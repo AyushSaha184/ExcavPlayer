@@ -1,14 +1,39 @@
+# IntelliJ / Android Studio
 *.iml
-.gradle
-/local.properties
-/.idea/
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
+.idea/
+.kotlin/
+
+# Local configuration
 local.properties
-app/build/
+/local.properties
+
+# Build outputs
+/build/
+/app/build/
+
+# Gradle
+.gradle/
+
+# Kotlin / profiling
 *.hprof
-.kotlin
+kotlin-profile/
+
+# Android
+/captures/
+/.externalNativeBuild/
+
+# Native / generated
+.cxx/
+.native/
+
+# Project-generated directories
+/tmp/
+.tmp/
+caches/
+daemon/
+
+# Project files
 ARCHITECTURE.md
+
+# OS
+.DS_Store

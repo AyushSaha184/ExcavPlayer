@@ -85,6 +85,21 @@ android {
         disable.add("UnsafeOptInUsageError")
         abortOnError = true
     }
+
+    packaging {
+        resources {
+            excludes += listOf(
+                "/META-INF/{AL2.0,LGPL2.1}",
+                "/META-INF/LICENSE.md",
+                "/META-INF/LICENSE-notice.md",
+                "/META-INF/LICENSE.txt",
+                "/META-INF/NOTICE.md",
+                "/META-INF/NOTICE.txt",
+                "/META-INF/license.txt",
+                "/META-INF/notice.txt"
+            )
+        }
+    }
 }
 
 ksp {
