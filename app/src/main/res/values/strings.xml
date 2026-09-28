@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">ExcavPlayer</string>
+    <string name="playback_channel_name">Playback Controls</string>
+    <string name="playback_channel_description">Media controls for background video playback</string>
+    <string name="media_sync_channel_name">Media Library Synchronization</string>
+    <string name="media_sync_channel_description">Syncing device media library with local database</string>
+</resources>
