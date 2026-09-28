@@ -7,6 +7,21 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+fun getPackageJsonVersion(): String {
+    val packageJsonFile = rootProject.file("package.json")
+    if (packageJsonFile.exists()) {
+        val content = packageJsonFile.readText()
+        val regex = """"version"\s*:\s*"([^"]+)"""".toRegex()
+        val match = regex.find(content)
+        if (match != null) {
+            return match.groupValues[1]
+        }
+    }
+    return "1.0.0"
+}
+
+val appVersion = getPackageJsonVersion()
+
 android {
     namespace = "com.excavplayer"
     compileSdk = 35
@@ -16,14 +31,22 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 1
-        versionName = "1.0.0"
+        versionName = appVersion
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    applicationVariants.all {
+        outputs.all {
+            val output = this as? com.android.build.gradle.internal.api.BaseVariantOutputImpl
+            output?.outputFileName = "ExcavPlayer_${appVersion}.apk"
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
