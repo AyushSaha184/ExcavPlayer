@@ -45,6 +45,7 @@ import com.excavplayer.ui.theme.SurfaceBorder
 import com.excavplayer.ui.theme.SurfaceDark
 import com.excavplayer.ui.theme.TextPrimary
 import com.excavplayer.ui.theme.TextSecondary
+import com.excavplayer.ui.theme.excavBackground
 
 @Composable
 fun SearchScreen(
@@ -64,7 +65,7 @@ fun SearchScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(BackgroundDark)
+            .excavBackground()
     ) {
         // Search Input Bar
         Row(
@@ -110,8 +111,8 @@ fun SearchScreen(
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = TextPrimary,
                     unfocusedTextColor = TextPrimary,
-                    focusedContainerColor = SurfaceDark,
-                    unfocusedContainerColor = SurfaceDark,
+                    focusedContainerColor = com.excavplayer.ui.theme.SurfaceGlass,
+                    unfocusedContainerColor = com.excavplayer.ui.theme.SurfaceGlass,
                     focusedBorderColor = CyanAccent,
                     unfocusedBorderColor = SurfaceBorder,
                     cursorColor = CyanAccent
@@ -137,9 +138,9 @@ fun SearchScreen(
         } else {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalArrangement = Arrangement.spacedBy(18.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(searchResults, key = { it.id }) { video ->

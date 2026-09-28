@@ -43,9 +43,12 @@ import com.excavplayer.ui.theme.FavoriteRed
 import com.excavplayer.ui.theme.SurfaceBorder
 import com.excavplayer.ui.theme.SurfaceDark
 import com.excavplayer.ui.theme.SurfaceDarkElevated
+import com.excavplayer.ui.theme.SurfaceGlass
 import com.excavplayer.ui.theme.TextPrimary
 import com.excavplayer.ui.theme.TextSecondary
 import com.excavplayer.ui.theme.ThumbnailShape
+
+private val PlaylistCardShape = RoundedCornerShape(13.dp)
 
 @Composable
 fun PlaylistCard(
@@ -60,125 +63,127 @@ fun PlaylistCard(
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
-    Row(
+    ExcavSurface(
         modifier = modifier
             .fillMaxWidth()
-            .clip(CardShape)
-            .background(SurfaceDark)
-            .border(0.5.dp, SurfaceBorder, CardShape)
-            .clickable { onClick() }
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .clickable { onClick() },
+        shape = PlaylistCardShape,
+        backgroundColor = SurfaceGlass,
+        borderColor = SurfaceBorder
     ) {
-        // Thumbnail Artwork with optional heart badge if it's Favorites
-        Box(
+        Row(
             modifier = Modifier
-                .size(width = 72.dp, height = 56.dp)
-                .clip(ThumbnailShape)
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            if (previewThumbnailUri != null) {
-                AsyncThumbnail(
-                    uriString = previewThumbnailUri,
-                    modifier = Modifier.matchParentSize()
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .background(SurfaceDarkElevated),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = if (isFavoritesVirtualPlaylist) Icons.Default.Favorite else Icons.AutoMirrored.Filled.QueueMusic,
-                        contentDescription = null,
-                        tint = if (isFavoritesVirtualPlaylist) FavoriteRed else CyanAccent,
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
-            }
-
-            if (isFavoritesVirtualPlaylist) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .size(26.dp)
-                        .clip(CircleShape)
-                        .background(BadgeBackground),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Favorite,
-                        contentDescription = null,
-                        tint = FavoriteRed,
-                        modifier = Modifier.size(15.dp)
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.width(14.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = playlist.title,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = TextPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Text(
-                text = "${playlist.itemCount} videos",
-                fontSize = 13.sp,
-                color = TextSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-
-        Box {
-            IconButton(
-                onClick = { showMenu = true },
-                modifier = Modifier.size(36.dp)
+            // Square 64x64 Artwork Tile
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(RoundedCornerShape(10.dp))
             ) {
-                Icon(
-                    imageVector = Icons.Default.MoreVert,
-                    contentDescription = "Options",
-                    tint = TextSecondary,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-
-            DropdownMenu(
-                expanded = showMenu,
-                onDismissRequest = { showMenu = false },
-                modifier = Modifier.background(SurfaceDarkElevated)
-            ) {
-                DropdownMenuItem(
-                    text = { Text("Play All", color = TextPrimary) },
-                    onClick = {
-                        showMenu = false
-                        onPlayAllClick()
+                if (previewThumbnailUri != null) {
+                    AsyncThumbnail(
+                        uriString = previewThumbnailUri,
+                        modifier = Modifier.matchParentSize()
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(SurfaceDarkElevated),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (isFavoritesVirtualPlaylist) Icons.Default.Favorite else Icons.AutoMirrored.Filled.QueueMusic,
+                            contentDescription = null,
+                            tint = if (isFavoritesVirtualPlaylist) FavoriteRed else CyanAccent,
+                            modifier = Modifier.size(26.dp)
+                        )
                     }
+                }
+
+                if (isFavoritesVirtualPlaylist) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .size(26.dp)
+                            .clip(CircleShape)
+                            .background(BadgeBackground),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Favorite,
+                            contentDescription = null,
+                            tint = FavoriteRed,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = playlist.title,
+                    fontSize = 14.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-                if (!isFavoritesVirtualPlaylist) {
+
+                Spacer(modifier = Modifier.height(2.dp))
+
+                Text(
+                    text = "${playlist.itemCount} videos",
+                    fontSize = 11.5.sp,
+                    color = TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Box {
+                ExcavIconButton(
+                    icon = Icons.Default.MoreVert,
+                    contentDescription = "Options",
+                    onClick = { showMenu = true },
+                    touchTargetSize = 32.dp,
+                    iconSize = 18.dp,
+                    tint = TextSecondary
+                )
+
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false },
+                    modifier = Modifier.background(SurfaceDarkElevated)
+                ) {
                     DropdownMenuItem(
-                        text = { Text("Rename", color = TextPrimary) },
+                        text = { Text("Play All", color = TextPrimary) },
                         onClick = {
                             showMenu = false
-                            onRenameClick()
+                            onPlayAllClick()
                         }
                     )
-                    DropdownMenuItem(
-                        text = { Text("Delete", color = FavoriteRed) },
-                        onClick = {
-                            showMenu = false
-                            onDeleteClick()
-                        }
-                    )
+                    if (!isFavoritesVirtualPlaylist) {
+                        DropdownMenuItem(
+                            text = { Text("Rename", color = TextPrimary) },
+                            onClick = {
+                                showMenu = false
+                                onRenameClick()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Delete", color = FavoriteRed) },
+                            onClick = {
+                                showMenu = false
+                                onDeleteClick()
+                            }
+                        )
+                    }
                 }
             }
         }

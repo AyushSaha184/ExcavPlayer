@@ -2,6 +2,7 @@ package com.excavplayer.ui.folders
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -31,11 +32,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.excavplayer.domain.model.Folder
 import com.excavplayer.ui.components.EmptyState
+import com.excavplayer.ui.components.ExcavIconButton
 import com.excavplayer.ui.components.ExcavTopBar
 import com.excavplayer.ui.components.FolderCard
 import com.excavplayer.ui.theme.BackgroundDark
 import com.excavplayer.ui.theme.SurfaceDarkElevated
 import com.excavplayer.ui.theme.TextPrimary
+import com.excavplayer.ui.theme.excavBackground
 
 @Composable
 fun FoldersScreen(
@@ -51,40 +54,44 @@ fun FoldersScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(BackgroundDark)
+            .excavBackground()
     ) {
         // Top Bar
         ExcavTopBar(
             showBrandLogo = true,
             actions = {
-                IconButton(onClick = onNavigateToSearch) {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = "Search",
-                        tint = TextPrimary
-                    )
-                }
+                ExcavIconButton(
+                    icon = Icons.Default.Search,
+                    contentDescription = "Search",
+                    onClick = onNavigateToSearch,
+                    touchTargetSize = 38.dp,
+                    iconSize = 22.dp,
+                    tint = TextPrimary
+                )
 
-                IconButton(onClick = { showTopMenu = true }) {
-                    Icon(
-                        imageVector = Icons.Default.MoreVert,
+                Box {
+                    ExcavIconButton(
+                        icon = Icons.Default.MoreVert,
                         contentDescription = "Options",
+                        onClick = { showTopMenu = true },
+                        touchTargetSize = 38.dp,
+                        iconSize = 20.dp,
                         tint = TextPrimary
                     )
-                }
 
-                DropdownMenu(
-                    expanded = showTopMenu,
-                    onDismissRequest = { showTopMenu = false },
-                    modifier = Modifier.background(SurfaceDarkElevated)
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Rescan Media", color = TextPrimary) },
-                        onClick = {
-                            showTopMenu = false
-                            viewModel.refresh()
-                        }
-                    )
+                    DropdownMenu(
+                        expanded = showTopMenu,
+                        onDismissRequest = { showTopMenu = false },
+                        modifier = Modifier.background(SurfaceDarkElevated)
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Rescan Media", color = TextPrimary) },
+                            onClick = {
+                                showTopMenu = false
+                                viewModel.refresh()
+                            }
+                        )
+                    }
                 }
             }
         )
@@ -99,17 +106,14 @@ fun FoldersScreen(
             )
         } else {
             LazyColumn(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
                 item {
-                    Text(
-                        text = "Folders",
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary,
-                        modifier = Modifier.padding(bottom = 6.dp)
+                    com.excavplayer.ui.components.ExcavSectionHeader(
+                        title = "Folders",
+                        fontSize = 18.sp
                     )
                 }
 

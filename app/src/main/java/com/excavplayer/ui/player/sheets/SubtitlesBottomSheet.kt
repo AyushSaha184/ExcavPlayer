@@ -40,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -82,14 +83,14 @@ fun SubtitlesBottomSheet(
                     .width(36.dp)
                     .height(4.dp)
                     .clip(CircleShape)
-                    .background(SurfaceBorder)
+                    .background(Color(0xFF475569))
             )
         }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 8.dp)
+                .padding(horizontal = 24.dp, vertical = 6.dp)
                 .verticalScroll(rememberScrollState())
         ) {
             // Header
@@ -99,8 +100,8 @@ fun SubtitlesBottomSheet(
             ) {
                 Text(
                     text = "Subtitles",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
                     color = TextPrimary,
                     modifier = Modifier.weight(1f)
                 )

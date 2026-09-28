@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -62,6 +63,7 @@ import com.excavplayer.ui.theme.ScrimDark
 import com.excavplayer.ui.theme.TextPrimary
 import com.excavplayer.ui.theme.TextSecondary
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun PlayerControlsOverlay(
     playerState: PlayerState,
@@ -160,35 +162,39 @@ fun PlayerControlsOverlay(
                         modifier = Modifier.weight(1f)
                     )
 
-                    IconButton(onClick = { /* Cast */ }) {
+                    IconButton(onClick = { /* Cast */ }, modifier = Modifier.size(36.dp)) {
                         Icon(
                             imageVector = Icons.Default.Cast,
                             contentDescription = "Cast",
-                            tint = TextPrimary
+                            tint = TextPrimary,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
 
-                    IconButton(onClick = onPipClick) {
+                    IconButton(onClick = onPipClick, modifier = Modifier.size(36.dp)) {
                         Icon(
                             imageVector = Icons.Default.PictureInPictureAlt,
                             contentDescription = "Picture in Picture",
-                            tint = TextPrimary
+                            tint = TextPrimary,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
 
-                    IconButton(onClick = onAspectRatioClick) {
+                    IconButton(onClick = onAspectRatioClick, modifier = Modifier.size(36.dp)) {
                         Icon(
                             imageVector = Icons.Default.AspectRatio,
                             contentDescription = "Aspect Ratio",
-                            tint = TextPrimary
+                            tint = TextPrimary,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
 
-                    IconButton(onClick = onOptionsClick) {
+                    IconButton(onClick = onOptionsClick, modifier = Modifier.size(36.dp)) {
                         Icon(
                             imageVector = Icons.Default.MoreVert,
                             contentDescription = "More",
-                            tint = TextPrimary
+                            tint = TextPrimary,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
@@ -204,35 +210,36 @@ fun PlayerControlsOverlay(
                     // Rewind 10s
                     IconButton(
                         onClick = onSeekBackward,
-                        modifier = Modifier.size(48.dp)
+                        modifier = Modifier.size(44.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Replay10,
                             contentDescription = "Rewind 10s",
                             tint = TextPrimary,
-                            modifier = Modifier.size(34.dp)
+                            modifier = Modifier.size(30.dp)
                         )
                     }
 
                     // Previous Track
                     IconButton(
                         onClick = onPreviousClick,
-                        modifier = Modifier.size(48.dp)
+                        modifier = Modifier.size(44.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.SkipPrevious,
                             contentDescription = "Previous",
                             tint = TextPrimary,
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(28.dp)
                         )
                     }
 
-                    // Center Big Play/Pause Button
+                    // Center Big Play/Pause Button (66dp dark translucent circle with subtle border, no glow)
                     Box(
                         modifier = Modifier
-                            .size(68.dp)
+                            .size(66.dp)
                             .clip(CircleShape)
-                            .background(BadgeBackground)
+                            .background(Color(0x8009111A))
+                            .border(1.dp, com.excavplayer.ui.theme.SurfaceBorderStrong, CircleShape)
                             .clickable { onPlayPauseClick() },
                         contentAlignment = Alignment.Center
                     ) {
@@ -240,33 +247,33 @@ fun PlayerControlsOverlay(
                             imageVector = if (playerState.playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                             contentDescription = if (playerState.playback.isPlaying) "Pause" else "Play",
                             tint = TextPrimary,
-                            modifier = Modifier.size(38.dp)
+                            modifier = Modifier.size(34.dp)
                         )
                     }
 
                     // Next Track
                     IconButton(
                         onClick = onNextClick,
-                        modifier = Modifier.size(48.dp)
+                        modifier = Modifier.size(44.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.SkipNext,
                             contentDescription = "Next",
                             tint = TextPrimary,
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(28.dp)
                         )
                     }
 
                     // Forward 10s
                     IconButton(
                         onClick = onSeekForward,
-                        modifier = Modifier.size(48.dp)
+                        modifier = Modifier.size(44.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Forward10,
                             contentDescription = "Forward 10s",
                             tint = TextPrimary,
-                            modifier = Modifier.size(34.dp)
+                            modifier = Modifier.size(30.dp)
                         )
                     }
                 }
@@ -276,9 +283,9 @@ fun PlayerControlsOverlay(
                     modifier = Modifier
                         .fillMaxWidth()
                         .align(Alignment.BottomCenter)
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
                 ) {
-                    // Timeline Scrubber Row
+                    // Timeline Scrubber Row (track height 3dp, thumb 10dp, active cyan, inactive white 22%)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
@@ -301,11 +308,25 @@ fun PlayerControlsOverlay(
                                 isDraggingSlider = false
                             },
                             valueRange = 0f..durationMs.toFloat(),
-                            colors = SliderDefaults.colors(
-                                thumbColor = CyanAccent,
-                                activeTrackColor = CyanAccent,
-                                inactiveTrackColor = Color.White.copy(alpha = 0.25f)
-                            ),
+                            thumb = {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .clip(CircleShape)
+                                        .background(CyanAccent)
+                                )
+                            },
+                            track = { sliderState ->
+                                SliderDefaults.Track(
+                                    sliderState = sliderState,
+                                    modifier = Modifier.height(3.dp),
+                                    colors = SliderDefaults.colors(
+                                        activeTrackColor = CyanAccent,
+                                        inactiveTrackColor = Color.White.copy(alpha = 0.22f)
+                                    ),
+                                    thumbTrackGapSize = 0.dp
+                                )
+                            },
                             modifier = Modifier
                                 .weight(1f)
                                 .padding(horizontal = 8.dp)

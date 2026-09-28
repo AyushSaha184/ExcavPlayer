@@ -53,14 +53,13 @@ fun VideoCard(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(CardShape)
             .clickable { onClick() }
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(16f / 10f)
-                .clip(ThumbnailShape)
+                .aspectRatio(16f / 9f)
+                .clip(RoundedCornerShape(12.dp))
         ) {
             AsyncThumbnail(
                 uriString = video.uri,
@@ -69,13 +68,13 @@ fun VideoCard(
                 modifier = Modifier.matchParentSize()
             )
 
-            // Heart Badge (for Favorites screen)
+            // Favorite Badge (26dp black translucent circle, 8dp from edge)
             if (showHeartBadge) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(8.dp)
-                        .size(28.dp)
+                        .size(26.dp)
                         .clip(CircleShape)
                         .background(BadgeBackground),
                     contentAlignment = Alignment.Center
@@ -84,13 +83,13 @@ fun VideoCard(
                         imageVector = Icons.Default.Favorite,
                         contentDescription = "Favorite",
                         tint = FavoriteRed,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(14.dp)
                     )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(7.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -99,11 +98,12 @@ fun VideoCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = video.displayName.substringBeforeLast("."),
-                    style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
                     color = TextPrimary,
+                    fontSize = 13.5.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    letterSpacing = (-0.1).sp
                 )
 
                 Spacer(modifier = Modifier.height(2.dp))
@@ -111,25 +111,22 @@ fun VideoCard(
                 val subtitle = subtitleText ?: formatVideoSubtitle(video, progressPercentage)
                 Text(
                     text = subtitle,
-                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                     color = TextSecondary,
+                    fontSize = 11.5.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
 
             if (onOptionsClick != null) {
-                IconButton(
+                ExcavIconButton(
+                    icon = Icons.Default.MoreVert,
+                    contentDescription = "Options",
                     onClick = onOptionsClick,
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = "Options",
-                        tint = TextSecondary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+                    touchTargetSize = 30.dp,
+                    iconSize = 18.dp,
+                    tint = TextSecondary
+                )
             }
         }
     }

@@ -46,6 +46,7 @@ import com.excavplayer.ui.theme.CyanAccent
 import com.excavplayer.ui.theme.PillShape
 import com.excavplayer.ui.theme.TextPrimary
 import com.excavplayer.ui.theme.TextSecondary
+import com.excavplayer.ui.theme.excavBackground
 
 @Composable
 fun FolderDetailScreen(
@@ -65,7 +66,7 @@ fun FolderDetailScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(BackgroundDark)
+            .excavBackground()
     ) {
         ExcavTopBar(
             title = folderName,
@@ -74,9 +75,9 @@ fun FolderDetailScreen(
 
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
             modifier = Modifier.fillMaxSize()
         ) {
             item(span = { GridItemSpan(2) }) {

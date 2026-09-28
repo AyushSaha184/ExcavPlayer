@@ -28,14 +28,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.excavplayer.domain.model.Playlist
 import com.excavplayer.ui.components.EmptyState
+import com.excavplayer.ui.components.ExcavIconButton
 import com.excavplayer.ui.components.ExcavTopBar
 import com.excavplayer.ui.components.PlaylistCard
 import com.excavplayer.ui.theme.BackgroundDark
 import com.excavplayer.ui.theme.CyanAccent
 import com.excavplayer.ui.theme.TextPrimary
+import com.excavplayer.ui.theme.excavBackground
 
 @Composable
 fun PlaylistsScreen(
@@ -55,35 +58,38 @@ fun PlaylistsScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(BackgroundDark)
+            .excavBackground()
     ) {
         ExcavTopBar(
             title = "Playlists",
             actions = {
-                IconButton(onClick = onNavigateToSearch) {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = "Search",
-                        tint = TextPrimary
-                    )
-                }
+                ExcavIconButton(
+                    icon = Icons.Default.Search,
+                    contentDescription = "Search",
+                    onClick = onNavigateToSearch,
+                    touchTargetSize = 38.dp,
+                    iconSize = 22.dp,
+                    tint = TextPrimary
+                )
 
-                // Plus (+) circular action button
+                Spacer(modifier = Modifier.size(6.dp))
+
+                // Plus (+) circular action button (40dp with high contrast)
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(40.dp)
                         .clip(CircleShape)
                         .background(CyanAccent),
                     contentAlignment = Alignment.Center
                 ) {
                     IconButton(
                         onClick = { showCreateDialog = true },
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(40.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Add,
                             contentDescription = "Create Playlist",
-                            tint = BackgroundDark,
+                            tint = Color(0xFF09111A),
                             modifier = Modifier.size(22.dp)
                         )
                     }
@@ -92,8 +98,8 @@ fun PlaylistsScreen(
         )
 
         LazyColumn(
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxSize()
         ) {
             // First item is always "My Favorites" virtual playlist as seen in mockup screen 3

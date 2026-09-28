@@ -15,8 +15,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.BrightnessHigh
-import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -175,7 +175,7 @@ fun PlayerScreen(
 
         VerticalGestureSlider(
             value = volume,
-            icon = Icons.Default.VolumeUp,
+            icon = Icons.AutoMirrored.Filled.VolumeUp,
             visible = showVolumeIndicator,
             modifier = Modifier
                 .align(Alignment.CenterEnd)

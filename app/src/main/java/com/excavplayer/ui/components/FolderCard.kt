@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -33,9 +34,14 @@ import com.excavplayer.ui.theme.CardShape
 import com.excavplayer.ui.theme.FolderYellow
 import com.excavplayer.ui.theme.SurfaceBorder
 import com.excavplayer.ui.theme.SurfaceDark
+import com.excavplayer.ui.theme.SurfaceDarkElevated
+import com.excavplayer.ui.theme.SurfaceGlass
 import com.excavplayer.ui.theme.TextPrimary
 import com.excavplayer.ui.theme.TextSecondary
+import com.excavplayer.ui.theme.TextTertiary
 import com.excavplayer.ui.theme.ThumbnailShape
+
+private val FolderCardShape = RoundedCornerShape(13.dp)
 
 @Composable
 fun FolderCard(
@@ -44,91 +50,97 @@ fun FolderCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Row(
+    ExcavSurface(
         modifier = modifier
             .fillMaxWidth()
-            .clip(CardShape)
-            .background(SurfaceDark)
-            .border(0.5.dp, SurfaceBorder, CardShape)
-            .clickable { onClick() }
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .height(72.dp)
+            .clickable { onClick() },
+        shape = FolderCardShape,
+        backgroundColor = SurfaceGlass,
+        borderColor = SurfaceBorder
     ) {
-        // Thumbnail with Yellow Folder Badge overlay at bottom-left
-        Box(
+        Row(
             modifier = Modifier
-                .size(width = 80.dp, height = 56.dp)
-                .clip(ThumbnailShape)
+                .fillMaxSize()
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            if (previewThumbnailUri != null) {
-                AsyncThumbnail(
-                    uriString = previewThumbnailUri,
-                    modifier = Modifier.matchParentSize()
-                )
-            } else {
+            // Thumbnail with Yellow Folder Badge overlay
+            Box(
+                modifier = Modifier
+                    .size(width = 78.dp, height = 54.dp)
+                    .clip(RoundedCornerShape(10.dp))
+            ) {
+                if (previewThumbnailUri != null) {
+                    AsyncThumbnail(
+                        uriString = previewThumbnailUri,
+                        modifier = Modifier.matchParentSize()
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(SurfaceDarkElevated),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Folder,
+                            contentDescription = null,
+                            tint = FolderYellow,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+
+                // Small yellow folder badge
                 Box(
                     modifier = Modifier
-                        .matchParentSize()
-                        .background(com.excavplayer.ui.theme.SurfaceDarkElevated),
+                        .align(Alignment.BottomStart)
+                        .padding(4.dp)
+                        .size(18.dp)
+                        .clip(BadgeShape)
+                        .background(BadgeBackground),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.Folder,
                         contentDescription = null,
                         tint = FolderYellow,
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.size(12.dp)
                     )
                 }
             }
 
-            // Small yellow folder badge
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(4.dp)
-                    .size(20.dp)
-                    .clip(BadgeShape)
-                    .background(BadgeBackground),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Folder,
-                    contentDescription = null,
-                    tint = FolderYellow,
-                    modifier = Modifier.size(13.dp)
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = folder.name,
+                    fontSize = 14.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Spacer(modifier = Modifier.height(2.dp))
+
+                val sizeStr = formatFileSize(folder.totalSizeBytes)
+                Text(
+                    text = "${folder.videoCount} videos · $sizeStr",
+                    fontSize = 11.5.sp,
+                    color = TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
-        }
 
-        Spacer(modifier = Modifier.width(14.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = folder.name,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = TextPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            val sizeStr = formatFileSize(folder.totalSizeBytes)
-            Text(
-                text = "${folder.videoCount} videos · $sizeStr",
-                fontSize = 13.sp,
-                color = TextSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = "Open Folder",
+                tint = TextTertiary,
+                modifier = Modifier.size(20.dp)
             )
         }
-
-        Icon(
-            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-            contentDescription = "Open Folder",
-            tint = TextSecondary,
-            modifier = Modifier.size(22.dp)
-        )
     }
 }

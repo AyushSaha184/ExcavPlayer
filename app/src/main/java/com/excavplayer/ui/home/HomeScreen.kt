@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.excavplayer.domain.model.Video
 import com.excavplayer.ui.components.EmptyState
+import com.excavplayer.ui.components.ExcavIconButton
 import com.excavplayer.ui.components.ExcavTopBar
 import com.excavplayer.ui.components.VideoCard
 import com.excavplayer.ui.components.VideoDetailsDialog
@@ -43,6 +44,7 @@ import com.excavplayer.ui.components.VideoOptionsSheet
 import com.excavplayer.ui.theme.BackgroundDark
 import com.excavplayer.ui.theme.TextPrimary
 import com.excavplayer.ui.theme.TextSecondary
+import com.excavplayer.ui.theme.excavBackground
 
 @Composable
 fun HomeScreen(
@@ -61,26 +63,28 @@ fun HomeScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(BackgroundDark)
+            .excavBackground()
     ) {
         // App Top Bar
         ExcavTopBar(
             showBrandLogo = true,
             actions = {
-                IconButton(onClick = onNavigateToSearch) {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = "Search",
-                        tint = TextPrimary
-                    )
-                }
-                IconButton(onClick = onNavigateToSettings) {
-                    Icon(
-                        imageVector = Icons.Default.Settings,
-                        contentDescription = "Settings",
-                        tint = TextPrimary
-                    )
-                }
+                ExcavIconButton(
+                    icon = Icons.Default.Search,
+                    contentDescription = "Search",
+                    onClick = onNavigateToSearch,
+                    touchTargetSize = 38.dp,
+                    iconSize = 22.dp,
+                    tint = TextPrimary
+                )
+                ExcavIconButton(
+                    icon = Icons.Default.Settings,
+                    contentDescription = "Settings",
+                    onClick = onNavigateToSettings,
+                    touchTargetSize = 38.dp,
+                    iconSize = 22.dp,
+                    tint = TextPrimary
+                )
             }
         )
 
@@ -95,20 +99,17 @@ fun HomeScreen(
         } else {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalArrangement = Arrangement.spacedBy(18.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
                 // Continue Watching Section
                 if (continueWatching.isNotEmpty()) {
                     item(span = { GridItemSpan(2) }) {
-                        Text(
-                            text = "Continue Watching",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary,
-                            modifier = Modifier.padding(bottom = 6.dp)
+                        com.excavplayer.ui.components.ExcavSectionHeader(
+                            title = "Continue Watching",
+                            fontSize = 18.sp
                         )
                     }
 
@@ -133,13 +134,10 @@ fun HomeScreen(
                 val remainingVideos = allVideos.filter { v -> continueWatching.none { it.id == v.id } }
                 if (remainingVideos.isNotEmpty()) {
                     item(span = { GridItemSpan(2) }) {
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text(
-                            text = if (continueWatching.isNotEmpty()) "All Videos" else "Recent Videos",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary,
-                            modifier = Modifier.padding(bottom = 6.dp)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        com.excavplayer.ui.components.ExcavSectionHeader(
+                            title = if (continueWatching.isNotEmpty()) "All Videos" else "Recent Videos",
+                            fontSize = 18.sp
                         )
                     }
 
@@ -156,7 +154,7 @@ fun HomeScreen(
                 }
 
                 item(span = { GridItemSpan(2) }) {
-                    Spacer(modifier = Modifier.height(30.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
                 }
             }
         }

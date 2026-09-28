@@ -50,14 +50,14 @@ fun MiniPlayer(
     val video = playerState.currentVideo ?: return
     val progress = playerState.playback.progressPercentage
 
-    Box(
+    ExcavSurface(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 6.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(SurfaceDarkElevated)
-            .border(0.5.dp, SurfaceBorder, RoundedCornerShape(14.dp))
-            .clickable { onClick() }
+            .clickable { onClick() },
+        shape = RoundedCornerShape(14.dp),
+        backgroundColor = com.excavplayer.ui.theme.SurfaceGlass,
+        borderColor = SurfaceBorder
     ) {
         Column {
             Row(

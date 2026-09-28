@@ -41,6 +41,7 @@ import com.excavplayer.ui.search.SearchViewModel
 import com.excavplayer.ui.settings.SettingsScreen
 import com.excavplayer.ui.settings.SettingsViewModel
 import com.excavplayer.ui.theme.BackgroundDark
+import com.excavplayer.ui.theme.excavBackground
 
 class ExcavViewModels(
     val homeViewModel: HomeViewModel,
@@ -78,8 +79,8 @@ fun ExcavAppScaffold(
     val isPlayerScreen = currentRoute == Screen.Player.route
 
     Scaffold(
-        modifier = modifier.fillMaxSize(),
-        containerColor = BackgroundDark,
+        modifier = modifier.fillMaxSize().excavBackground(),
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
         bottomBar = {
             if (isRootTab && !isPlayerScreen) {
                 Column {

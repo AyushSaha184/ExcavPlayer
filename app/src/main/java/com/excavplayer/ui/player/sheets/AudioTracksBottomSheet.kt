@@ -63,14 +63,14 @@ fun AudioTracksBottomSheet(
                     .width(36.dp)
                     .height(4.dp)
                     .clip(CircleShape)
-                    .background(SurfaceBorder)
+                    .background(androidx.compose.ui.graphics.Color(0xFF475569))
             )
         }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 8.dp)
+                .padding(horizontal = 24.dp, vertical = 6.dp)
                 .verticalScroll(rememberScrollState())
         ) {
             // Header
@@ -80,8 +80,8 @@ fun AudioTracksBottomSheet(
             ) {
                 Text(
                     text = "Audio Tracks",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
                     color = TextPrimary,
                     modifier = Modifier.weight(1f)
                 )

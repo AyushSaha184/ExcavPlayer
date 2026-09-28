@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.excavplayer.domain.model.Video
 import com.excavplayer.ui.components.EmptyState
+import com.excavplayer.ui.components.ExcavIconButton
 import com.excavplayer.ui.components.ExcavTopBar
 import com.excavplayer.ui.components.VideoCard
 import com.excavplayer.ui.components.VideoDetailsDialog
@@ -33,6 +34,7 @@ import com.excavplayer.ui.components.VideoOptionsSheet
 import com.excavplayer.ui.components.formatFileSize
 import com.excavplayer.ui.theme.BackgroundDark
 import com.excavplayer.ui.theme.TextPrimary
+import com.excavplayer.ui.theme.excavBackground
 import java.util.Calendar
 
 @Composable
@@ -49,25 +51,27 @@ fun FavoritesScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(BackgroundDark)
+            .excavBackground()
     ) {
         ExcavTopBar(
             title = "Favorites",
             actions = {
-                IconButton(onClick = onNavigateToSearch) {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = "Search",
-                        tint = TextPrimary
-                    )
-                }
-                IconButton(onClick = { /* Grid view toggle */ }) {
-                    Icon(
-                        imageVector = Icons.Default.GridView,
-                        contentDescription = "View Options",
-                        tint = TextPrimary
-                    )
-                }
+                ExcavIconButton(
+                    icon = Icons.Default.Search,
+                    contentDescription = "Search",
+                    onClick = onNavigateToSearch,
+                    touchTargetSize = 38.dp,
+                    iconSize = 22.dp,
+                    tint = TextPrimary
+                )
+                ExcavIconButton(
+                    icon = Icons.Default.GridView,
+                    contentDescription = "View Options",
+                    onClick = { /* Grid view toggle */ },
+                    touchTargetSize = 38.dp,
+                    iconSize = 20.dp,
+                    tint = TextPrimary
+                )
             }
         )
 
@@ -80,9 +84,9 @@ fun FavoritesScreen(
         } else {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalArrangement = Arrangement.spacedBy(18.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(favorites, key = { it.id }) { video ->

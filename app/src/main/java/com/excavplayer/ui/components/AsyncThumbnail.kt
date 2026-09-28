@@ -94,34 +94,41 @@ fun AsyncThumbnail(
             }
         }
 
-        // Duration Badge (bottom-right)
+        // Duration Badge (bottom-right translucent pill)
         if (!durationText.isNullOrBlank()) {
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(end = 6.dp, bottom = if (progressPercentage != null && progressPercentage > 0f) 8.dp else 6.dp)
-                    .background(BadgeBackground, BadgeShape)
-                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                    .padding(
+                        end = 7.dp,
+                        bottom = if (progressPercentage != null && progressPercentage > 0f) 14.dp else 7.dp
+                    )
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(BadgeBackground)
+                    .padding(horizontal = 5.dp, vertical = 2.dp)
             ) {
                 androidx.compose.material3.Text(
                     text = durationText,
                     color = TextPrimary,
-                    fontSize = 11.sp,
+                    fontSize = 10.5.sp,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                    letterSpacing = 0.2.sp,
                     maxLines = 1
                 )
             }
         }
 
-        // Progress Bar (bottom edge of thumbnail)
+        // Integrated Progress Bar (bottom = 7dp, start = 7dp, fill width minus ~8dp)
         if (progressPercentage != null && progressPercentage > 0f) {
-            LinearProgressIndicator(
-                progress = { progressPercentage.coerceIn(0f, 1f) },
+            ExcavProgressBar(
+                progress = progressPercentage,
                 modifier = Modifier
+                    .align(Alignment.BottomStart)
                     .fillMaxWidth()
-                    .height(3.dp)
-                    .align(Alignment.BottomCenter),
-                color = CyanAccent,
-                trackColor = Color.Black.copy(alpha = 0.5f),
+                    .padding(start = 7.dp, end = 7.dp, bottom = 7.dp),
+                height = 3.dp,
+                activeColor = CyanAccent,
+                trackColor = Color(0x66000000)
             )
         }
     }

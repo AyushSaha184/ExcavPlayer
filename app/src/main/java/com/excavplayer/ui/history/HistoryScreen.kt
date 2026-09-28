@@ -1,6 +1,7 @@
 package com.excavplayer.ui.history
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -34,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.excavplayer.domain.model.Video
 import com.excavplayer.ui.components.EmptyState
+import com.excavplayer.ui.components.ExcavIconButton
 import com.excavplayer.ui.components.ExcavTopBar
 import com.excavplayer.ui.components.HistoryCard
 import com.excavplayer.ui.theme.BackgroundDark
@@ -43,6 +45,7 @@ import com.excavplayer.ui.theme.PillShape
 import com.excavplayer.ui.theme.SurfaceDarkElevated
 import com.excavplayer.ui.theme.TextPrimary
 import com.excavplayer.ui.theme.TextSecondary
+import com.excavplayer.ui.theme.excavBackground
 
 @Composable
 fun HistoryScreen(
@@ -60,39 +63,43 @@ fun HistoryScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(BackgroundDark)
+            .excavBackground()
     ) {
         ExcavTopBar(
             title = "Watch History",
             actions = {
-                IconButton(onClick = onNavigateToSearch) {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = "Search",
-                        tint = TextPrimary
-                    )
-                }
+                ExcavIconButton(
+                    icon = Icons.Default.Search,
+                    contentDescription = "Search",
+                    onClick = onNavigateToSearch,
+                    touchTargetSize = 38.dp,
+                    iconSize = 22.dp,
+                    tint = TextPrimary
+                )
 
-                IconButton(onClick = { showTopMenu = true }) {
-                    Icon(
-                        imageVector = Icons.Default.MoreVert,
+                Box {
+                    ExcavIconButton(
+                        icon = Icons.Default.MoreVert,
                         contentDescription = "Options",
+                        onClick = { showTopMenu = true },
+                        touchTargetSize = 38.dp,
+                        iconSize = 20.dp,
                         tint = TextPrimary
                     )
-                }
 
-                DropdownMenu(
-                    expanded = showTopMenu,
-                    onDismissRequest = { showTopMenu = false },
-                    modifier = Modifier.background(SurfaceDarkElevated)
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Clear All History", color = FavoriteRed) },
-                        onClick = {
-                            showTopMenu = false
-                            showClearConfirmDialog = true
-                        }
-                    )
+                    DropdownMenu(
+                        expanded = showTopMenu,
+                        onDismissRequest = { showTopMenu = false },
+                        modifier = Modifier.background(SurfaceDarkElevated)
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Clear All History", color = FavoriteRed) },
+                            onClick = {
+                                showTopMenu = false
+                                showClearConfirmDialog = true
+                            }
+                        )
+                    }
                 }
             }
         )
@@ -105,17 +112,16 @@ fun HistoryScreen(
             )
         } else {
             LazyColumn(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
                 groupedHistory.forEach { section ->
                     item(key = "header_${section.title}") {
-                        Text(
-                            text = section.title,
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary,
-                            modifier = Modifier.padding(top = 12.dp, bottom = 8.dp)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        com.excavplayer.ui.components.ExcavSectionHeader(
+                            title = section.title,
+                            fontSize = 16.sp
                         )
                     }
 

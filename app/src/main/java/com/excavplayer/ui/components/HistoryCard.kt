@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
@@ -35,10 +36,14 @@ import com.excavplayer.domain.model.WatchHistoryEntry
 import com.excavplayer.ui.theme.CompletedGreen
 import com.excavplayer.ui.theme.CyanAccent
 import com.excavplayer.ui.theme.FavoriteRed
+import com.excavplayer.ui.theme.SurfaceBorder
 import com.excavplayer.ui.theme.SurfaceDarkElevated
+import com.excavplayer.ui.theme.SurfaceGlass
 import com.excavplayer.ui.theme.TextPrimary
 import com.excavplayer.ui.theme.TextSecondary
 import com.excavplayer.ui.theme.ThumbnailShape
+
+private val HistoryCardShape = RoundedCornerShape(13.dp)
 
 @Composable
 fun HistoryCard(
@@ -51,124 +56,129 @@ fun HistoryCard(
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
-    Row(
+    ExcavSurface(
         modifier = modifier
             .fillMaxWidth()
-            .clickable { onClick() }
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .clickable { onClick() },
+        shape = HistoryCardShape,
+        backgroundColor = SurfaceGlass,
+        borderColor = SurfaceBorder
     ) {
-        // Thumbnail with bottom progress bar
-        Box(
+        Row(
             modifier = Modifier
-                .size(width = 88.dp, height = 58.dp)
-                .clip(ThumbnailShape)
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            if (video != null) {
-                AsyncThumbnail(
-                    uriString = video.uri,
-                    durationText = video.formattedDuration,
-                    progressPercentage = if (entry.isCompleted) 1f else entry.completionPercentage,
-                    modifier = Modifier.matchParentSize()
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .clip(ThumbnailShape)
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.width(14.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-            val title = video?.displayName?.substringBeforeLast(".") ?: "Video ${entry.videoId}"
-            Text(
-                text = title,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = TextPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            if (entry.isCompleted) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "Completed",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = CompletedGreen
+            // Thumbnail
+            Box(
+                modifier = Modifier
+                    .size(width = 74.dp, height = 54.dp)
+                    .clip(RoundedCornerShape(10.dp))
+            ) {
+                if (video != null) {
+                    AsyncThumbnail(
+                        uriString = video.uri,
+                        durationText = video.formattedDuration,
+                        progressPercentage = if (entry.isCompleted) 1f else entry.completionPercentage,
+                        modifier = Modifier.matchParentSize()
                     )
-                    val durationStr = if (video != null && video.durationMs > 0) {
-                        " · " + formatDuration(video.durationMs)
-                    } else if (entry.totalWatchDurationMs > 0) {
-                        " · " + formatDuration(entry.totalWatchDurationMs)
-                    } else ""
-                    Text(
-                        text = durationStr,
-                        fontSize = 13.sp,
-                        color = TextSecondary
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(SurfaceDarkElevated)
                     )
                 }
-            } else {
-                val currentStr = formatDuration(entry.lastPositionMs)
-                val totalStr = if (video != null && video.durationMs > 0) formatDuration(video.durationMs) else ""
-                val percent = (entry.completionPercentage * 100).toInt()
-                val subtitle = if (totalStr.isNotEmpty()) "$currentStr / $totalStr · $percent%" else "$currentStr · $percent%"
+            }
 
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                val title = video?.displayName?.substringBeforeLast(".") ?: "Video ${entry.videoId}"
                 Text(
-                    text = subtitle,
-                    fontSize = 13.sp,
-                    color = TextSecondary,
+                    text = title,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-            }
-        }
 
-        Box {
-            IconButton(
-                onClick = { showMenu = true },
-                modifier = Modifier.size(36.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.MoreVert,
+                Spacer(modifier = Modifier.height(3.dp))
+
+                if (entry.isCompleted) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Completed",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = CompletedGreen
+                        )
+                        val durationStr = if (video != null && video.durationMs > 0) {
+                            " · " + formatDuration(video.durationMs)
+                        } else if (entry.totalWatchDurationMs > 0) {
+                            " · " + formatDuration(entry.totalWatchDurationMs)
+                        } else ""
+                        Text(
+                            text = durationStr,
+                            fontSize = 11.5.sp,
+                            color = TextSecondary
+                        )
+                    }
+                } else {
+                    val currentStr = formatDuration(entry.lastPositionMs)
+                    val totalStr = if (video != null && video.durationMs > 0) formatDuration(video.durationMs) else ""
+                    val percent = (entry.completionPercentage * 100).toInt()
+                    val subtitle = if (totalStr.isNotEmpty()) "$currentStr / $totalStr · $percent%" else "$currentStr · $percent%"
+
+                    Text(
+                        text = subtitle,
+                        fontSize = 11.5.sp,
+                        color = TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            Box {
+                ExcavIconButton(
+                    icon = Icons.Default.MoreVert,
                     contentDescription = "Options",
-                    tint = TextSecondary,
-                    modifier = Modifier.size(20.dp)
+                    onClick = { showMenu = true },
+                    touchTargetSize = 30.dp,
+                    iconSize = 18.dp,
+                    tint = TextSecondary
                 )
-            }
 
-            DropdownMenu(
-                expanded = showMenu,
-                onDismissRequest = { showMenu = false },
-                modifier = Modifier.background(SurfaceDarkElevated)
-            ) {
-                DropdownMenuItem(
-                    text = { Text("Resume Playback", color = TextPrimary) },
-                    onClick = {
-                        showMenu = false
-                        onClick()
-                    }
-                )
-                DropdownMenuItem(
-                    text = { Text("Play from Beginning", color = TextPrimary) },
-                    onClick = {
-                        showMenu = false
-                        onPlayFromStart()
-                    }
-                )
-                DropdownMenuItem(
-                    text = { Text("Remove from History", color = FavoriteRed) },
-                    onClick = {
-                        showMenu = false
-                        onRemoveFromHistory()
-                    }
-                )
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false },
+                    modifier = Modifier.background(SurfaceDarkElevated)
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Resume Playback", color = TextPrimary) },
+                        onClick = {
+                            showMenu = false
+                            onClick()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Play from Beginning", color = TextPrimary) },
+                        onClick = {
+                            showMenu = false
+                            onPlayFromStart()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Remove from History", color = FavoriteRed) },
+                        onClick = {
+                            showMenu = false
+                            onRemoveFromHistory()
+                        }
+                    )
+                }
             }
         }
     }
