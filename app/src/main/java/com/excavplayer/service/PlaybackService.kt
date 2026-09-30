@@ -65,7 +65,6 @@ class PlaybackService : MediaSessionService() {
     override fun onDestroy() {
         logger.i(TAG, "Destroying PlaybackService")
         mediaSession?.run {
-            player.release()
             release()
             mediaSession = null
         }

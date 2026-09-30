@@ -13,7 +13,8 @@ data class PlayerState(
     val isLandscapeRequested: Boolean = false,
     val areControlsVisible: Boolean = true,
     val isScreenLocked: Boolean = false,
-    val isInPictureInPicture: Boolean = false
+    val isInPictureInPicture: Boolean = false,
+    val isBackgroundAudio: Boolean = false
 )
 
 sealed interface PlayerCommand {
@@ -39,4 +40,5 @@ sealed interface PlayerCommand {
     data class SetControlsVisible(val visible: Boolean) : PlayerCommand
     data class SetScreenLocked(val locked: Boolean) : PlayerCommand
     data class SetInPictureInPicture(val inPip: Boolean) : PlayerCommand
+    data class SetBackgroundAudio(val enabled: Boolean) : PlayerCommand
 }

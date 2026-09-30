@@ -116,6 +116,17 @@ fun PlayerScreen(
     var gestureHudProgress by remember { mutableFloatStateOf(0f) }
     var gestureHudIcon by remember { mutableStateOf<ImageVector?>(null) }
 
+    // Smooth Subtitle Dragging State
+    var localSubtitlePosition by remember { mutableFloatStateOf(settings.subtitleVerticalPositionPercent) }
+    var isDraggingSubtitle by remember { mutableStateOf(false) }
+    var activeSurfaceView by remember { mutableStateOf<android.view.SurfaceView?>(null) }
+
+    LaunchedEffect(settings.subtitleVerticalPositionPercent) {
+        if (!isDraggingSubtitle) {
+            localSubtitlePosition = settings.subtitleVerticalPositionPercent
+        }
+    }
+
     // Clear gesture HUD automatically
     LaunchedEffect(gestureHudText) {
         if (gestureHudText != null) {
@@ -137,10 +148,18 @@ fun PlayerScreen(
         activity?.requestedOrientation = initialOrientation
     }
 
-    // Reset orientation on disposal
+    // Reset orientation & surface frame rate on disposal
     DisposableEffect(Unit) {
         onDispose {
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                try {
+                    val surf = activeSurfaceView?.holder?.surface
+                    if (surf != null && surf.isValid) {
+                        surf.setFrameRate(0f, android.view.Surface.FRAME_RATE_COMPATIBILITY_DEFAULT)
+                    }
+                } catch (_: Exception) {}
+            }
         }
     }
 
@@ -154,7 +173,7 @@ fun PlayerScreen(
         } else if (isLocked) {
             isLocked = false
         } else {
-            if (!keepAudioOnBackground) {
+            if (!keepAudioOnBackground && !state.isBackgroundAudio) {
                 vm.player.stop()
             }
             onClose()
@@ -269,13 +288,9 @@ fun PlayerScreen(
                             when {
                                 offset.x < width * 0.35f -> {
                                     vm.player.seekBackward(10_000)
-                                    gestureHudText = "-10s"
-                                    gestureHudIcon = Icons.Default.Replay10
                                 }
                                 offset.x > width * 0.65f -> {
                                     vm.player.seekForward(10_000)
-                                    gestureHudText = "+10s"
-                                    gestureHudIcon = Icons.Default.Forward10
                                 }
                                 else -> {
                                     if (state.playback.isPlaying) {
@@ -373,17 +388,46 @@ fun PlayerScreen(
                     null
                 )
 
-                val textSizeRatio = when (settings.subtitleTextSize) {
-                    "Small" -> 0.045f
-                    "Large" -> 0.075f
-                    "Extra Large" -> 0.09f
-                    else -> 0.058f
+                val currentTextSizeSp = settings.subtitleTextSize.toFloatOrNull() ?: when (settings.subtitleTextSize) {
+                    "Small" -> 13f
+                    "Large" -> 22f
+                    "Extra Large" -> 28f
+                    else -> 17f
                 }
+                val textSizeRatio = (currentTextSizeSp / 300f).coerceIn(0.035f, 0.10f)
 
                 playerView.subtitleView?.apply {
+                    setApplyEmbeddedStyles(false)
+                    setApplyEmbeddedFontSizes(false)
                     setStyle(captionStyle)
                     setFractionalTextSize(textSizeRatio)
-                    setBottomPaddingFraction(1f - settings.subtitleVerticalPositionPercent.coerceIn(0.05f, 0.95f))
+                    setBottomPaddingFraction(1f - localSubtitlePosition.coerceIn(0.05f, 0.95f))
+                }
+
+                // Display Refresh Rate Optimization (Judder-Free Playback)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    val surfaceView = playerView.videoSurfaceView as? android.view.SurfaceView
+                    activeSurfaceView = surfaceView
+                    val surface = surfaceView?.holder?.surface
+                    if (surface != null && surface.isValid) {
+                        val fps = vm.player.exoPlayer.videoFormat?.frameRate ?: 0f
+                        if (settings.matchDisplayRefreshRate && fps > 1.0f) {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                surface.setFrameRate(
+                                    fps,
+                                    android.view.Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE,
+                                    android.view.Surface.CHANGE_FRAME_RATE_ONLY_IF_SEAMLESS
+                                )
+                            } else {
+                                surface.setFrameRate(
+                                    fps,
+                                    android.view.Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE
+                                )
+                            }
+                        } else {
+                            surface.setFrameRate(0f, android.view.Surface.FRAME_RATE_COMPATIBILITY_DEFAULT)
+                        }
+                    }
                 }
             },
             modifier = Modifier
@@ -401,15 +445,25 @@ fun PlayerScreen(
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxSize()
-                    .pointerInput(settings.subtitleVerticalPositionPercent) {
-                        detectDragGestures { change, dragAmount ->
-                            change.consume()
-                            val newPercent = (settings.subtitleVerticalPositionPercent + (dragAmount.y / size.height)).coerceIn(0.10f, 0.92f)
-                            vm.setSubtitlePosition(newPercent)
-                        }
+                    .pointerInput(Unit) {
+                        detectDragGestures(
+                            onDragStart = { isDraggingSubtitle = true },
+                            onDragEnd = {
+                                isDraggingSubtitle = false
+                                vm.setSubtitlePosition(localSubtitlePosition)
+                            },
+                            onDragCancel = {
+                                isDraggingSubtitle = false
+                                vm.setSubtitlePosition(localSubtitlePosition)
+                            },
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                localSubtitlePosition = (localSubtitlePosition + (dragAmount.y / size.height)).coerceIn(0.08f, 0.95f)
+                            }
+                        )
                     }
             ) {
-                val lineY = maxHeight * settings.subtitleVerticalPositionPercent.coerceIn(0.10f, 0.92f)
+                val lineY = maxHeight * localSubtitlePosition.coerceIn(0.08f, 0.95f)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -417,40 +471,25 @@ fun PlayerScreen(
                         .padding(horizontal = 24.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(2.dp)
-                            .background(
-                                Brush.horizontalGradient(
-                                    colors = listOf(
-                                        Color.Transparent,
-                                        ExcavPalette.Blue.copy(alpha = 0.7f),
-                                        ExcavPalette.CyanGlow,
-                                        ExcavPalette.Blue.copy(alpha = 0.7f),
-                                        Color.Transparent
-                                    )
-                                )
-                            )
-                    )
                     Surface(
                         shape = ExcavShapes.Pill,
-                        color = ExcavPalette.Ink.copy(alpha = 0.88f),
-                        border = BorderStroke(1.dp, ExcavPalette.BlueGlow)
+                        color = ExcavPalette.Ink.copy(alpha = 0.92f),
+                        border = BorderStroke(1.dp, ExcavPalette.BlueGlow),
+                        shadowElevation = 8.dp
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
                                 imageVector = Icons.Default.UnfoldMore,
                                 contentDescription = null,
                                 tint = ExcavPalette.CyanGlow,
-                                modifier = Modifier.size(14.dp)
+                                modifier = Modifier.size(16.dp)
                             )
-                            Spacer(Modifier.width(4.dp))
+                            Spacer(Modifier.width(6.dp))
                             Text(
-                                text = "Subtitle: ${(settings.subtitleVerticalPositionPercent * 100).toInt()}% (Drag to move)",
+                                text = "Subtitle: ${(localSubtitlePosition * 100).toInt()}% (Drag to move)",
                                 color = ExcavPalette.Text,
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 11.sp)
                             )
@@ -460,29 +499,23 @@ fun PlayerScreen(
             }
         }
 
-        // Buffering Indicator
+        // Buffering Indicator - clean spinner without buffering text
         if (state.playback.playbackStatus == PlaybackStatus.BUFFERING) {
             Surface(
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .clip(ExcavShapes.Pill)
-                    .border(1.dp, ExcavPalette.BlueGlow, ExcavShapes.Pill),
+                    .clip(CircleShape)
+                    .border(1.dp, ExcavPalette.BlueGlow, CircleShape),
                 color = ExcavPalette.Ink.copy(alpha = 0.85f)
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                Box(
+                    modifier = Modifier.padding(12.dp),
+                    contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
+                        modifier = Modifier.size(24.dp),
                         color = ExcavPalette.Blue,
-                        strokeWidth = 2.dp
-                    )
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        text = stringResource(R.string.buffering),
-                        color = ExcavPalette.Text,
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium)
+                        strokeWidth = 2.5.dp
                     )
                 }
             }
@@ -741,7 +774,7 @@ fun PlayerScreen(
                     state = state,
                     player = vm.player,
                     onClose = {
-                        if (!keepAudioOnBackground) {
+                        if (!keepAudioOnBackground && !state.isBackgroundAudio) {
                             vm.player.stop()
                         }
                         onClose()
@@ -755,11 +788,20 @@ fun PlayerScreen(
                     },
                     onCycleOrientation = cycleOrientation,
                     onToggleBackgroundAudio = {
-                        keepAudioOnBackground = !keepAudioOnBackground
-                        gestureHudText = if (keepAudioOnBackground) "Background Audio On" else "Background Audio Off"
-                        gestureHudIcon = Icons.Default.Headphones
+                        keepAudioOnBackground = true
+                        vm.player.startBackgroundPlay()
+                        vm.showMessage("Playing audio in background")
+                        onClose()
                     },
-                    isBackgroundAudioActive = keepAudioOnBackground,
+                    isBackgroundAudioActive = state.isBackgroundAudio || keepAudioOnBackground,
+                    onToggleDialogueBoost = {
+                        val next = !settings.dialogueBoostEnabled
+                        vm.setDialogueBoost(next)
+                        gestureHudProgress = 0f
+                        gestureHudText = if (next) "Dialogue Boost: On" else "Dialogue Boost: Off"
+                        gestureHudIcon = Icons.Default.RecordVoiceOver
+                    },
+                    isDialogueBoostActive = settings.dialogueBoostEnabled,
                     onCycleResizeMode = cycleResizeMode
                 )
             }
@@ -789,6 +831,8 @@ private fun PlayerControlsOverlay(
     onCycleOrientation: () -> Unit,
     onToggleBackgroundAudio: () -> Unit,
     isBackgroundAudioActive: Boolean,
+    onToggleDialogueBoost: () -> Unit,
+    isDialogueBoostActive: Boolean,
     onCycleResizeMode: () -> Unit
 ) {
     Column(
@@ -834,6 +878,21 @@ private fun PlayerControlsOverlay(
             }
 
             Spacer(Modifier.width(12.dp))
+
+            // Dialogue Booster Button (Left side of subtitle option)
+            IconButton(
+                onClick = onToggleDialogueBoost,
+                modifier = Modifier.size(38.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.RecordVoiceOver,
+                    contentDescription = "Dialogue Booster",
+                    tint = if (isDialogueBoostActive) ExcavPalette.Blue else ExcavPalette.Text,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+
+            Spacer(Modifier.width(4.dp))
 
             // Subtitle Button (CC) - Clean floating button
             val hasSubtitles = state.playback.selectedSubtitleTrackId != null
@@ -1064,22 +1123,42 @@ private fun SheetContainer(
 ) {
     val settings by vm.userSettings.collectAsState()
 
+    // Controls on the left: Chapters
+    // Controls on the right: Playback Speed, Audio / Language, Subtitles
+    val isLeftAligned = sheet == PlayerSheet.CHAPTERS
+    val alignment = if (isLeftAligned) Alignment.BottomStart else Alignment.BottomEnd
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black.copy(alpha = 0.55f))
-            .clickable(onClick = onDismiss),
-        contentAlignment = Alignment.BottomCenter
+            .clickable(onClick = onDismiss)
+            .windowInsetsPadding(WindowInsets.safeDrawing)
+            .padding(
+                start = if (isLeftAligned) 20.dp else 12.dp,
+                end = if (!isLeftAligned) 20.dp else 12.dp,
+                bottom = 16.dp,
+                top = 16.dp
+            ),
+        contentAlignment = alignment
     ) {
         Surface(
             modifier = Modifier
-                .fillMaxWidth()
                 .clickable(enabled = false) {}
-                .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+                .widthIn(
+                    min = 280.dp,
+                    max = when (sheet) {
+                        PlayerSheet.SUBTITLES -> 560.dp
+                        PlayerSheet.CHAPTERS -> 380.dp
+                        PlayerSheet.AUDIO -> 340.dp
+                        PlayerSheet.SPEED -> 320.dp
+                    }
+                )
+                .clip(RoundedCornerShape(18.dp))
                 .border(
                     1.dp,
                     ExcavPalette.Line,
-                    RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+                    RoundedCornerShape(18.dp)
                 ),
             color = ExcavPalette.SurfaceCard,
             shadowElevation = 16.dp
@@ -1087,7 +1166,6 @@ private fun SheetContainer(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .navigationBarsPadding()
                     .imePadding()
             ) {
                 // Top Pill Handle
@@ -1253,12 +1331,13 @@ private fun SubtitleSheet(
         "Translucent Box" -> Color.Black.copy(alpha = 0.75f)
         else -> Color.Transparent
     }
-    val previewFontSize = when (settings.subtitleTextSize) {
-        "Small" -> 13.sp
-        "Large" -> 18.sp
-        "Extra Large" -> 21.sp
-        else -> 15.sp
+    val currentTextSizeSp = settings.subtitleTextSize.toFloatOrNull() ?: when (settings.subtitleTextSize) {
+        "Small" -> 13f
+        "Large" -> 22f
+        "Extra Large" -> 28f
+        else -> 17f
     }
+    val previewFontSize = currentTextSizeSp.sp
 
     BoxWithConstraints(
         modifier = Modifier
@@ -1282,17 +1361,9 @@ private fun SubtitleSheet(
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "Live Preview",
-                        color = ExcavPalette.Text,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp
-                        )
-                    )
                     Text(
                         text = "${(settings.subtitleVerticalPositionPercent * 100).toInt()}%",
                         color = ExcavPalette.Blue,
@@ -1321,24 +1392,15 @@ private fun SubtitleSheet(
                                     )
                                 )
                             )
-                            .pointerInput(settings.subtitleVerticalPositionPercent) {
+                            .pointerInput(Unit) {
                                 detectDragGestures { change, dragAmount ->
                                     change.consume()
-                                    val newPercent = (settings.subtitleVerticalPositionPercent + (dragAmount.y / size.height)).coerceIn(0.10f, 0.92f)
+                                    val newPercent = (settings.subtitleVerticalPositionPercent + (dragAmount.y / size.height)).coerceIn(0.08f, 0.95f)
                                     onSetPosition(newPercent)
                                 }
                             }
                     ) {
-                        val subY = maxHeight * settings.subtitleVerticalPositionPercent.coerceIn(0.10f, 0.92f) - 16.dp
-
-                        // Subtle guide line across preview
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .offset(y = subY + 12.dp)
-                                .height(1.dp)
-                                .background(ExcavPalette.Blue.copy(alpha = 0.35f))
-                        )
+                        val subY = maxHeight * settings.subtitleVerticalPositionPercent.coerceIn(0.08f, 0.95f) - 16.dp
 
                         // Sample Subtitle Box (Draggable)
                         Box(
@@ -1401,7 +1463,7 @@ private fun SubtitleSheet(
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = ExcavPalette.TextMuted),
                     contentPadding = PaddingValues(vertical = 4.dp, horizontal = 8.dp)
                 ) {
-                    Text("Reset Position (90%)", fontSize = 11.sp)
+                    Text("Reset", fontSize = 12.sp)
                 }
             }
 
@@ -1492,40 +1554,22 @@ private fun SubtitleSheet(
                 )
                 Spacer(Modifier.height(6.dp))
 
-                // Text Size
+                // Text Size (Slider)
                 Text(
                     text = "Text Size",
                     color = ExcavPalette.TextSecondary,
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp)
                 )
                 Spacer(Modifier.height(4.dp))
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    listOf("Small", "Normal", "Large", "Extra Large").forEach { sizeOpt ->
-                        val isSel = settings.subtitleTextSize == sizeOpt
-                        Surface(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(ExcavShapes.Pill)
-                                .border(1.dp, if (isSel) ExcavPalette.BlueGlow else ExcavPalette.Line, ExcavShapes.Pill)
-                                .clickable { onSetSize(sizeOpt) },
-                            color = if (isSel) ExcavPalette.Blue.copy(alpha = 0.2f) else ExcavPalette.SurfaceCard
-                        ) {
-                            Text(
-                                text = if (sizeOpt == "Extra Large") "XL" else sizeOpt,
-                                color = if (isSel) ExcavPalette.Blue else ExcavPalette.Text,
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
-                                    fontSize = 10.sp
-                                ),
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.padding(vertical = 6.dp)
-                            )
-                        }
-                    }
-                }
+
+                ExcavSleekSlider(
+                    value = currentTextSizeSp,
+                    onValueChange = { onSetSize(it.toInt().toString()) },
+                    valueRange = 12f..32f,
+                    startLabel = "12 sp",
+                    centerLabel = "${currentTextSizeSp.toInt()} sp",
+                    endLabel = "32 sp"
+                )
 
                 Spacer(Modifier.height(10.dp))
 

@@ -1649,15 +1649,15 @@ fun ExcavSleekSlider(
             thumb = {
                 Box(
                     modifier = Modifier
-                        .size(24.dp)
+                        .size(17.dp)
                         .clip(CircleShape)
                         .background(Color.White)
-                        .border(3.5.dp, Color(0xFF00B0FF), CircleShape),
+                        .border(2.5.dp, Color(0xFF00B0FF), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(6.dp)
+                            .size(5.dp)
                             .clip(CircleShape)
                             .background(Color(0xFF00B0FF))
                     )
@@ -1671,15 +1671,15 @@ fun ExcavSleekSlider(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(10.dp)
-                        .clip(RoundedCornerShape(5.dp))
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp))
                         .background(Color(0xFF232A3B))
                 ) {
                     Box(
                         modifier = Modifier
                             .fillMaxHeight()
                             .fillMaxWidth(fraction)
-                            .clip(RoundedCornerShape(5.dp))
+                            .clip(RoundedCornerShape(3.dp))
                             .background(
                                 Brush.horizontalGradient(
                                     listOf(Color(0xFF00B0FF), Color(0xFF00E5FF))

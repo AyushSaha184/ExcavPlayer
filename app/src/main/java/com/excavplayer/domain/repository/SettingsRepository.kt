@@ -30,4 +30,7 @@ interface SettingsRepository {
     suspend fun updateHeadsetDetection(enabled: Boolean)
     suspend fun updateStopOnScreenOff(enabled: Boolean)
     suspend fun updateHardwareAcceleration(enabled: Boolean)
+    suspend fun updateHardwareAccelerationMode(mode: String)
+    suspend fun updateDialogueBoost(enabled: Boolean)
+    suspend fun updateMatchDisplayRefreshRate(enabled: Boolean)
 }

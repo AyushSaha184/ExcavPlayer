@@ -5,14 +5,28 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Headphones
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.excavplayer.R
 import com.excavplayer.ui.ExcavViewModel
 import com.excavplayer.ui.components.*
@@ -187,6 +201,108 @@ fun ExcavApp(
                                 MainTab.SETTINGS -> SettingsScreen(
                                     vm = vm,
                                     onBack = { tab = MainTab.HOME }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Sleek Floating Mini Player when audio is playing in the background
+            val playerState by vm.player.state.collectAsState()
+            val isBackgroundAudioActive = !playerOpen && playerState.currentVideo != null && (playerState.isBackgroundAudio || playerState.playback.isPlaying)
+
+            if (isBackgroundAudioActive) {
+                val currentVideo = playerState.currentVideo
+                if (currentVideo != null) {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                            .padding(bottom = if (searchOpen) 16.dp else 78.dp)
+                            .align(Alignment.BottomCenter)
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable {
+                                playerOpen = true
+                            },
+                        color = ExcavPalette.SurfaceCard,
+                        shadowElevation = 14.dp,
+                        border = BorderStroke(1.dp, ExcavPalette.Blue.copy(alpha = 0.45f))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(CircleShape)
+                                    .background(ExcavPalette.Blue.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Headphones,
+                                    contentDescription = "Background Audio",
+                                    tint = ExcavPalette.Blue,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+
+                            Spacer(Modifier.width(12.dp))
+
+                            Column(
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    text = currentVideo.displayName,
+                                    color = ExcavPalette.Text,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 14.sp
+                                    ),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = if (playerState.playback.isPlaying) "Playing in background" else "Paused",
+                                    color = ExcavPalette.Blue,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp)
+                                )
+                            }
+
+                            Spacer(Modifier.width(8.dp))
+
+                            IconButton(
+                                onClick = {
+                                    if (playerState.playback.isPlaying) {
+                                        vm.player.pause()
+                                    } else {
+                                        vm.player.resume()
+                                    }
+                                },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (playerState.playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    contentDescription = if (playerState.playback.isPlaying) "Pause" else "Play",
+                                    tint = ExcavPalette.Text,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    vm.player.stop()
+                                },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Stop",
+                                    tint = ExcavPalette.TextMuted,
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                         }

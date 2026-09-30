@@ -35,7 +35,7 @@ import com.excavplayer.ui.theme.ExcavPalette
 import com.excavplayer.ui.theme.ExcavShapes
 
 private enum class SettingDialog {
-    NONE, SPEED, REPEAT, THRESHOLD, ORIENTATION, MEDIA_FIT, SUB_LANG, AUDIO_LANG
+    NONE, HARDWARE_ACCELERATION, SPEED, REPEAT, THRESHOLD, ORIENTATION, MEDIA_FIT, SUB_LANG, AUDIO_LANG
 }
 
 @Composable
@@ -114,12 +114,19 @@ fun SettingsScreen(
                     onCheckedChange = { vm.setStopOnScreenOff(it) }
                 )
                 SettingsDivider()
-                SettingsSwitchRow(
+                SettingsNavRow(
                     icon = Icons.Default.Memory,
                     title = "Hardware Acceleration",
-                    subtitle = "Use hardware decoders for smooth video playback",
-                    checked = settings.hardwareAccelerationEnabled,
-                    onCheckedChange = { vm.setHardwareAcceleration(it) }
+                    subtitle = settings.hardwareAccelerationMode,
+                    onClick = { activeDialog = SettingDialog.HARDWARE_ACCELERATION }
+                )
+                SettingsDivider()
+                SettingsSwitchRow(
+                    icon = Icons.Default.Sync,
+                    title = "Match Display Refresh Rate",
+                    subtitle = "Seamless frame rate sync to eliminate 24fps motion judder on 60Hz/120Hz displays",
+                    checked = settings.matchDisplayRefreshRate,
+                    onCheckedChange = { vm.setMatchDisplayRefreshRate(it) }
                 )
                 SettingsDivider()
                 SettingsNavRow(
@@ -217,6 +224,14 @@ fun SettingsScreen(
                     checked = settings.rememberVolume,
                     onCheckedChange = { vm.setRememberVolume(it) }
                 )
+                SettingsDivider()
+                SettingsSwitchRow(
+                    icon = Icons.Default.RecordVoiceOver,
+                    title = "Dialogue Booster",
+                    subtitle = "Enhance vocal frequencies and clarify speech across videos",
+                    checked = settings.dialogueBoostEnabled,
+                    onCheckedChange = { vm.setDialogueBoost(it) }
+                )
             }
 
             Spacer(Modifier.height(20.dp))
@@ -289,6 +304,28 @@ fun SettingsScreen(
 
     // Dialogs
     when (activeDialog) {
+        SettingDialog.HARDWARE_ACCELERATION -> {
+            RadioChoiceDialog(
+                title = "Hardware Acceleration",
+                options = listOf("Automatic", "Full Acceleration", "Decoding Acceleration", "Disabled"),
+                selected = settings.hardwareAccelerationMode,
+                labelFor = { it },
+                subtitleFor = {
+                    when (it) {
+                        "Automatic" -> "Recommended. Automatically selects best hardware acceleration with fallback"
+                        "Full Acceleration" -> "Direct hardware decoding & GPU output for maximum battery savings"
+                        "Decoding Acceleration" -> "Hardware accelerated video decoding with flexible frame processing"
+                        "Disabled" -> "Pure software decoding using CPU for maximum compatibility"
+                        else -> null
+                    }
+                },
+                onSelect = {
+                    vm.setHardwareAccelerationMode(it)
+                    activeDialog = SettingDialog.NONE
+                },
+                onDismiss = { activeDialog = SettingDialog.NONE }
+            )
+        }
         SettingDialog.SPEED -> {
             RadioChoiceDialog(
                 title = "Default Playback Speed",
@@ -539,6 +576,7 @@ private fun <T> RadioChoiceDialog(
     options: List<T>,
     selected: T,
     labelFor: (T) -> String,
+    subtitleFor: ((T) -> String?)? = null,
     onSelect: (T) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -559,13 +597,14 @@ private fun <T> RadioChoiceDialog(
             ) {
                 options.forEach { option ->
                     val isSelected = option == selected
+                    val sub = subtitleFor?.invoke(option)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(10.dp))
                             .background(if (isSelected) ExcavPalette.Blue.copy(alpha = 0.12f) else Color.Transparent)
                             .clickable { onSelect(option) }
-                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                            .padding(horizontal = 12.dp, vertical = if (sub != null) 10.dp else 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         SleekRadioButton(
@@ -573,13 +612,23 @@ private fun <T> RadioChoiceDialog(
                             onClick = { onSelect(option) }
                         )
                         Spacer(Modifier.width(12.dp))
-                        Text(
-                            text = labelFor(option),
-                            color = if (isSelected) ExcavPalette.Blue else ExcavPalette.Text,
-                            style = MaterialTheme.typography.bodyLarge.copy(
-                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = labelFor(option),
+                                color = if (isSelected) ExcavPalette.Blue else ExcavPalette.Text,
+                                style = MaterialTheme.typography.bodyLarge.copy(
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                                )
                             )
-                        )
+                            if (sub != null) {
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    text = sub,
+                                    color = ExcavPalette.TextMuted,
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp)
+                                )
+                            }
+                        }
                     }
                 }
             }

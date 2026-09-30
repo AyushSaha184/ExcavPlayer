@@ -1,7 +1,9 @@
 package com.excavplayer.player.core
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
+import com.excavplayer.service.PlaybackService
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -12,7 +14,10 @@ import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
+import androidx.media3.exoplayer.mediacodec.MediaCodecUtil
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import com.excavplayer.domain.model.UserSettings
 import com.excavplayer.core.coroutine.DispatcherProvider
 import com.excavplayer.core.logging.AppLogger
 import com.excavplayer.domain.model.PlaybackError
@@ -66,9 +71,35 @@ class PlayerManager @Inject constructor(
     private val trackSelector = DefaultTrackSelector(context)
     private val trackManager = TrackManager()
 
+    private var currentSettings = UserSettings()
+
     override val exoPlayer: ExoPlayer by lazy {
+        val mediaCodecSelector = MediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
+            val decoders = MediaCodecUtil.getDecoderInfos(mimeType, requiresSecureDecoder, requiresTunnelingDecoder)
+            when (currentSettings.hardwareAccelerationMode) {
+                "Disabled" -> {
+                    // Pure software decoding: prioritize software decoders
+                    decoders.sortedBy { it.hardwareAccelerated }
+                }
+                "Full Acceleration" -> {
+                    // Full hardware decoding & direct GPU output
+                    decoders.sortedByDescending { it.hardwareAccelerated }
+                }
+                "Decoding Acceleration" -> {
+                    // Hardware accelerated decoding
+                    decoders.sortedByDescending { it.hardwareAccelerated }
+                }
+                else -> { // "Automatic"
+                    // Automatic: hardware first with graceful fallback
+                    decoders.sortedByDescending { it.hardwareAccelerated }
+                }
+            }
+        }
+
         val renderersFactory = DefaultRenderersFactory(context)
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+            .setEnableDecoderFallback(true)
+            .setMediaCodecSelector(mediaCodecSelector)
 
         val audioAttributes = AudioAttributes.Builder()
             .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
@@ -80,6 +111,12 @@ class PlayerManager @Inject constructor(
             .setAudioAttributes(audioAttributes, /* handleAudioFocus = */ true)
             .setHandleAudioBecomingNoisy(false) // We manage audio becoming noisy with explicit receiver
             .build().apply {
+                val strategy = if (currentSettings.matchDisplayRefreshRate) {
+                    C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_ONLY_IF_SEAMLESS
+                } else {
+                    C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF
+                }
+                setVideoChangeFrameRateStrategy(strategy)
                 addListener(PlayerEventListener())
             }
     }
@@ -93,6 +130,19 @@ class PlayerManager @Inject constructor(
 
     init {
         startPositionTicker()
+        playerScope.launch {
+            settingsRepository.userSettings.collect { settings ->
+                val prevDialogue = currentSettings.dialogueBoostEnabled
+                val prevMatchRate = currentSettings.matchDisplayRefreshRate
+                currentSettings = settings
+                if (prevDialogue != settings.dialogueBoostEnabled) {
+                    applyDialogueBooster(settings.dialogueBoostEnabled)
+                }
+                if (prevMatchRate != settings.matchDisplayRefreshRate) {
+                    applyDisplayRefreshRateOptimization(settings.matchDisplayRefreshRate)
+                }
+            }
+        }
     }
 
     private fun startPositionTicker() {
@@ -138,6 +188,7 @@ class PlayerManager @Inject constructor(
             it.copy(
                 currentVideo = video,
                 error = null,
+                isBackgroundAudio = false,
                 chapters = emptyList(),
                 playback = it.playback.copy(
                     videoId = video.id,
@@ -221,13 +272,16 @@ class PlayerManager @Inject constructor(
     }
 
     private var loudnessEnhancer: android.media.audiofx.LoudnessEnhancer? = null
+    private var loudnessEnhancerSessionId: Int = C.AUDIO_SESSION_ID_UNSET
 
     private fun applyLoudnessEnhancer(volume: Float) {
         val sessionId = exoPlayer.audioSessionId
         if (sessionId != C.AUDIO_SESSION_ID_UNSET && sessionId > 0) {
             try {
-                if (loudnessEnhancer == null) {
+                if (loudnessEnhancer == null || loudnessEnhancerSessionId != sessionId) {
+                    releaseLoudnessEnhancer()
                     loudnessEnhancer = android.media.audiofx.LoudnessEnhancer(sessionId)
+                    loudnessEnhancerSessionId = sessionId
                 }
                 if (volume > 1.0f) {
                     // Boost volume from 100% to 200% mapped to +0 to +1200 mB (+12dB)
@@ -252,6 +306,84 @@ class PlayerManager @Inject constructor(
             logger.w(TAG, "Failed to release LoudnessEnhancer: ${e.message}")
         } finally {
             loudnessEnhancer = null
+            loudnessEnhancerSessionId = C.AUDIO_SESSION_ID_UNSET
+        }
+    }
+
+    private var equalizer: android.media.audiofx.Equalizer? = null
+    private var equalizerSessionId: Int = C.AUDIO_SESSION_ID_UNSET
+
+    fun applyDialogueBooster(enabled: Boolean) {
+        val sessionId = exoPlayer.audioSessionId
+        if (sessionId != C.AUDIO_SESSION_ID_UNSET && sessionId > 0) {
+            try {
+                if (equalizer == null || equalizerSessionId != sessionId) {
+                    releaseEqualizer()
+                    equalizer = android.media.audiofx.Equalizer(0, sessionId)
+                    equalizerSessionId = sessionId
+                }
+                equalizer?.let { eq ->
+                    if (enabled) {
+                        eq.enabled = true
+                        val numBands = eq.numberOfBands
+                        for (i in 0 until numBands) {
+                            val band = i.toShort()
+                            val centerFreq = eq.getCenterFreq(band) // in mHz
+                            when {
+                                // Boost human vocal speech range (800 Hz - 4.5 kHz)
+                                centerFreq in 800_000..4_500_000 -> {
+                                    val maxLevel = eq.bandLevelRange.getOrNull(1) ?: 1000
+                                    val boost = (maxLevel * 0.55f).toInt().coerceAtMost(maxLevel.toInt()).toShort()
+                                    eq.setBandLevel(band, boost)
+                                }
+                                // Subtle cut on heavy sub-bass (< 250 Hz) to clear up mud/boomy rumble
+                                centerFreq < 250_000 -> {
+                                    val minLevel = eq.bandLevelRange.getOrNull(0) ?: -1000
+                                    val cut = (minLevel * 0.25f).toInt().coerceAtLeast(minLevel.toInt()).toShort()
+                                    eq.setBandLevel(band, cut)
+                                }
+                                else -> {
+                                    eq.setBandLevel(band, 0.toShort())
+                                }
+                            }
+                        }
+                    } else {
+                        val numBands = eq.numberOfBands
+                        for (i in 0 until numBands) {
+                            eq.setBandLevel(i.toShort(), 0.toShort())
+                        }
+                        eq.enabled = false
+                    }
+                }
+            } catch (e: Exception) {
+                logger.w(TAG, "Failed to configure Dialogue Booster Equalizer: ${e.message}")
+            }
+        }
+    }
+
+    private fun releaseEqualizer() {
+        try {
+            equalizer?.enabled = false
+            equalizer?.release()
+        } catch (e: Exception) {
+            logger.w(TAG, "Failed to release Equalizer: ${e.message}")
+        } finally {
+            equalizer = null
+            equalizerSessionId = C.AUDIO_SESSION_ID_UNSET
+        }
+    }
+
+    fun applyDisplayRefreshRateOptimization(enabled: Boolean) {
+        try {
+            val strategy = if (enabled) {
+                C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_ONLY_IF_SEAMLESS
+            } else {
+                C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF
+            }
+            exoPlayer.setVideoChangeFrameRateStrategy(strategy)
+            logger.d(TAG, "Applied video change frame rate strategy: $strategy (enabled=$enabled)")
+        } catch (e: Exception) {
+            logger.w(TAG, "Failed to apply video change frame rate strategy: ${e.message}")
         }
     }
 
@@ -333,15 +465,37 @@ class PlayerManager @Inject constructor(
         exoPlayer.prepare()
     }
 
+    override fun startBackgroundPlay() {
+        logger.i(TAG, "startBackgroundPlay()")
+        _state.update { it.copy(isBackgroundAudio = true) }
+        try {
+            val intent = Intent(context, PlaybackService::class.java)
+            context.startService(intent)
+        } catch (e: Exception) {
+            logger.w(TAG, "Failed to start PlaybackService: ${e.message}")
+        }
+    }
+
+    override fun stopBackgroundPlay() {
+        logger.i(TAG, "stopBackgroundPlay()")
+        _state.update { it.copy(isBackgroundAudio = false) }
+        try {
+            context.stopService(Intent(context, PlaybackService::class.java))
+        } catch (_: Exception) {}
+    }
+
     override fun stop() {
         logger.d(TAG, "stop()")
+        stopBackgroundPlay()
         becomingNoisyReceiver.unregister()
         persistenceManager.stopPeriodicSave()
         releaseLoudnessEnhancer()
+        releaseEqualizer()
         playerScope.launch {
             persistenceManager.saveImmediate(_state.value.playback, _state.value.currentVideo)
         }
         exoPlayer.stop()
+        _state.update { it.copy(currentVideo = null, isBackgroundAudio = false) }
     }
 
     override fun release() {
@@ -349,6 +503,7 @@ class PlayerManager @Inject constructor(
         becomingNoisyReceiver.unregister()
         persistenceManager.stopPeriodicSave()
         releaseLoudnessEnhancer()
+        releaseEqualizer()
         playerScope.launch {
             persistenceManager.saveImmediate(_state.value.playback, _state.value.currentVideo)
             exoPlayer.release()
@@ -378,6 +533,9 @@ class PlayerManager @Inject constructor(
             is PlayerCommand.SetControlsVisible -> _state.update { it.copy(areControlsVisible = command.visible) }
             is PlayerCommand.SetScreenLocked -> _state.update { it.copy(isScreenLocked = command.locked) }
             is PlayerCommand.SetInPictureInPicture -> _state.update { it.copy(isInPictureInPicture = command.inPip) }
+            is PlayerCommand.SetBackgroundAudio -> {
+                if (command.enabled) startBackgroundPlay() else stopBackgroundPlay()
+            }
         }
     }
 
@@ -401,6 +559,12 @@ class PlayerManager @Inject constructor(
                 )
             }
 
+            if (playbackState == Player.STATE_READY) {
+                applyDialogueBooster(currentSettings.dialogueBoostEnabled)
+                applyLoudnessEnhancer(_state.value.playback.volume)
+                applyDisplayRefreshRateOptimization(currentSettings.matchDisplayRefreshRate)
+            }
+
             if (playbackState == Player.STATE_ENDED) {
                 becomingNoisyReceiver.unregister()
                 persistenceManager.stopPeriodicSave()
@@ -417,6 +581,11 @@ class PlayerManager @Inject constructor(
                     }
                 }
             }
+        }
+
+        override fun onAudioSessionIdChanged(audioSessionId: Int) {
+            applyDialogueBooster(currentSettings.dialogueBoostEnabled)
+            applyLoudnessEnhancer(_state.value.playback.volume)
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -440,9 +609,41 @@ class PlayerManager @Inject constructor(
             val video = trackManager.extractVideoTracks(tracks)
             val subs = trackManager.extractSubtitleTracks(tracks)
 
-            val selectedAudio = audio.find { it.isSelected }?.id
+            var selectedAudio = audio.find { it.isSelected }?.id
             val selectedVideo = video.find { it.isSelected }?.id
-            val selectedSubs = subs.find { it.isSelected }?.id
+            var selectedSubs = subs.find { it.isSelected }?.id
+
+            // Match preferred audio language if configured
+            currentSettings.preferredAudioLanguage?.let { preferredLang ->
+                val matchingAudio = audio.find { track ->
+                    matchesLanguage(track.language, track.label, preferredLang)
+                }
+                if (matchingAudio != null && matchingAudio.id != selectedAudio) {
+                    trackManager.selectTrack(exoPlayer, C.TRACK_TYPE_AUDIO, matchingAudio.id)
+                    selectedAudio = matchingAudio.id
+                }
+            }
+
+            // Auto-enable subtitles if enabled in user settings
+            if (currentSettings.subtitlesEnabled) {
+                if (selectedSubs == null && subs.isNotEmpty()) {
+                    val preferredLang = currentSettings.preferredSubtitleLanguage
+                    val matchingSub = if (!preferredLang.isNullOrBlank()) {
+                        subs.find { track ->
+                            matchesLanguage(track.language, track.label, preferredLang)
+                        } ?: subs.first()
+                    } else {
+                        subs.first()
+                    }
+                    trackManager.selectTrack(exoPlayer, C.TRACK_TYPE_TEXT, matchingSub.id)
+                    selectedSubs = matchingSub.id
+                }
+            } else {
+                if (selectedSubs != null) {
+                    trackManager.selectTrack(exoPlayer, C.TRACK_TYPE_TEXT, null)
+                    selectedSubs = null
+                }
+            }
 
             _state.update {
                 it.copy(
@@ -455,6 +656,36 @@ class PlayerManager @Inject constructor(
                         selectedSubtitleTrackId = selectedSubs
                     )
                 )
+            }
+        }
+
+        private fun matchesLanguage(language: String?, label: String?, preferred: String): Boolean {
+            if (preferred.isBlank()) return false
+            val pref = preferred.trim().lowercase()
+            val lang = language?.trim()?.lowercase()
+            val lab = label?.trim()?.lowercase()
+
+            if (lang != null && (lang == pref || lang.startsWith(pref) || pref.startsWith(lang))) return true
+            if (lab != null && (lab.contains(pref) || pref.contains(lab))) return true
+
+            val synonyms = when (pref) {
+                "english", "en" -> listOf("en", "eng", "english")
+                "japanese", "ja" -> listOf("ja", "jpn", "japanese", "jp")
+                "spanish", "es" -> listOf("es", "spa", "spanish", "espanol", "español")
+                "french", "fr" -> listOf("fr", "fra", "fre", "french", "francais", "français")
+                "german", "de" -> listOf("de", "deu", "ger", "german", "deutsch")
+                "chinese", "zh" -> listOf("zh", "zho", "chi", "chinese")
+                "korean", "ko" -> listOf("ko", "kor", "korean")
+                "hindi", "hi" -> listOf("hi", "hin", "hindi")
+                "russian", "ru" -> listOf("ru", "rus", "russian")
+                "portuguese", "pt" -> listOf("pt", "por", "portuguese")
+                "italian", "it" -> listOf("it", "ita", "italian")
+                else -> listOf(pref)
+            }
+
+            return synonyms.any { s ->
+                (lang != null && (lang == s || lang.startsWith(s))) ||
+                (lab != null && lab.contains(s))
             }
         }
 

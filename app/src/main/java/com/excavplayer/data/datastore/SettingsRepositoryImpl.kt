@@ -59,6 +59,9 @@ class SettingsRepositoryImpl @Inject constructor(
         val KEY_HEADSET_DETECTION = booleanPreferencesKey("headset_detection")
         val KEY_STOP_ON_SCREEN_OFF = booleanPreferencesKey("stop_on_screen_off")
         val KEY_HARDWARE_ACCELERATION = booleanPreferencesKey("hardware_acceleration")
+        val KEY_HARDWARE_ACCELERATION_MODE = stringPreferencesKey("hardware_acceleration_mode")
+        val KEY_DIALOGUE_BOOST = booleanPreferencesKey("dialogue_boost")
+        val KEY_MATCH_DISPLAY_REFRESH_RATE = booleanPreferencesKey("match_display_refresh_rate")
     }
 
     override val userSettings: Flow<UserSettings> = context.dataStore.data
@@ -72,6 +75,9 @@ class SettingsRepositoryImpl @Inject constructor(
             }
         }
         .map { preferences ->
+            val hwMode = preferences[KEY_HARDWARE_ACCELERATION_MODE]
+                ?: if (preferences[KEY_HARDWARE_ACCELERATION] == false) "Disabled" else "Automatic"
+
             UserSettings(
                 defaultPlaybackSpeed = preferences[KEY_DEFAULT_PLAYBACK_SPEED] ?: 1.0f,
                 autoResume = preferences[KEY_AUTO_RESUME] ?: true,
@@ -98,7 +104,10 @@ class SettingsRepositoryImpl @Inject constructor(
                 autoRescanOnLaunch = preferences[KEY_AUTO_RESCAN] ?: true,
                 headsetDetectionEnabled = preferences[KEY_HEADSET_DETECTION] ?: true,
                 stopOnScreenOff = preferences[KEY_STOP_ON_SCREEN_OFF] ?: true,
-                hardwareAccelerationEnabled = preferences[KEY_HARDWARE_ACCELERATION] ?: true
+                hardwareAccelerationMode = hwMode,
+                hardwareAccelerationEnabled = hwMode != "Disabled",
+                dialogueBoostEnabled = preferences[KEY_DIALOGUE_BOOST] ?: false,
+                matchDisplayRefreshRate = preferences[KEY_MATCH_DISPLAY_REFRESH_RATE] ?: false
             )
         }
         .flowOn(dispatchers.io)
@@ -226,7 +235,25 @@ class SettingsRepositoryImpl @Inject constructor(
 
     override suspend fun updateHardwareAcceleration(enabled: Boolean) {
         logger.i(TAG, "updateHardwareAcceleration: $enabled")
-        edit { it[KEY_HARDWARE_ACCELERATION] = enabled }
+        updateHardwareAccelerationMode(if (enabled) "Automatic" else "Disabled")
+    }
+
+    override suspend fun updateHardwareAccelerationMode(mode: String) {
+        logger.i(TAG, "updateHardwareAccelerationMode: $mode")
+        edit {
+            it[KEY_HARDWARE_ACCELERATION_MODE] = mode
+            it[KEY_HARDWARE_ACCELERATION] = (mode != "Disabled")
+        }
+    }
+
+    override suspend fun updateDialogueBoost(enabled: Boolean) {
+        logger.i(TAG, "updateDialogueBoost: $enabled")
+        edit { it[KEY_DIALOGUE_BOOST] = enabled }
+    }
+
+    override suspend fun updateMatchDisplayRefreshRate(enabled: Boolean) {
+        logger.i(TAG, "updateMatchDisplayRefreshRate: $enabled")
+        edit { it[KEY_MATCH_DISPLAY_REFRESH_RATE] = enabled }
     }
 
     private suspend fun edit(transform: suspend (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {

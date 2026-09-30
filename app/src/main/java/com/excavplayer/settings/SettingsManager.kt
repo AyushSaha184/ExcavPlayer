@@ -138,4 +138,19 @@ class SettingsManager @Inject constructor(
         logger.i(TAG, "Setting hardware acceleration to: $enabled")
         settingsRepository.updateHardwareAcceleration(enabled)
     }
+
+    suspend fun setHardwareAccelerationMode(mode: String) {
+        logger.i(TAG, "Setting hardware acceleration mode to: $mode")
+        settingsRepository.updateHardwareAccelerationMode(mode)
+    }
+
+    suspend fun setDialogueBoost(enabled: Boolean) {
+        logger.i(TAG, "Setting dialogue boost to: $enabled")
+        settingsRepository.updateDialogueBoost(enabled)
+    }
+
+    suspend fun setMatchDisplayRefreshRate(enabled: Boolean) {
+        logger.i(TAG, "Setting match display refresh rate to: $enabled")
+        settingsRepository.updateMatchDisplayRefreshRate(enabled)
+    }
 }

@@ -28,5 +28,7 @@ interface PlayerController {
     fun addExternalSubtitle(uri: String, label: String, mimeType: String)
     fun stop()
     fun release()
+    fun startBackgroundPlay()
+    fun stopBackgroundPlay()
     fun dispatch(command: PlayerCommand)
 }

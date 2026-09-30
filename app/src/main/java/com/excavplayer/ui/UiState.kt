@@ -142,7 +142,7 @@ class ExcavViewModel @Inject constructor(
             logger.i(TAG, "User requested media library refresh")
             when (val result = library.refresh()) {
                 is ExcavResult.Success -> {
-                    showMessage("Library synchronized (${result.data} items)", isError = false)
+                    // Refreshed silently without toast banner
                 }
                 is ExcavResult.Error -> {
                     logger.e(TAG, "Failed to refresh library", result.exception)
@@ -181,9 +181,7 @@ class ExcavViewModel @Inject constructor(
     fun toggleFavorite(video: Video) {
         viewModelScope.launch {
             logger.i(TAG, "toggleFavorite for: ${video.id}")
-            val wasFav = libraryState.value.favorites.any { it.id == video.id }
             library.toggleFavorite(video.id)
-            showMessage(if (wasFav) "Removed from favorites" else "Added to favorites")
         }
     }
 
@@ -249,7 +247,6 @@ class ExcavViewModel @Inject constructor(
             }
             logger.i(TAG, "Renaming playlist $id to: $title")
             playlistManager.renamePlaylist(id, title)
-            showMessage("Playlist renamed")
         }
     }
 
@@ -257,7 +254,6 @@ class ExcavViewModel @Inject constructor(
         viewModelScope.launch {
             logger.i(TAG, "Deleting playlist: $id")
             playlistManager.deletePlaylist(id)
-            showMessage("Playlist deleted")
         }
     }
 
@@ -269,7 +265,6 @@ class ExcavViewModel @Inject constructor(
         viewModelScope.launch {
             logger.i(TAG, "Removing video $videoId from playlist $playlistId")
             playlistManager.removeVideo(playlistId, videoId)
-            showMessage("Removed from playlist")
         }
     }
 
@@ -430,6 +425,27 @@ class ExcavViewModel @Inject constructor(
         viewModelScope.launch {
             logger.i(TAG, "setHardwareAcceleration: $enabled")
             settingsManager.setHardwareAcceleration(enabled)
+        }
+    }
+
+    fun setHardwareAccelerationMode(mode: String) {
+        viewModelScope.launch {
+            logger.i(TAG, "setHardwareAccelerationMode: $mode")
+            settingsManager.setHardwareAccelerationMode(mode)
+        }
+    }
+
+    fun setDialogueBoost(enabled: Boolean) {
+        viewModelScope.launch {
+            logger.i(TAG, "setDialogueBoost: $enabled")
+            settingsManager.setDialogueBoost(enabled)
+        }
+    }
+
+    fun setMatchDisplayRefreshRate(enabled: Boolean) {
+        viewModelScope.launch {
+            logger.i(TAG, "setMatchDisplayRefreshRate: $enabled")
+            settingsManager.setMatchDisplayRefreshRate(enabled)
         }
     }
 

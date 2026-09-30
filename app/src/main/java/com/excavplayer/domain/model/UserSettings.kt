@@ -24,5 +24,8 @@ data class UserSettings(
     val autoRescanOnLaunch: Boolean = true,
     val headsetDetectionEnabled: Boolean = true,
     val stopOnScreenOff: Boolean = true,
-    val hardwareAccelerationEnabled: Boolean = true
+    val hardwareAccelerationMode: String = "Automatic",
+    val hardwareAccelerationEnabled: Boolean = true,
+    val dialogueBoostEnabled: Boolean = false,
+    val matchDisplayRefreshRate: Boolean = false
 )

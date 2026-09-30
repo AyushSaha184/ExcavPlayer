@@ -142,9 +142,20 @@ fun UpdateDialog(
                                 )
                             }
                             Spacer(Modifier.width(10.dp))
+                            val context = androidx.compose.ui.platform.LocalContext.current
                             Button(
                                 onClick = {
-                                    updateState.apkAsset?.let { onDownload(it) }
+                                    val asset = updateState.apkAsset
+                                    if (asset != null) {
+                                        onDownload(asset)
+                                    } else {
+                                        val url = updateState.release.htmlUrl.ifEmpty { "https://github.com/AyushSaha184/ExcavPlayer/releases" }
+                                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)).apply {
+                                            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                                        }
+                                        context.startActivity(intent)
+                                        onDismiss()
+                                    }
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
                                 shape = ExcavShapes.Pill
@@ -231,83 +242,6 @@ fun UpdateDialog(
                                 color = ExcavPalette.TextMuted,
                                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp)
                             )
-                        }
-                    }
-                }
-            }
-        }
-
-        is UpdateState.ReadyToInstall -> {
-            Dialog(onDismissRequest = onDismiss) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .wrapContentHeight()
-                        .clip(ExcavShapes.Card)
-                        .border(1.dp, ExcavPalette.BlueGlow, ExcavShapes.Card),
-                    color = ExcavPalette.InkElevated,
-                    shadowElevation = 24.dp
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(22.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(CircleShape)
-                                    .background(ExcavPalette.Blue.copy(alpha = 0.18f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.InstallMobile,
-                                    contentDescription = null,
-                                    tint = ExcavPalette.Blue,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                            Spacer(Modifier.width(14.dp))
-                            Column {
-                                Text(
-                                    text = "Update Ready to Install",
-                                    color = ExcavPalette.Text,
-                                    style = MaterialTheme.typography.titleLarge.copy(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 18.sp
-                                    )
-                                )
-                                Spacer(Modifier.height(2.dp))
-                                Text(
-                                    text = "Download completed successfully",
-                                    color = ExcavPalette.TextSecondary,
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp)
-                                )
-                            }
-                        }
-
-                        Spacer(Modifier.height(20.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End
-                        ) {
-                            TextButton(onClick = onDismiss) {
-                                Text("Later", color = ExcavPalette.TextMuted)
-                            }
-                            Spacer(Modifier.width(10.dp))
-                            Button(
-                                onClick = { onInstall(updateState.apkFile) },
-                                colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
-                                shape = ExcavShapes.Pill
-                            ) {
-                                Text(
-                                    text = "Install Now",
-                                    color = ExcavPalette.Ink,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
                         }
                     }
                 }

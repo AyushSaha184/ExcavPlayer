@@ -51,21 +51,22 @@ fun FoldersScreen(
     var deleteVideoTarget by remember { mutableStateOf<Video?>(null) }
     var playlistVideoTarget by remember { mutableStateOf<Video?>(null) }
 
+    val defaultDownloadPath = remember {
+        android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)?.absolutePath
+            ?: "/storage/emulated/0/Download"
+    }
+
     // Auto-select the Downloads folder by default on first launch if no folder is chosen
     var initialFolderChecked by remember { mutableStateOf(false) }
     LaunchedEffect(folders) {
-        if (!initialFolderChecked && selectedFolder == null && folders.isNotEmpty()) {
+        if (!initialFolderChecked && selectedFolder == null) {
             val downloadFolder = folders.find {
                 it.name.equals("Download", ignoreCase = true) ||
                 it.name.equals("Downloads", ignoreCase = true) ||
                 it.path.endsWith("/Download", ignoreCase = true) ||
                 it.path.endsWith("/Downloads", ignoreCase = true)
-            }
-            if (downloadFolder != null) {
-                onSelectFolder(downloadFolder)
-            } else {
-                onSelectFolder(Folder("Internal Storage", "/storage/emulated/0", 0, 0))
-            }
+            } ?: Folder("Download", defaultDownloadPath, 0, 0)
+            onSelectFolder(downloadFolder)
             initialFolderChecked = true
         }
     }
@@ -74,9 +75,22 @@ fun FoldersScreen(
     val currentPath = selectedFolder?.path.orEmpty()
     val normCurrent = if (currentPath.isEmpty()) "/storage/emulated/0" else currentPath.trimEnd('/')
 
-    // Subfolders inside current directory computed from device paths
+    // Subfolders inside current directory: scan full device directories + database video stats
     val subfolders = remember(folders, normCurrent) {
         val childDirs = mutableMapOf<String, Pair<Int, Long>>() // childPath -> (videoCount, totalBytes)
+
+        // 1. Scan real directories from device filesystem for current directory
+        try {
+            val dir = java.io.File(normCurrent)
+            if (dir.exists() && dir.isDirectory) {
+                dir.listFiles { file -> file.isDirectory && !file.name.startsWith(".") }
+                    ?.forEach { f ->
+                        childDirs[f.absolutePath] = Pair(0, 0L)
+                    }
+            }
+        } catch (_: Exception) {}
+
+        // 2. Aggregate stats and discovered folders from MediaStore database
         folders.forEach { folder ->
             val fPath = folder.path.trimEnd('/')
             if (fPath != normCurrent && fPath.startsWith("$normCurrent/")) {
@@ -88,7 +102,7 @@ fun FoldersScreen(
                     existing.first + folder.videoCount,
                     existing.second + folder.totalSizeBytes
                 )
-            } else if (normCurrent == "/storage/emulated/0" && !fPath.startsWith("/storage/emulated/0")) {
+            } else if ((normCurrent == "/storage/emulated/0" || normCurrent.isEmpty()) && !fPath.startsWith("/storage/emulated/0")) {
                 val segments = fPath.split('/').filter { it.isNotEmpty() }
                 if (segments.size >= 2) {
                     val rootSegment = "/" + segments.take(2).joinToString("/")
@@ -109,15 +123,15 @@ fun FoldersScreen(
                 videoCount = stats.first,
                 totalSizeBytes = stats.second
             )
-        }.sortedBy { it.name.lowercase() }
+        }.sortedWith(compareByDescending<Folder> { it.videoCount > 0 }.thenBy { it.name.lowercase() })
     }
 
-    val canGoBack = selectedFolder != null && selectedFolder.path.isNotEmpty() && selectedFolder.path != "/storage/emulated/0"
+    val canGoBack = selectedFolder != null && normCurrent != "/storage/emulated/0" && normCurrent.isNotEmpty()
 
     androidx.activity.compose.BackHandler(enabled = canGoBack) {
         if (selectedFolder != null) {
             val parentPath = selectedFolder.path.substringBeforeLast('/', "")
-            if (parentPath.isEmpty() || parentPath == "/storage/emulated/0") {
+            if (parentPath.isEmpty() || parentPath == "/storage/emulated/0" || parentPath == "/storage/emulated") {
                 onSelectFolder(Folder("Internal Storage", "/storage/emulated/0", 0, 0))
             } else {
                 val parentFolder = folders.find { it.path == parentPath }
@@ -132,7 +146,7 @@ fun FoldersScreen(
         BreadcrumbBar(
             currentPath = if (currentPath.isEmpty()) "/storage/emulated/0" else currentPath,
             onNavigateToPath = { path ->
-                if (path.isEmpty() || path == "/storage/emulated/0") {
+                if (path.isEmpty() || path == "/storage/emulated/0" || path == "/storage/emulated") {
                     onSelectFolder(Folder("Internal Storage", "/storage/emulated/0", 0, 0))
                 } else {
                     val match = folders.find { it.path == path }
@@ -143,7 +157,7 @@ fun FoldersScreen(
             onBack = {
                 if (canGoBack) {
                     val parentPath = selectedFolder?.path?.substringBeforeLast('/', "").orEmpty()
-                    if (parentPath.isEmpty() || parentPath == "/storage/emulated/0") {
+                    if (parentPath.isEmpty() || parentPath == "/storage/emulated/0" || parentPath == "/storage/emulated") {
                         onSelectFolder(Folder("Internal Storage", "/storage/emulated/0", 0, 0))
                     } else {
                         val parentFolder = folders.find { it.path == parentPath }
@@ -167,19 +181,8 @@ fun FoldersScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-                // Section 1: Child Subfolders (if any)
+                // Section 1: Child Subfolders (No title header)
                 if (subfolders.isNotEmpty()) {
-                    item {
-                        Text(
-                            text = if (selectedFolder == null) "Folders" else "Subfolders (${subfolders.size})",
-                            color = ExcavPalette.TextSecondary,
-                            style = MaterialTheme.typography.labelMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp
-                            ),
-                            modifier = Modifier.padding(vertical = 4.dp)
-                        )
-                    }
                     items(subfolders, key = { "folder_${it.path}" }) { folder ->
                         FolderRow(
                             folder = folder,
@@ -188,20 +191,8 @@ fun FoldersScreen(
                     }
                 }
 
-                // Section 2: Videos directly in this directory
-                if (selectedFolder != null && folderVideos.isNotEmpty()) {
-                    item {
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = "Videos (${folderVideos.size})",
-                            color = ExcavPalette.TextSecondary,
-                            style = MaterialTheme.typography.labelMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp
-                            ),
-                            modifier = Modifier.padding(vertical = 4.dp)
-                        )
-                    }
+                // Section 2: Videos directly in this directory (No title header)
+                if (folderVideos.isNotEmpty()) {
                     items(folderVideos, key = { "video_${it.id}" }) { video ->
                         Box {
                             ListVideoRow(

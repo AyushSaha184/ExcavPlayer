@@ -128,6 +128,21 @@ class AppUpdateManager @Inject constructor(
         }
     }
 
+    init {
+        cleanUpdateCache()
+    }
+
+    fun cleanUpdateCache() {
+        try {
+            val downloadDir = File(context.cacheDir, "updates")
+            if (downloadDir.exists()) {
+                downloadDir.listFiles()?.forEach { it.delete() }
+            }
+        } catch (e: Exception) {
+            logger.e(TAG, "Failed to clean update cache", e)
+        }
+    }
+
     suspend fun downloadAndInstallUpdate(asset: GitHubAsset, onProgress: ((Float, Long, Long) -> Unit)? = null) = withContext(dispatchers.io) {
         try {
             logger.i(TAG, "Starting download of APK: ${asset.browserDownloadUrl}")
@@ -137,25 +152,33 @@ class AppUpdateManager @Inject constructor(
             val apkFile = File(downloadDir, "ExcavPlayer_${asset.name}")
             if (apkFile.exists()) apkFile.delete()
 
-            val url = URL(asset.browserDownloadUrl)
-            val connection = (url.openConnection() as HttpURLConnection).apply {
-                instanceFollowRedirects = true
-                setRequestProperty("User-Agent", "ExcavPlayer-${BuildConfig.VERSION_NAME}")
-                connectTimeout = 15_000
-                readTimeout = 30_000
-            }
+            var currentUrl = asset.browserDownloadUrl
+            var connection: HttpURLConnection? = null
+            var redirectCount = 0
 
-            // Handle redirect if needed
-            var finalConnection = connection
-            if (connection.responseCode in listOf(HttpURLConnection.HTTP_MOVED_PERM, HttpURLConnection.HTTP_MOVED_TEMP, 307, 308)) {
-                val newUrl = connection.getHeaderField("Location")
-                finalConnection = (URL(newUrl).openConnection() as HttpURLConnection).apply {
+            while (redirectCount < 5) {
+                val url = URL(currentUrl)
+                val conn = (url.openConnection() as HttpURLConnection).apply {
+                    instanceFollowRedirects = true
                     setRequestProperty("User-Agent", "ExcavPlayer-${BuildConfig.VERSION_NAME}")
                     connectTimeout = 15_000
                     readTimeout = 30_000
                 }
+                val code = conn.responseCode
+                if (code in listOf(HttpURLConnection.HTTP_MOVED_PERM, HttpURLConnection.HTTP_MOVED_TEMP, 307, 308)) {
+                    val location = conn.getHeaderField("Location")
+                    if (!location.isNullOrEmpty()) {
+                        currentUrl = location
+                        redirectCount++
+                        conn.disconnect()
+                        continue
+                    }
+                }
+                connection = conn
+                break
             }
 
+            val finalConnection = connection ?: throw IllegalStateException("Could not establish connection")
             val totalLength = if (finalConnection.contentLengthLong > 0) finalConnection.contentLengthLong else asset.size
 
             finalConnection.inputStream.use { input ->
@@ -176,7 +199,8 @@ class AppUpdateManager @Inject constructor(
             }
 
             logger.i(TAG, "APK download completed: ${apkFile.absolutePath} (${apkFile.length()} bytes)")
-            _updateState.value = UpdateState.ReadyToInstall(apkFile)
+            // Dismiss dialog immediately so no redundant "Install Now" box appears
+            _updateState.value = UpdateState.Idle
             installApk(apkFile)
         } catch (e: Exception) {
             logger.e(TAG, "Failed to download update APK", e)
@@ -187,6 +211,7 @@ class AppUpdateManager @Inject constructor(
     fun installApk(apkFile: File) {
         try {
             logger.i(TAG, "Launching APK installer for: ${apkFile.absolutePath}")
+            apkFile.deleteOnExit()
             val uri: Uri = FileProvider.getUriForFile(
                 context,
                 "${context.packageName}.fileprovider",
