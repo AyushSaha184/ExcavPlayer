@@ -64,12 +64,12 @@ class MediaSyncManager @Inject constructor(
             }
 
             if (removedIds.isNotEmpty()) {
-                logger.i(TAG, "Marking ${removedIds.size} videos as UNAVAILABLE")
-                videoDao.markUnavailable(removedIds)
+                logger.i(TAG, "Deleting ${removedIds.size} missing videos from database")
+                videoDao.deleteVideos(removedIds)
             }
 
             _syncStatus.value = SyncStatus.Success(totalScanned = totalCount, updatedCount = discoveredIds.size)
-            logger.i(TAG, "Sync complete: $totalCount items discovered, ${removedIds.size} marked unavailable")
+            logger.i(TAG, "Sync complete: $totalCount items discovered, ${removedIds.size} removed from database")
             ExcavResult.Success(totalCount)
         } catch (e: Exception) {
             logger.e(TAG, "Error synchronizing media library", e)

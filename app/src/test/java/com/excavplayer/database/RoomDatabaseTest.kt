@@ -6,7 +6,6 @@ import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import com.excavplayer.data.database.ExcavDatabase
 import com.excavplayer.data.database.dao.FavoriteDao
-import com.excavplayer.data.database.dao.HistoryDao
 import com.excavplayer.data.database.dao.PlaybackDao
 import com.excavplayer.data.database.dao.PlaylistDao
 import com.excavplayer.data.database.dao.VideoDao
@@ -15,7 +14,6 @@ import com.excavplayer.data.database.entity.PlaybackEntity
 import com.excavplayer.data.database.entity.PlaylistEntity
 import com.excavplayer.data.database.entity.PlaylistItemEntity
 import com.excavplayer.data.database.entity.VideoEntity
-import com.excavplayer.data.database.entity.WatchHistoryEntity
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -32,7 +30,6 @@ class RoomDatabaseTest {
     private lateinit var database: ExcavDatabase
     private lateinit var videoDao: VideoDao
     private lateinit var playbackDao: PlaybackDao
-    private lateinit var historyDao: HistoryDao
     private lateinit var favoriteDao: FavoriteDao
     private lateinit var playlistDao: PlaylistDao
 
@@ -45,7 +42,6 @@ class RoomDatabaseTest {
 
         videoDao = database.videoDao()
         playbackDao = database.playbackDao()
-        historyDao = database.historyDao()
         favoriteDao = database.favoriteDao()
         playlistDao = database.playlistDao()
     }
@@ -125,7 +121,7 @@ class RoomDatabaseTest {
     }
 
     @Test
-    fun `foreign key cascade deletes playback state, favorites, and history on video deletion`() = runBlocking {
+    fun `foreign key cascade deletes playback state and favorites on video deletion`() = runBlocking {
         val v1 = createVideoEntity("v1")
         videoDao.insertVideo(v1)
 
@@ -133,22 +129,10 @@ class RoomDatabaseTest {
             PlaybackEntity(videoId = "v1", currentPositionMs = 50000L, durationMs = 100000L)
         )
         favoriteDao.insertFavorite(FavoriteEntity(videoId = "v1"))
-        historyDao.insertOrUpdate(
-            WatchHistoryEntity(
-                videoId = "v1",
-                firstPlayedTimestamp = 1000L,
-                lastPlayedTimestamp = 2000L,
-                totalWatchDurationMs = 50000L,
-                completionPercentage = 0.5f,
-                isCompleted = false,
-                lastPositionMs = 50000L
-            )
-        )
 
         // Verify inserted
         assertThat(playbackDao.getPlaybackState("v1")).isNotNull()
         assertThat(favoriteDao.isFavorite("v1").first()).isTrue()
-        assertThat(historyDao.getHistoryForVideo("v1")).isNotNull()
 
         // Delete video
         videoDao.deleteVideo("v1")
@@ -156,7 +140,6 @@ class RoomDatabaseTest {
         // Foreign keys should cascade delete all associated records
         assertThat(playbackDao.getPlaybackState("v1")).isNull()
         assertThat(favoriteDao.isFavorite("v1").first()).isFalse()
-        assertThat(historyDao.getHistoryForVideo("v1")).isNull()
     }
 
     @Test
@@ -188,33 +171,5 @@ class RoomDatabaseTest {
         val reorderedItems = playlistDao.observePlaylistItemsWithVideo(playlistId).first()
         assertThat(reorderedItems.map { it.item.videoId }).containsExactly("v2", "v3", "v1").inOrder()
     }
-
-    @Test
-    fun `pruneOldEntries removes older watch history records exceeding limit`() = runBlocking {
-        val videos = (1..10).map { createVideoEntity("v$it") }
-        videoDao.insertVideos(videos)
-
-        for (i in 1..10) {
-            historyDao.insertOrUpdate(
-                WatchHistoryEntity(
-                    videoId = "v$i",
-                    firstPlayedTimestamp = i * 1000L,
-                    lastPlayedTimestamp = i * 1000L,
-                    totalWatchDurationMs = 10000L,
-                    completionPercentage = 0.5f,
-                    isCompleted = false,
-                    lastPositionMs = 5000L
-                )
-            )
-        }
-
-        assertThat(historyDao.observeHistory().first()).hasSize(10)
-
-        // Prune keeping only the newest 3
-        historyDao.pruneOldEntries(keepCount = 3)
-
-        val remaining = historyDao.observeHistory().first()
-        assertThat(remaining).hasSize(3)
-        assertThat(remaining.map { it.videoId }).containsExactly("v10", "v9", "v8").inOrder()
-    }
 }
+

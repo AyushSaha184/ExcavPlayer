@@ -23,7 +23,7 @@ UI / Presentation (Jetpack Compose / Activities / ViewModels)
 ### Core Principles
 - **UI Independence**: The playback engine, queue manager, and database never reference UI widgets, Compose states, or Activities.
 - **Controlled Player Lifecycle**: A single, application-scoped `ExoPlayer` instance managed by `PlayerManager` prevents recreating decoders during screen rotations or configuration changes.
-- **Reliable Persistence**: Playback positions and watch history are debounced/throttled (persisting every 3 seconds while playing, and immediately on pause, stop, backgrounding, or error) to prevent main-thread or database lockups.
+- **Reliable Persistence**: Playback positions and resume states are debounced/throttled (persisting every 3 seconds while playing, and immediately on pause, stop, backgrounding, or error) to prevent main-thread or database lockups.
 - **Scoped Storage & SAF Compliance**: Content URIs (`content://`) are treated as canonical references. Storage Access Framework (SAF) enables persistent tree and document access across reboots.
 
 ---
@@ -42,7 +42,7 @@ com.excavplayer
  ├── domain/
  │   ├── model/            # Pure Kotlin domain entities (Video, PlaybackState, etc.)
  │   ├── repository/       # Repository interfaces
- │   └── usecase/          # Encapsulated business actions (GetVideos, Playback, History, etc.)
+ │   └── usecase/          # Encapsulated business actions (GetVideos, Playback, Favorites, Playlist, etc.)
  │
  ├── data/
  │   ├── database/         # Room Database, Entities, DAOs, Tuples, Mappers
@@ -63,7 +63,7 @@ com.excavplayer
  │   ├── metadata/         # MediaMetadataExtractor (MediaMetadataRetriever)
  │   └── thumbnail/        # Asynchronous hardware-accelerated ThumbnailLoader with LruCache
  │
- ├── library/              # VideoLibrary, HistoryManager, PlaylistManager UI facades
+ ├── library/              # VideoLibrary, PlaylistManager UI facades
  ├── settings/             # SettingsManager facade
  ├── service/              # MediaSession PlaybackService for lockscreen/notification controls
  ├── background/           # WorkManager MediaSyncWorker for battery-aware sync
@@ -92,10 +92,9 @@ com.excavplayer
 
 ## 4. Room Database Schema
 
-The database `excav_player.db` contains 9 normalized tables:
+The database `excav_player.db` contains 8 normalized tables:
 - `videos`: Master table indexed by URI, folder path, display name, and date added.
 - `playback_states`: Active playback positions, speeds, track selections (Cascade delete on video removal).
-- `watch_history`: Completion stats and total watch duration.
 - `favorites`: User-favorited media with foreign-key cascade integrity.
 - `playlists`: User-defined playlists.
 - `playlist_items`: Ordered playlist entries with composite uniqueness constraint on `(playlist_id, video_id)`.

@@ -59,8 +59,8 @@ class MediaSyncManagerTest {
         assertThat(result.isSuccess).isTrue()
         // Video ms_4 and ms_1, ms_2 inserted
         coVerify { videoDao.insertVideos(any()) }
-        // Missing ms_3 should be marked unavailable
-        coVerify { videoDao.markUnavailable(listOf("ms_3")) }
+        // Missing ms_3 should be deleted from database
+        coVerify { videoDao.deleteVideos(listOf("ms_3")) }
     }
 
     private fun createVideoEntity(id: String): VideoEntity {

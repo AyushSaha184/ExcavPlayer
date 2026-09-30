@@ -9,7 +9,6 @@ import com.excavplayer.data.database.entity.PlaybackEntity
 import com.excavplayer.data.database.entity.PlaylistEntity
 import com.excavplayer.data.database.entity.PlaylistItemEntity
 import com.excavplayer.data.database.entity.VideoEntity
-import com.excavplayer.data.database.entity.WatchHistoryEntity
 import com.excavplayer.domain.model.Folder
 import com.excavplayer.domain.model.MediaAvailability
 import com.excavplayer.domain.model.MediaSource
@@ -20,7 +19,6 @@ import com.excavplayer.domain.model.Playlist
 import com.excavplayer.domain.model.PlaylistItem
 import com.excavplayer.domain.model.RepeatMode
 import com.excavplayer.domain.model.Video
-import com.excavplayer.domain.model.WatchHistoryEntry
 
 fun VideoWithMetadataTuple.toDomain(): Video {
     return Video(
@@ -130,30 +128,6 @@ fun PlaybackState.toEntity(): PlaybackEntity {
         selectedSubtitleTrackId = selectedSubtitleTrackId,
         selectedVideoTrackId = selectedVideoTrackId,
         lastUpdatedTimestamp = lastUpdatedTimestamp
-    )
-}
-
-fun WatchHistoryEntity.toDomain(): WatchHistoryEntry {
-    return WatchHistoryEntry(
-        videoId = videoId,
-        firstPlayedTimestamp = firstPlayedTimestamp,
-        lastPlayedTimestamp = lastPlayedTimestamp,
-        totalWatchDurationMs = totalWatchDurationMs,
-        completionPercentage = completionPercentage,
-        isCompleted = isCompleted,
-        lastPositionMs = lastPositionMs
-    )
-}
-
-fun WatchHistoryEntry.toEntity(): WatchHistoryEntity {
-    return WatchHistoryEntity(
-        videoId = videoId,
-        firstPlayedTimestamp = firstPlayedTimestamp,
-        lastPlayedTimestamp = lastPlayedTimestamp,
-        totalWatchDurationMs = totalWatchDurationMs,
-        completionPercentage = completionPercentage,
-        isCompleted = isCompleted,
-        lastPositionMs = lastPositionMs
     )
 }
 

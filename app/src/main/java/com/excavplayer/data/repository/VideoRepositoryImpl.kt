@@ -68,6 +68,17 @@ class VideoRepositoryImpl @Inject constructor(
             .flowOn(dispatchers.io)
     }
 
+    override suspend fun renameVideo(videoId: String, newName: String): ExcavResult<Unit> = withContext(dispatchers.io) {
+        try {
+            logger.i(TAG, "Renaming video $videoId to: $newName")
+            videoDao.renameVideo(videoId, newName)
+            ExcavResult.Success(Unit)
+        } catch (e: Exception) {
+            logger.e(TAG, "Failed to rename video $videoId", e)
+            ExcavResult.Error(e)
+        }
+    }
+
     override suspend fun deleteVideo(videoId: String): ExcavResult<Unit> = withContext(dispatchers.io) {
         try {
             val video = videoDao.getVideoById(videoId)

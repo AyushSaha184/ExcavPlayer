@@ -1,7 +1,7 @@
 <resources>
     <style name="Theme.ExcavPlayer" parent="android:Theme.Material.NoActionBar">
-        <item name="android:statusBarColor">#000000</item>
-        <item name="android:navigationBarColor">#000000</item>
-        <item name="android:windowBackground">#121212</item>
+        <item name="android:statusBarColor">#101216</item>
+        <item name="android:navigationBarColor">#101216</item>
+        <item name="android:windowBackground">#101216</item>
     </style>
 </resources>

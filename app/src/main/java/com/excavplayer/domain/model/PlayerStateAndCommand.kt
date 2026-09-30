@@ -6,6 +6,7 @@ data class PlayerState(
     val availableAudioTracks: List<AudioTrack> = emptyList(),
     val availableVideoTracks: List<VideoTrack> = emptyList(),
     val availableSubtitleTracks: List<SubtitleTrack> = emptyList(),
+    val chapters: List<MediaChapter> = emptyList(),
     val subtitleDelayMs: Long = 0L,
     val error: PlaybackError? = null,
     val isFullscreenRequested: Boolean = false,

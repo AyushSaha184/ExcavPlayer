@@ -2,13 +2,11 @@ package com.excavplayer.data.repository.di
 
 import com.excavplayer.data.datastore.SettingsRepositoryImpl
 import com.excavplayer.data.repository.FavoritesRepositoryImpl
-import com.excavplayer.data.repository.HistoryRepositoryImpl
 import com.excavplayer.data.repository.MediaSourceRepositoryImpl
 import com.excavplayer.data.repository.PlaybackRepositoryImpl
 import com.excavplayer.data.repository.PlaylistRepositoryImpl
 import com.excavplayer.data.repository.VideoRepositoryImpl
 import com.excavplayer.domain.repository.FavoritesRepository
-import com.excavplayer.domain.repository.HistoryRepository
 import com.excavplayer.domain.repository.MediaSourceRepository
 import com.excavplayer.domain.repository.PlaybackRepository
 import com.excavplayer.domain.repository.PlaylistRepository
@@ -31,10 +29,6 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindPlaybackRepository(impl: PlaybackRepositoryImpl): PlaybackRepository
-
-    @Binds
-    @Singleton
-    abstract fun bindHistoryRepository(impl: HistoryRepositoryImpl): HistoryRepository
 
     @Binds
     @Singleton

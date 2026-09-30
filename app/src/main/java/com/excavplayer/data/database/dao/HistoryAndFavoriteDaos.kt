@@ -5,36 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import com.excavplayer.data.database.entity.FavoriteEntity
-import com.excavplayer.data.database.entity.WatchHistoryEntity
 import kotlinx.coroutines.flow.Flow
-
-@Dao
-interface HistoryDao {
-    @Query("SELECT * FROM watch_history ORDER BY last_played_timestamp DESC")
-    fun observeHistory(): Flow<List<WatchHistoryEntity>>
-
-    @Query("SELECT * FROM watch_history WHERE video_id = :videoId")
-    suspend fun getHistoryForVideo(videoId: String): WatchHistoryEntity?
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertOrUpdate(entry: WatchHistoryEntity)
-
-    @Query("DELETE FROM watch_history WHERE video_id = :videoId")
-    suspend fun deleteByVideoId(videoId: String)
-
-    @Query("DELETE FROM watch_history")
-    suspend fun clearAll()
-
-    @Query("""
-        DELETE FROM watch_history 
-        WHERE id NOT IN (
-            SELECT id FROM watch_history 
-            ORDER BY last_played_timestamp DESC 
-            LIMIT :keepCount
-        )
-    """)
-    suspend fun pruneOldEntries(keepCount: Int)
-}
 
 @Dao
 interface FavoriteDao {
@@ -57,3 +28,4 @@ interface FavoriteDao {
     @Query("DELETE FROM favorites WHERE video_id = :videoId")
     suspend fun deleteFavorite(videoId: String)
 }
+

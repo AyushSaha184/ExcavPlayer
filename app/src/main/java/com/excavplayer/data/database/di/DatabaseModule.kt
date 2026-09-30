@@ -3,7 +3,6 @@ package com.excavplayer.data.database.di
 import android.content.Context
 import com.excavplayer.data.database.ExcavDatabase
 import com.excavplayer.data.database.dao.FavoriteDao
-import com.excavplayer.data.database.dao.HistoryDao
 import com.excavplayer.data.database.dao.MediaSourceDao
 import com.excavplayer.data.database.dao.PlaybackDao
 import com.excavplayer.data.database.dao.PlaylistDao
@@ -31,9 +30,6 @@ object DatabaseModule {
 
     @Provides
     fun providePlaybackDao(database: ExcavDatabase): PlaybackDao = database.playbackDao()
-
-    @Provides
-    fun provideHistoryDao(database: ExcavDatabase): HistoryDao = database.historyDao()
 
     @Provides
     fun provideFavoriteDao(database: ExcavDatabase): FavoriteDao = database.favoriteDao()

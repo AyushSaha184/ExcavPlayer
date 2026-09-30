@@ -1,5 +1,6 @@
 package com.excavplayer.library
 
+import com.excavplayer.core.logging.AppLogger
 import com.excavplayer.core.result.ExcavResult
 import com.excavplayer.domain.model.Folder
 import com.excavplayer.domain.model.Video
@@ -14,8 +15,13 @@ import javax.inject.Singleton
 class VideoLibrary @Inject constructor(
     private val videoRepository: VideoRepository,
     private val playbackRepository: PlaybackRepository,
-    private val favoritesRepository: FavoritesRepository
+    private val favoritesRepository: FavoritesRepository,
+    private val logger: AppLogger
 ) {
+    companion object {
+        private const val TAG = "VideoLibrary"
+    }
+
     fun observeVideos(): Flow<List<Video>> = videoRepository.observeVideos()
 
     fun observeFolders(): Flow<List<Folder>> = videoRepository.observeFolders()
@@ -29,9 +35,23 @@ class VideoLibrary @Inject constructor(
 
     fun searchVideos(query: String): Flow<List<Video>> = videoRepository.searchVideos(query)
 
-    suspend fun refresh(): ExcavResult<Int> = videoRepository.syncWithMediaStore()
+    suspend fun refresh(): ExcavResult<Int> {
+        logger.i(TAG, "Refreshing video library via MediaStore sync")
+        return videoRepository.syncWithMediaStore()
+    }
 
-    suspend fun deleteVideo(videoId: String): ExcavResult<Unit> = videoRepository.deleteVideo(videoId)
+    suspend fun renameVideo(videoId: String, newName: String): ExcavResult<Unit> {
+        logger.i(TAG, "Renaming video $videoId to $newName")
+        return videoRepository.renameVideo(videoId, newName)
+    }
 
-    suspend fun toggleFavorite(videoId: String) = favoritesRepository.toggleFavorite(videoId)
+    suspend fun deleteVideo(videoId: String): ExcavResult<Unit> {
+        logger.i(TAG, "Deleting video from library: $videoId")
+        return videoRepository.deleteVideo(videoId)
+    }
+
+    suspend fun toggleFavorite(videoId: String) {
+        logger.i(TAG, "Toggling favorite status for: $videoId")
+        favoritesRepository.toggleFavorite(videoId)
+    }
 }

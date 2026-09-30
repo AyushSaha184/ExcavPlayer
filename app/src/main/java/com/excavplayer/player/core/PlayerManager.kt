@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.Metadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
@@ -23,6 +24,7 @@ import com.excavplayer.domain.model.RepeatMode
 import com.excavplayer.domain.model.Video
 import com.excavplayer.domain.repository.PlaybackRepository
 import com.excavplayer.domain.repository.SettingsRepository
+import com.excavplayer.player.chapters.ChapterExtractor
 import com.excavplayer.player.playback.PlaybackPersistenceManager
 import com.excavplayer.player.queue.PlaybackQueue
 import com.excavplayer.player.tracks.TrackManager
@@ -50,6 +52,7 @@ class PlayerManager @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val persistenceManager: PlaybackPersistenceManager,
     val queue: PlaybackQueue,
+    private val chapterExtractor: ChapterExtractor,
     private val dispatchers: DispatcherProvider,
     private val logger: AppLogger
 ) : PlayerController {
@@ -135,6 +138,7 @@ class PlayerManager @Inject constructor(
             it.copy(
                 currentVideo = video,
                 error = null,
+                chapters = emptyList(),
                 playback = it.playback.copy(
                     videoId = video.id,
                     playbackSpeed = settings.defaultPlaybackSpeed,
@@ -216,9 +220,49 @@ class PlayerManager @Inject constructor(
         }
     }
 
+    private var loudnessEnhancer: android.media.audiofx.LoudnessEnhancer? = null
+
+    private fun applyLoudnessEnhancer(volume: Float) {
+        val sessionId = exoPlayer.audioSessionId
+        if (sessionId != C.AUDIO_SESSION_ID_UNSET && sessionId > 0) {
+            try {
+                if (loudnessEnhancer == null) {
+                    loudnessEnhancer = android.media.audiofx.LoudnessEnhancer(sessionId)
+                }
+                if (volume > 1.0f) {
+                    // Boost volume from 100% to 200% mapped to +0 to +1200 mB (+12dB)
+                    val gainMb = ((volume - 1.0f) * 1200f).toInt()
+                    loudnessEnhancer?.setTargetGain(gainMb)
+                    loudnessEnhancer?.enabled = true
+                } else {
+                    loudnessEnhancer?.setTargetGain(0)
+                    loudnessEnhancer?.enabled = false
+                }
+            } catch (e: Exception) {
+                logger.w(TAG, "Failed to configure LoudnessEnhancer: ${e.message}")
+            }
+        }
+    }
+
+    private fun releaseLoudnessEnhancer() {
+        try {
+            loudnessEnhancer?.enabled = false
+            loudnessEnhancer?.release()
+        } catch (e: Exception) {
+            logger.w(TAG, "Failed to release LoudnessEnhancer: ${e.message}")
+        } finally {
+            loudnessEnhancer = null
+        }
+    }
+
     override fun setVolume(volume: Float) {
-        val clampedVolume = volume.coerceIn(0f, 1f)
-        exoPlayer.volume = clampedVolume
+        val clampedVolume = volume.coerceIn(0f, 2.0f)
+        if (clampedVolume <= 1.0f) {
+            exoPlayer.volume = clampedVolume
+        } else {
+            exoPlayer.volume = 1.0f
+        }
+        applyLoudnessEnhancer(clampedVolume)
         _state.update {
             it.copy(playback = it.playback.copy(volume = clampedVolume))
         }
@@ -293,6 +337,7 @@ class PlayerManager @Inject constructor(
         logger.d(TAG, "stop()")
         becomingNoisyReceiver.unregister()
         persistenceManager.stopPeriodicSave()
+        releaseLoudnessEnhancer()
         playerScope.launch {
             persistenceManager.saveImmediate(_state.value.playback, _state.value.currentVideo)
         }
@@ -303,6 +348,7 @@ class PlayerManager @Inject constructor(
         logger.d(TAG, "release()")
         becomingNoisyReceiver.unregister()
         persistenceManager.stopPeriodicSave()
+        releaseLoudnessEnhancer()
         playerScope.launch {
             persistenceManager.saveImmediate(_state.value.playback, _state.value.currentVideo)
             exoPlayer.release()
@@ -409,6 +455,16 @@ class PlayerManager @Inject constructor(
                         selectedSubtitleTrackId = selectedSubs
                     )
                 )
+            }
+        }
+
+        override fun onMetadata(metadata: Metadata) {
+            val extracted = chapterExtractor.extractFromMetadata(metadata)
+            if (extracted.isNotEmpty()) {
+                _state.update { current ->
+                    val combined = (current.chapters + extracted).distinctBy { it.startTimeMs }.sortedBy { it.startTimeMs }
+                    current.copy(chapters = combined)
+                }
             }
         }
 

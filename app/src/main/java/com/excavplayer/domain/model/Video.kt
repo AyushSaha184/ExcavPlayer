@@ -45,4 +45,13 @@ data class Video(
                 String.format("%02d:%02d", minutes, seconds)
             }
         }
+
+    val fileFormat: String
+        get() {
+            val ext = displayName.substringAfterLast('.', "").uppercase()
+            if (ext.isNotEmpty() && ext.length in 2..5) return ext
+            val mimeSub = mimeType.substringAfterLast('/', "").uppercase()
+            if (mimeSub.isNotEmpty() && mimeSub != "OCTET-STREAM" && mimeSub != "*") return mimeSub
+            return "VIDEO"
+        }
 }

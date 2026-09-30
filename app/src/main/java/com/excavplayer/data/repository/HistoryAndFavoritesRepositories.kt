@@ -2,14 +2,10 @@ package com.excavplayer.data.repository
 
 import com.excavplayer.core.coroutine.DispatcherProvider
 import com.excavplayer.data.database.dao.FavoriteDao
-import com.excavplayer.data.database.dao.HistoryDao
 import com.excavplayer.data.database.entity.FavoriteEntity
 import com.excavplayer.data.database.mapper.toDomain
-import com.excavplayer.data.database.mapper.toEntity
 import com.excavplayer.domain.model.Video
-import com.excavplayer.domain.model.WatchHistoryEntry
 import com.excavplayer.domain.repository.FavoritesRepository
-import com.excavplayer.domain.repository.HistoryRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
@@ -17,35 +13,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
-
-@Singleton
-class HistoryRepositoryImpl @Inject constructor(
-    private val historyDao: HistoryDao,
-    private val dispatchers: DispatcherProvider
-) : HistoryRepository {
-
-    override fun observeHistory(): Flow<List<WatchHistoryEntry>> {
-        return historyDao.observeHistory()
-            .map { list -> list.map { it.toDomain() } }
-            .flowOn(dispatchers.io)
-    }
-
-    override suspend fun recordHistory(entry: WatchHistoryEntry) = withContext(dispatchers.io) {
-        historyDao.insertOrUpdate(entry.toEntity())
-    }
-
-    override suspend fun removeFromHistory(videoId: String) = withContext(dispatchers.io) {
-        historyDao.deleteByVideoId(videoId)
-    }
-
-    override suspend fun clearHistory() = withContext(dispatchers.io) {
-        historyDao.clearAll()
-    }
-
-    override suspend fun pruneOldHistory(keepCount: Int) = withContext(dispatchers.io) {
-        historyDao.pruneOldEntries(keepCount)
-    }
-}
 
 @Singleton
 class FavoritesRepositoryImpl @Inject constructor(
@@ -81,3 +48,4 @@ class FavoritesRepositoryImpl @Inject constructor(
         }
     }
 }
+

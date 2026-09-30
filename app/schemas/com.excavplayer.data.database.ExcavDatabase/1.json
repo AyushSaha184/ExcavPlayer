@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "a50b24a8950cfa02e3378f7cb0eaaf1a",
+    "identityHash": "3396726c848c2d401c029af479d4bd8b",
     "entities": [
       {
         "tableName": "videos",
@@ -267,108 +267,6 @@
             ],
             "orders": [],
             "createSql": "CREATE INDEX IF NOT EXISTS `index_playback_states_last_updated_timestamp` ON `${TABLE_NAME}` (`last_updated_timestamp`)"
-          }
-        ],
-        "foreignKeys": [
-          {
-            "table": "videos",
-            "onDelete": "CASCADE",
-            "onUpdate": "NO ACTION",
-            "columns": [
-              "video_id"
-            ],
-            "referencedColumns": [
-              "id"
-            ]
-          }
-        ]
-      },
-      {
-        "tableName": "watch_history",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `video_id` TEXT NOT NULL, `first_played_timestamp` INTEGER NOT NULL, `last_played_timestamp` INTEGER NOT NULL, `total_watch_duration_ms` INTEGER NOT NULL, `completion_percentage` REAL NOT NULL, `is_completed` INTEGER NOT NULL, `last_position_ms` INTEGER NOT NULL, FOREIGN KEY(`video_id`) REFERENCES `videos`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
-        "fields": [
-          {
-            "fieldPath": "id",
-            "columnName": "id",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "videoId",
-            "columnName": "video_id",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "firstPlayedTimestamp",
-            "columnName": "first_played_timestamp",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "lastPlayedTimestamp",
-            "columnName": "last_played_timestamp",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "totalWatchDurationMs",
-            "columnName": "total_watch_duration_ms",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "completionPercentage",
-            "columnName": "completion_percentage",
-            "affinity": "REAL",
-            "notNull": true
-          },
-          {
-            "fieldPath": "isCompleted",
-            "columnName": "is_completed",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "lastPositionMs",
-            "columnName": "last_position_ms",
-            "affinity": "INTEGER",
-            "notNull": true
-          }
-        ],
-        "primaryKey": {
-          "autoGenerate": true,
-          "columnNames": [
-            "id"
-          ]
-        },
-        "indices": [
-          {
-            "name": "index_watch_history_video_id",
-            "unique": true,
-            "columnNames": [
-              "video_id"
-            ],
-            "orders": [],
-            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_watch_history_video_id` ON `${TABLE_NAME}` (`video_id`)"
-          },
-          {
-            "name": "index_watch_history_last_played_timestamp",
-            "unique": false,
-            "columnNames": [
-              "last_played_timestamp"
-            ],
-            "orders": [],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_watch_history_last_played_timestamp` ON `${TABLE_NAME}` (`last_played_timestamp`)"
-          },
-          {
-            "name": "index_watch_history_is_completed",
-            "unique": false,
-            "columnNames": [
-              "is_completed"
-            ],
-            "orders": [],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_watch_history_is_completed` ON `${TABLE_NAME}` (`is_completed`)"
           }
         ],
         "foreignKeys": [
@@ -742,7 +640,7 @@
     "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'a50b24a8950cfa02e3378f7cb0eaaf1a')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '3396726c848c2d401c029af479d4bd8b')"
     ]
   }
 }

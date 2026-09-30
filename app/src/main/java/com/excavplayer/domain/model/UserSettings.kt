@@ -7,10 +7,17 @@ data class UserSettings(
     val defaultRepeatMode: RepeatMode = RepeatMode.OFF,
     val autoplayNextVideo: Boolean = true,
     val subtitlesEnabled: Boolean = true,
-    val preferredSubtitleLanguage: String? = null,
+    val preferredSubtitleLanguage: String? = "English",
     val preferredAudioLanguage: String? = null,
     val gestureControlsEnabled: Boolean = true,
+    val brightnessGestureEnabled: Boolean = true,
+    val volumeGestureEnabled: Boolean = true,
+    val subtitleTextSize: String = "Normal",
+    val subtitleTextColor: String = "White",
+    val subtitleBackgroundStyle: String = "Outline",
     val rememberVolume: Boolean = true,
     val continueWatchingEnabled: Boolean = true,
-    val historyEnabled: Boolean = true
+    val defaultScreenOrientation: String = "Auto",
+    val defaultMediaFit: String = "Fit to Screen",
+    val lastOpenedFolder: String? = null
 )

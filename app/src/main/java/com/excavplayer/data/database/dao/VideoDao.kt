@@ -17,6 +17,7 @@ interface VideoDao {
         FROM videos v
         LEFT JOIN favorites f ON v.id = f.video_id
         LEFT JOIN playback_states p ON v.id = p.video_id
+        WHERE v.availability = 'AVAILABLE'
         ORDER BY v.date_added DESC
     """)
     fun observeAllVideosWithMetadata(): Flow<List<VideoWithMetadataTuple>>
@@ -28,7 +29,7 @@ interface VideoDao {
         FROM videos v
         LEFT JOIN favorites f ON v.id = f.video_id
         LEFT JOIN playback_states p ON v.id = p.video_id
-        WHERE v.id = :id
+        WHERE v.id = :id AND v.availability = 'AVAILABLE'
     """)
     fun observeVideoById(id: String): Flow<VideoWithMetadataTuple?>
 
@@ -50,7 +51,7 @@ interface VideoDao {
         FROM videos v
         LEFT JOIN favorites f ON v.id = f.video_id
         LEFT JOIN playback_states p ON v.id = p.video_id
-        WHERE v.folder_path = :folderPath
+        WHERE v.folder_path = :folderPath AND v.availability = 'AVAILABLE'
         ORDER BY v.date_added DESC
     """)
     fun observeVideosInFolder(folderPath: String): Flow<List<VideoWithMetadataTuple>>
@@ -62,7 +63,7 @@ interface VideoDao {
         FROM videos v
         LEFT JOIN favorites f ON v.id = f.video_id
         LEFT JOIN playback_states p ON v.id = p.video_id
-        WHERE v.display_name LIKE '%' || :query || '%'
+        WHERE v.display_name LIKE '%' || :query || '%' AND v.availability = 'AVAILABLE'
         ORDER BY v.date_added DESC
     """)
     fun searchVideos(query: String): Flow<List<VideoWithMetadataTuple>>
@@ -99,6 +100,9 @@ interface VideoDao {
 
     @Update
     suspend fun updateVideo(video: VideoEntity)
+
+    @Query("UPDATE videos SET display_name = :newName WHERE id = :videoId")
+    suspend fun renameVideo(videoId: String, newName: String)
 
     @Query("DELETE FROM videos WHERE id = :videoId")
     suspend fun deleteVideo(videoId: String)

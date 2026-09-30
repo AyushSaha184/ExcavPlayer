@@ -1,7 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">ExcavPlayer</string>
     <string name="playback_channel_name">Playback Controls</string>
     <string name="playback_channel_description">Media controls for background video playback</string>
     <string name="media_sync_channel_name">Media Library Synchronization</string>
     <string name="media_sync_channel_description">Syncing device media library with local database</string>
+
+    <string name="continue_watching">Continue Watching</string>
+    <string name="all_videos">All Videos</string>
+    <string name="folders">Folders</string>
+    <string name="playlists">Playlists</string>
+    <string name="favorites">Favorites</string>
+    <string name="settings">Settings</string>
+    <string name="search">Search</string>
+    <string name="queue">Queue</string>
+    <string name="subtitles">Subtitles</string>
+    <string name="audio_tracks">Audio Tracks</string>
+    <string name="playback_speed">Playback Speed</string>
+    <string name="video_quality">Video Quality</string>
+    <string name="more">More</string>
+    <string name="off">Off</string>
+    <string name="add_external_subtitle">Add External Subtitle File</string>
+    <string name="subtitle_formats">.srt, .vtt, .ass</string>
+    <string name="subtitle_delay">Subtitle Delay</string>
+    <string name="create">Create</string>
+    <string name="cancel">Cancel</string>
+    <string name="refresh">Refresh</string>
+
+    <string name="empty_continue">Nothing to continue watching</string>
+    <string name="empty_folders">No folders found</string>
+    <string name="empty_videos">No videos found on device</string>
+    <string name="empty_playlists">No playlists created yet</string>
+    <string name="empty_favorites">No favorite videos yet</string>
+    <string name="empty_search">No matching videos found</string>
+    <string name="settings_empty">Settings unavailable</string>
+    <string name="new_playlist">New Playlist</string>
+    <string name="rename">Rename</string>
+    <string name="delete">Delete</string>
+    <string name="playlist_name">Playlist Name</string>
+    <string name="loading">Scanning media library…</string>
+    <string name="buffering">Buffering…</string>
+    <string name="retry">Retry</string>
+    <string name="now_playing">Now Playing</string>
+    <string name="empty_queue">Playback queue is empty</string>
+    <string name="enable_subtitles">Enable Subtitles</string>
+    <string name="no_audio_tracks">No additional audio tracks</string>
+    <string name="no_video_quality">No video qualities found</string>
+
+    <string name="video">video</string>
+    <string name="videos">videos</string>
+    <string name="thumbnail_description">Thumbnail for %1$s</string>
+
+    <!-- Content Descriptions -->
+    <string name="cd_search">Search library</string>
+    <string name="cd_back">Navigate back</string>
+    <string name="cd_add_playlist">Create new playlist</string>
+    <string name="cd_remove_favorite">Remove from favorites</string>
+    <string name="cd_unlock">Unlock controls</string>
+    <string name="cd_lock">Lock screen controls</string>
+    <string name="cd_subtitles">Open subtitles</string>
+    <string name="cd_more">More options</string>
+    <string name="cd_replay">Seek backward 10 seconds</string>
+    <string name="cd_forward">Seek forward 10 seconds</string>
+    <string name="cd_play_pause">Play or pause video</string>
+    <string name="cd_queue">Open playback queue</string>
+    <string name="cd_aspect">Adjust aspect ratio</string>
+    <string name="cd_logo">ExcavPlayer logo</string>
+    <string name="cd_folder">Folder</string>
+    <string name="cd_open">Open item</string>
+    <string name="cd_playlist">Playlist item</string>
+    <string name="cd_close">Close sheet</string>
+    <string name="cd_previous">Play previous video</string>
+    <string name="cd_next">Play next video</string>
+    <string name="cd_sleep_timer">Set sleep timer</string>
+    <string name="cd_brightness">Screen brightness</string>
+    <string name="cd_volume">Audio volume</string>
+    <string name="cd_playing">Now playing</string>
+    <string name="cd_reorder">Drag to reorder</string>
 </resources>
