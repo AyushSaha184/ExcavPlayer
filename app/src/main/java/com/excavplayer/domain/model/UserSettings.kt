@@ -19,5 +19,10 @@ data class UserSettings(
     val continueWatchingEnabled: Boolean = true,
     val defaultScreenOrientation: String = "Auto",
     val defaultMediaFit: String = "Fit to Screen",
-    val lastOpenedFolder: String? = null
+    val lastOpenedFolder: String? = null,
+    val subtitleVerticalPositionPercent: Float = 0.90f,
+    val autoRescanOnLaunch: Boolean = true,
+    val headsetDetectionEnabled: Boolean = true,
+    val stopOnScreenOff: Boolean = true,
+    val hardwareAccelerationEnabled: Boolean = true
 )

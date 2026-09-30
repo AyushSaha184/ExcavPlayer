@@ -54,6 +54,11 @@ class SettingsRepositoryImpl @Inject constructor(
         val KEY_DEFAULT_SCREEN_ORIENTATION = stringPreferencesKey("default_screen_orientation")
         val KEY_DEFAULT_MEDIA_FIT = stringPreferencesKey("default_media_fit")
         val KEY_LAST_OPENED_FOLDER = stringPreferencesKey("last_opened_folder")
+        val KEY_SUBTITLE_VERTICAL_POS = floatPreferencesKey("subtitle_vertical_pos")
+        val KEY_AUTO_RESCAN = booleanPreferencesKey("auto_rescan_on_launch")
+        val KEY_HEADSET_DETECTION = booleanPreferencesKey("headset_detection")
+        val KEY_STOP_ON_SCREEN_OFF = booleanPreferencesKey("stop_on_screen_off")
+        val KEY_HARDWARE_ACCELERATION = booleanPreferencesKey("hardware_acceleration")
     }
 
     override val userSettings: Flow<UserSettings> = context.dataStore.data
@@ -88,7 +93,12 @@ class SettingsRepositoryImpl @Inject constructor(
                 continueWatchingEnabled = preferences[KEY_CONTINUE_WATCHING] ?: true,
                 defaultScreenOrientation = preferences[KEY_DEFAULT_SCREEN_ORIENTATION] ?: "Auto",
                 defaultMediaFit = preferences[KEY_DEFAULT_MEDIA_FIT] ?: "Fit to Screen",
-                lastOpenedFolder = preferences[KEY_LAST_OPENED_FOLDER]
+                lastOpenedFolder = preferences[KEY_LAST_OPENED_FOLDER],
+                subtitleVerticalPositionPercent = preferences[KEY_SUBTITLE_VERTICAL_POS] ?: 0.90f,
+                autoRescanOnLaunch = preferences[KEY_AUTO_RESCAN] ?: true,
+                headsetDetectionEnabled = preferences[KEY_HEADSET_DETECTION] ?: true,
+                stopOnScreenOff = preferences[KEY_STOP_ON_SCREEN_OFF] ?: true,
+                hardwareAccelerationEnabled = preferences[KEY_HARDWARE_ACCELERATION] ?: true
             )
         }
         .flowOn(dispatchers.io)
@@ -192,6 +202,31 @@ class SettingsRepositoryImpl @Inject constructor(
         edit {
             if (folderPath != null) it[KEY_LAST_OPENED_FOLDER] = folderPath else it.remove(KEY_LAST_OPENED_FOLDER)
         }
+    }
+
+    override suspend fun updateSubtitlePosition(percentY: Float) {
+        logger.i(TAG, "updateSubtitlePosition: $percentY")
+        edit { it[KEY_SUBTITLE_VERTICAL_POS] = percentY }
+    }
+
+    override suspend fun updateAutoRescanOnLaunch(enabled: Boolean) {
+        logger.i(TAG, "updateAutoRescanOnLaunch: $enabled")
+        edit { it[KEY_AUTO_RESCAN] = enabled }
+    }
+
+    override suspend fun updateHeadsetDetection(enabled: Boolean) {
+        logger.i(TAG, "updateHeadsetDetection: $enabled")
+        edit { it[KEY_HEADSET_DETECTION] = enabled }
+    }
+
+    override suspend fun updateStopOnScreenOff(enabled: Boolean) {
+        logger.i(TAG, "updateStopOnScreenOff: $enabled")
+        edit { it[KEY_STOP_ON_SCREEN_OFF] = enabled }
+    }
+
+    override suspend fun updateHardwareAcceleration(enabled: Boolean) {
+        logger.i(TAG, "updateHardwareAcceleration: $enabled")
+        edit { it[KEY_HARDWARE_ACCELERATION] = enabled }
     }
 
     private suspend fun edit(transform: suspend (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {

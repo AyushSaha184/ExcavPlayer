@@ -156,9 +156,20 @@ fun ExcavApp(
                                 )
                                 MainTab.PLAYLISTS -> PlaylistsScreen(
                                     playlists = library.playlists,
+                                    favorites = library.favorites,
                                     onCreate = vm::createPlaylist,
                                     onRename = vm::renamePlaylist,
-                                    onDelete = vm::deletePlaylist
+                                    onDelete = vm::deletePlaylist,
+                                    onPlay = {
+                                        vm.play(it)
+                                        playerOpen = true
+                                    },
+                                    onToggleFavorite = vm::toggleFavorite,
+                                    onAddToPlaylist = vm::addVideoToPlaylist,
+                                    onRenameVideo = vm::renameVideo,
+                                    onDeleteVideo = vm::deleteVideo,
+                                    onRemoveFromPlaylist = vm::removeVideoFromPlaylist,
+                                    observePlaylistItems = vm::observePlaylistItems
                                 )
                                 MainTab.FAVORITES -> FavoritesScreen(
                                     videos = library.favorites,

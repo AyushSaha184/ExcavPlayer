@@ -61,8 +61,7 @@ fun BrandHeader(onSearch: () -> Unit, onRefresh: (() -> Unit)? = null) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(start = 18.dp, end = 18.dp, top = 4.dp, bottom = 8.dp),
+            .padding(start = 18.dp, end = 18.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -849,6 +848,7 @@ fun ListVideoRow(
     val resLabel = formatResolution(video.width, video.height)
     val sizeStr = formatFileSize(video.sizeBytes)
     val formatStr = video.fileFormat
+    val resumePos = video.resumePositionMs ?: 0L
 
     Surface(
         modifier = Modifier
@@ -878,6 +878,18 @@ fun ListVideoRow(
                             .padding(4.dp)
                             .background(ExcavPalette.Ink.copy(alpha = 0.88f), RoundedCornerShape(4.dp))
                             .padding(horizontal = 4.dp, vertical = 1.5.dp)
+                    )
+                }
+
+                // Progress Bar at bottom of thumbnail
+                if (resumePos > 0L && video.durationMs > 0L) {
+                    val progress = (resumePos.toFloat() / video.durationMs.toFloat()).coerceIn(0f, 1f)
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .fillMaxWidth(progress)
+                            .height(3.dp)
+                            .background(Brush.horizontalGradient(listOf(ExcavPalette.BlueDeep, ExcavPalette.Blue)))
                     )
                 }
             }
@@ -956,25 +968,48 @@ fun BreadcrumbBar(
 ) {
     val parts = remember(currentPath) {
         val trimmed = currentPath.trimEnd('/')
-        val segments = trimmed.split('/').filter { it.isNotEmpty() }
         val list = mutableListOf<Pair<String, String>>()
-        var accumulated = ""
-        for (i in segments.indices) {
-            accumulated += "/" + segments[i]
-            val name = when {
-                segments[i] == "0" && i > 0 && segments[i - 1] == "emulated" -> "Storage"
-                segments[i] == "emulated" -> continue
-                segments[i] == "storage" -> continue
-                else -> segments[i]
+
+        if (trimmed.isEmpty() || trimmed == "/storage/emulated/0") {
+            list.add(Pair("Internal Storage", "/storage/emulated/0"))
+        } else if (trimmed.startsWith("/storage/emulated/0")) {
+            list.add(Pair("Internal Storage", "/storage/emulated/0"))
+            val sub = trimmed.removePrefix("/storage/emulated/0").trimStart('/')
+            val segments = sub.split('/').filter { it.isNotEmpty() }
+            var accumulated = "/storage/emulated/0"
+            for (seg in segments) {
+                accumulated += "/$seg"
+                list.add(Pair(seg, accumulated))
             }
-            list.add(Pair(name, accumulated))
-        }
-        if (list.isEmpty()) {
-            listOf(Pair("All Folders", ""))
+        } else if (trimmed.startsWith("/storage/")) {
+            val sub = trimmed.removePrefix("/storage/").trimStart('/')
+            val segments = sub.split('/').filter { it.isNotEmpty() }
+            if (segments.isNotEmpty()) {
+                val cardId = segments[0]
+                list.add(Pair("SD Card", "/storage/$cardId"))
+                var accumulated = "/storage/$cardId"
+                for (i in 1 until segments.size) {
+                    accumulated += "/${segments[i]}"
+                    list.add(Pair(segments[i], accumulated))
+                }
+            } else {
+                list.add(Pair("Storage", trimmed))
+            }
         } else {
-            list
+            val segments = trimmed.split('/').filter { it.isNotEmpty() }
+            var accumulated = ""
+            for (seg in segments) {
+                accumulated += "/$seg"
+                list.add(Pair(seg, accumulated))
+            }
+            if (list.isEmpty()) {
+                list.add(Pair("Internal Storage", "/storage/emulated/0"))
+            }
         }
+        list
     }
+
+    val canGoBack = parts.size > 1
 
     Row(
         modifier = Modifier
@@ -984,16 +1019,17 @@ fun BreadcrumbBar(
     ) {
         IconButton(
             onClick = onBack,
+            enabled = canGoBack,
             modifier = Modifier
                 .size(36.dp)
                 .clip(CircleShape)
                 .background(ExcavPalette.SurfaceCard)
-                .border(1.dp, ExcavPalette.Line, CircleShape)
+                .border(1.dp, if (canGoBack) ExcavPalette.Line else ExcavPalette.Line.copy(alpha = 0.3f), CircleShape)
         ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = "Back",
-                tint = ExcavPalette.Text,
+                tint = if (canGoBack) ExcavPalette.Text else ExcavPalette.TextMuted.copy(alpha = 0.4f),
                 modifier = Modifier.size(18.dp)
             )
         }
@@ -1126,10 +1162,10 @@ fun VideoPropertiesDialog(video: Video, onDismiss: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 PropertyItem(label = "Title", value = video.displayName)
-                PropertyItem(label = "Resolution", value = formatResolution(video.width, video.height)?.let { "$it (${video.width}x${video.height})" } ?: "${video.width}x${video.height}")
+                PropertyItem(label = "Resolution", value = formatResolution(video.width, video.height) ?: "Standard")
                 PropertyItem(label = "Duration", value = video.formattedDuration)
-                PropertyItem(label = "File Size", value = formatFileSize(video.sizeBytes) + " (${video.sizeBytes} bytes)")
-                PropertyItem(label = "Format", value = video.mimeType)
+                PropertyItem(label = "File Size", value = formatFileSize(video.sizeBytes))
+                PropertyItem(label = "Format", value = video.fileFormat)
                 if (video.folderName.isNotBlank()) {
                     PropertyItem(label = "Folder", value = video.folderName)
                 }
@@ -1144,7 +1180,7 @@ fun VideoPropertiesDialog(video: Video, onDismiss: () -> Unit) {
                 colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
                 shape = ExcavShapes.Pill
             ) {
-                Text(stringResource(R.string.cd_close), color = ExcavPalette.Ink, fontWeight = FontWeight.Bold)
+                Text("Close", color = ExcavPalette.Ink, fontWeight = FontWeight.Bold)
             }
         },
         containerColor = ExcavPalette.SurfaceCard,
@@ -1528,6 +1564,13 @@ fun SleekSwitch(
 
 @Composable
 fun UserMessageHost(message: UserMessage?, onDismiss: () -> Unit) {
+    LaunchedEffect(message) {
+        if (message != null) {
+            kotlinx.coroutines.delay(3000L)
+            onDismiss()
+        }
+    }
+
     AnimatedVisibility(
         visible = message != null,
         enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
@@ -1577,6 +1620,103 @@ fun UserMessageHost(message: UserMessage?, onDismiss: () -> Unit) {
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ExcavSleekSlider(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    valueRange: ClosedFloatingPointRange<Float>,
+    modifier: Modifier = Modifier,
+    startLabel: String? = null,
+    centerLabel: String? = null,
+    endLabel: String? = null
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Slider(
+            value = value.coerceIn(valueRange.start, valueRange.endInclusive),
+            onValueChange = onValueChange,
+            valueRange = valueRange,
+            colors = SliderDefaults.colors(
+                thumbColor = Color.White,
+                activeTrackColor = Color(0xFF00B0FF),
+                inactiveTrackColor = Color(0xFF232A3B)
+            ),
+            thumb = {
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(Color.White)
+                        .border(3.5.dp, Color(0xFF00B0FF), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF00B0FF))
+                    )
+                }
+            },
+            track = { sliderState ->
+                val fraction = if (valueRange.endInclusive > valueRange.start) {
+                    ((sliderState.value - valueRange.start) / (valueRange.endInclusive - valueRange.start)).coerceIn(0f, 1f)
+                } else 0f
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(10.dp)
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(Color(0xFF232A3B))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(fraction)
+                            .clip(RoundedCornerShape(5.dp))
+                            .background(
+                                Brush.horizontalGradient(
+                                    listOf(Color(0xFF00B0FF), Color(0xFF00E5FF))
+                                )
+                            )
+                    )
+                }
+            }
+        )
+
+        if (startLabel != null || centerLabel != null || endLabel != null) {
+            Spacer(Modifier.height(2.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = startLabel.orEmpty(),
+                    color = ExcavPalette.TextMuted,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp)
+                )
+                Text(
+                    text = centerLabel.orEmpty(),
+                    color = ExcavPalette.Text,
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp
+                    )
+                )
+                Text(
+                    text = endLabel.orEmpty(),
+                    color = ExcavPalette.TextMuted,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp)
+                )
             }
         }
     }

@@ -35,7 +35,7 @@ import com.excavplayer.ui.theme.ExcavPalette
 import com.excavplayer.ui.theme.ExcavShapes
 
 private enum class SettingDialog {
-    NONE, SPEED, REPEAT, THRESHOLD, ORIENTATION, MEDIA_FIT, SUB_LANG, AUDIO_LANG, SUB_SIZE, SUB_COLOR, SUB_BG
+    NONE, SPEED, REPEAT, THRESHOLD, ORIENTATION, MEDIA_FIT, SUB_LANG, AUDIO_LANG
 }
 
 @Composable
@@ -106,6 +106,22 @@ fun SettingsScreen(
                     onCheckedChange = { vm.setAutoplayNext(it) }
                 )
                 SettingsDivider()
+                SettingsSwitchRow(
+                    icon = Icons.Default.ScreenLockPortrait,
+                    title = "Pause when Screen Turns Off",
+                    subtitle = "Automatically stop playback when device screen locks",
+                    checked = settings.stopOnScreenOff,
+                    onCheckedChange = { vm.setStopOnScreenOff(it) }
+                )
+                SettingsDivider()
+                SettingsSwitchRow(
+                    icon = Icons.Default.Memory,
+                    title = "Hardware Acceleration",
+                    subtitle = "Use hardware decoders for smooth video playback",
+                    checked = settings.hardwareAccelerationEnabled,
+                    onCheckedChange = { vm.setHardwareAcceleration(it) }
+                )
+                SettingsDivider()
                 SettingsNavRow(
                     icon = Icons.Default.Speed,
                     title = "Default Playback Speed",
@@ -161,9 +177,25 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(20.dp))
 
-            // Section 2: Audio & Subtitles
-            SettingsSectionHeader(title = "Audio & Subtitles")
+            // Section 2: Audio & Media
+            SettingsSectionHeader(title = "Audio & Media")
             SettingsCardContainer {
+                SettingsSwitchRow(
+                    icon = Icons.Default.Headphones,
+                    title = "Headset Detection",
+                    subtitle = "Auto pause when disconnected / resume when connected",
+                    checked = settings.headsetDetectionEnabled,
+                    onCheckedChange = { vm.setHeadsetDetection(it) }
+                )
+                SettingsDivider()
+                SettingsSwitchRow(
+                    icon = Icons.Default.Timelapse,
+                    title = "Auto Enable Subtitles",
+                    subtitle = "When subtitles are available in media",
+                    checked = settings.subtitlesEnabled,
+                    onCheckedChange = { vm.setSubtitlesEnabled(it) }
+                )
+                SettingsDivider()
                 SettingsNavRow(
                     icon = Icons.Default.Subtitles,
                     title = "Default Subtitle Language",
@@ -171,40 +203,11 @@ fun SettingsScreen(
                     onClick = { activeDialog = SettingDialog.SUB_LANG }
                 )
                 SettingsDivider()
-                SettingsSwitchRow(
-                    icon = Icons.Default.Timelapse,
-                    title = "Auto Enable Subtitles",
-                    subtitle = "When available",
-                    checked = settings.subtitlesEnabled,
-                    onCheckedChange = { vm.setSubtitlesEnabled(it) }
-                )
-                SettingsDivider()
                 SettingsNavRow(
                     icon = Icons.Default.MusicNote,
                     title = "Default Audio Track",
                     subtitle = settings.preferredAudioLanguage ?: "System default",
                     onClick = { activeDialog = SettingDialog.AUDIO_LANG }
-                )
-                SettingsDivider()
-                SettingsNavRow(
-                    icon = Icons.Default.FormatSize,
-                    title = "Subtitle Text Size",
-                    subtitle = settings.subtitleTextSize,
-                    onClick = { activeDialog = SettingDialog.SUB_SIZE }
-                )
-                SettingsDivider()
-                SettingsNavRow(
-                    icon = Icons.Default.Palette,
-                    title = "Subtitle Text Color",
-                    subtitle = settings.subtitleTextColor,
-                    onClick = { activeDialog = SettingDialog.SUB_COLOR }
-                )
-                SettingsDivider()
-                SettingsNavRow(
-                    icon = Icons.Default.Style,
-                    title = "Subtitle Background Style",
-                    subtitle = settings.subtitleBackgroundStyle,
-                    onClick = { activeDialog = SettingDialog.SUB_BG }
                 )
                 SettingsDivider()
                 SettingsSwitchRow(
@@ -240,23 +243,18 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(20.dp))
 
-            // Section 4: Library & Maintenance
-            SettingsSectionHeader(title = "Library & Maintenance")
-            SettingsCardContainer {
-                SettingsNavRow(
-                    icon = Icons.Default.Sync,
-                    title = "Rescan Media Library",
-                    subtitle = "Discover newly added or deleted media",
-                    onClick = { vm.refreshLibrary() }
-                )
-            }
-
-            Spacer(Modifier.height(20.dp))
-
-            // Section 5: About & Project Links
+            // Section 4: System & Updates
             val context = LocalContext.current
-            SettingsSectionHeader(title = "About & Updates")
+            SettingsSectionHeader(title = "System & Updates")
             SettingsCardContainer {
+                SettingsSwitchRow(
+                    icon = Icons.Default.Sync,
+                    title = "Auto Rescan on Startup",
+                    subtitle = "Scan folders for new media on app launch",
+                    checked = settings.autoRescanOnLaunch,
+                    onCheckedChange = { vm.setAutoRescanOnLaunch(it) }
+                )
+                SettingsDivider()
                 SettingsNavRow(
                     icon = Icons.Default.SystemUpdate,
                     title = "Check for Updates",
@@ -267,7 +265,7 @@ fun SettingsScreen(
                 SettingsNavRow(
                     icon = Icons.Default.Code,
                     title = "GitHub Repository",
-                    subtitle = "AyushSaha184/ExcavPlayer",
+                    subtitle = "View source code & issues",
                     onClick = {
                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/AyushSaha184/ExcavPlayer"))
                         context.startActivity(intent)
@@ -277,7 +275,7 @@ fun SettingsScreen(
                 SettingsNavRow(
                     icon = Icons.Default.Info,
                     title = "Releases & Changelog",
-                    subtitle = "github.com/AyushSaha184/ExcavPlayer/releases",
+                    subtitle = "View version history & download APKs",
                     onClick = {
                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/AyushSaha184/ExcavPlayer/releases"))
                         context.startActivity(intent)
@@ -348,15 +346,7 @@ fun SettingsScreen(
                 title = "Default Screen Orientation",
                 options = listOf("Auto", "Landscape", "Portrait", "Sensor"),
                 selected = settings.defaultScreenOrientation,
-                labelFor = {
-                    when (it) {
-                        "Auto" -> "Auto (Sensor)"
-                        "Landscape" -> "Landscape"
-                        "Portrait" -> "Portrait"
-                        "Sensor" -> "Full Sensor"
-                        else -> it
-                    }
-                },
+                labelFor = { it },
                 onSelect = {
                     vm.setDefaultScreenOrientation(it)
                     activeDialog = SettingDialog.NONE
@@ -379,12 +369,12 @@ fun SettingsScreen(
         }
         SettingDialog.SUB_LANG -> {
             RadioChoiceDialog(
-                title = "Default Subtitle Language",
-                options = listOf("English", "Spanish", "French", "German", "Japanese", "Chinese", "Off"),
-                selected = settings.preferredSubtitleLanguage ?: "English",
+                title = "Preferred Subtitle Language",
+                options = listOf("English", "Spanish", "Japanese", "French", "German", "Korean", "None"),
+                selected = settings.preferredSubtitleLanguage ?: "None",
                 labelFor = { it },
                 onSelect = {
-                    vm.setPreferredSubtitleLanguage(if (it == "Off") null else it)
+                    vm.setPreferredSubtitleLanguage(if (it == "None") null else it)
                     activeDialog = SettingDialog.NONE
                 },
                 onDismiss = { activeDialog = SettingDialog.NONE }
@@ -392,51 +382,12 @@ fun SettingsScreen(
         }
         SettingDialog.AUDIO_LANG -> {
             RadioChoiceDialog(
-                title = "Default Audio Track",
-                options = listOf("System default", "English", "Spanish", "French", "Japanese", "German"),
+                title = "Preferred Audio Language",
+                options = listOf("System default", "English", "Japanese", "Spanish", "French", "German"),
                 selected = settings.preferredAudioLanguage ?: "System default",
                 labelFor = { it },
                 onSelect = {
                     vm.setPreferredAudioLanguage(if (it == "System default") null else it)
-                    activeDialog = SettingDialog.NONE
-                },
-                onDismiss = { activeDialog = SettingDialog.NONE }
-            )
-        }
-        SettingDialog.SUB_SIZE -> {
-            RadioChoiceDialog(
-                title = "Subtitle Text Size",
-                options = listOf("Small", "Normal", "Large", "Extra Large"),
-                selected = settings.subtitleTextSize,
-                labelFor = { it },
-                onSelect = {
-                    vm.setSubtitleTextSize(it)
-                    activeDialog = SettingDialog.NONE
-                },
-                onDismiss = { activeDialog = SettingDialog.NONE }
-            )
-        }
-        SettingDialog.SUB_COLOR -> {
-            RadioChoiceDialog(
-                title = "Subtitle Text Color",
-                options = listOf("White", "Yellow", "Cyan", "Green"),
-                selected = settings.subtitleTextColor,
-                labelFor = { it },
-                onSelect = {
-                    vm.setSubtitleTextColor(it)
-                    activeDialog = SettingDialog.NONE
-                },
-                onDismiss = { activeDialog = SettingDialog.NONE }
-            )
-        }
-        SettingDialog.SUB_BG -> {
-            RadioChoiceDialog(
-                title = "Subtitle Background Style",
-                options = listOf("Outline", "Translucent Box", "None"),
-                selected = settings.subtitleBackgroundStyle,
-                labelFor = { it },
-                onSelect = {
-                    vm.setSubtitleBackgroundStyle(it)
                     activeDialog = SettingDialog.NONE
                 },
                 onDismiss = { activeDialog = SettingDialog.NONE }
@@ -450,12 +401,12 @@ fun SettingsScreen(
 private fun SettingsSectionHeader(title: String) {
     Text(
         text = title,
-        color = ExcavPalette.Text,
-        style = MaterialTheme.typography.titleLarge.copy(
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold
+        color = ExcavPalette.Blue,
+        style = MaterialTheme.typography.titleMedium.copy(
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp
         ),
-        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+        modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
     )
 }
 
@@ -466,18 +417,17 @@ private fun SettingsCardContainer(content: @Composable ColumnScope.() -> Unit) {
             .fillMaxWidth()
             .clip(ExcavShapes.Card)
             .border(1.dp, ExcavPalette.Line, ExcavShapes.Card),
-        color = ExcavPalette.SurfaceCard
-    ) {
-        Column(content = content)
-    }
+        color = ExcavPalette.SurfaceCard,
+        content = { Column(content = content) }
+    )
 }
 
 @Composable
 private fun SettingsDivider() {
     HorizontalDivider(
-        modifier = Modifier.padding(start = 58.dp, end = 12.dp),
+        color = ExcavPalette.Line.copy(alpha = 0.5f),
         thickness = 0.5.dp,
-        color = ExcavPalette.Line.copy(alpha = 0.7f)
+        modifier = Modifier.padding(start = 58.dp)
     )
 }
 
@@ -580,12 +530,6 @@ private fun SettingsNavRow(
                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp)
             )
         }
-        Icon(
-            imageVector = Icons.Default.ChevronRight,
-            contentDescription = null,
-            tint = ExcavPalette.TextMuted,
-            modifier = Modifier.size(20.dp)
-        )
     }
 }
 

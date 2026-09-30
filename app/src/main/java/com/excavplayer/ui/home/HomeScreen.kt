@@ -120,6 +120,10 @@ fun HomeScreen(
         }
     }
 
+    androidx.activity.compose.BackHandler(enabled = selectedGroup != null) {
+        selectedGroup = null
+    }
+
     // If a group is selected, display the group's video list view
     if (selectedGroup != null) {
         val group = selectedGroup!!

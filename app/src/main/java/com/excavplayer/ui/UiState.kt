@@ -261,6 +261,18 @@ class ExcavViewModel @Inject constructor(
         }
     }
 
+    fun observePlaylistItems(playlistId: Long): kotlinx.coroutines.flow.Flow<List<com.excavplayer.domain.model.PlaylistItem>> {
+        return playlistManager.observePlaylistItems(playlistId)
+    }
+
+    fun removeVideoFromPlaylist(playlistId: Long, videoId: String) {
+        viewModelScope.launch {
+            logger.i(TAG, "Removing video $videoId from playlist $playlistId")
+            playlistManager.removeVideo(playlistId, videoId)
+            showMessage("Removed from playlist")
+        }
+    }
+
     fun reorderQueue(from: Int, to: Int) {
         logger.d(TAG, "Reordering queue from $from to $to")
         queue.moveItem(from, to)
@@ -383,6 +395,41 @@ class ExcavViewModel @Inject constructor(
         viewModelScope.launch {
             logger.i(TAG, "setVolumeGesture: $enabled")
             settingsManager.setVolumeGesture(enabled)
+        }
+    }
+
+    fun setSubtitlePosition(percentY: Float) {
+        viewModelScope.launch {
+            logger.i(TAG, "setSubtitlePosition: $percentY")
+            settingsManager.setSubtitlePosition(percentY)
+        }
+    }
+
+    fun setAutoRescanOnLaunch(enabled: Boolean) {
+        viewModelScope.launch {
+            logger.i(TAG, "setAutoRescanOnLaunch: $enabled")
+            settingsManager.setAutoRescanOnLaunch(enabled)
+        }
+    }
+
+    fun setHeadsetDetection(enabled: Boolean) {
+        viewModelScope.launch {
+            logger.i(TAG, "setHeadsetDetection: $enabled")
+            settingsManager.setHeadsetDetection(enabled)
+        }
+    }
+
+    fun setStopOnScreenOff(enabled: Boolean) {
+        viewModelScope.launch {
+            logger.i(TAG, "setStopOnScreenOff: $enabled")
+            settingsManager.setStopOnScreenOff(enabled)
+        }
+    }
+
+    fun setHardwareAcceleration(enabled: Boolean) {
+        viewModelScope.launch {
+            logger.i(TAG, "setHardwareAcceleration: $enabled")
+            settingsManager.setHardwareAcceleration(enabled)
         }
     }
 

@@ -113,4 +113,29 @@ class SettingsManager @Inject constructor(
         logger.i(TAG, "Setting last opened folder to: $folderPath")
         settingsRepository.updateLastOpenedFolder(folderPath)
     }
+
+    suspend fun setSubtitlePosition(percentY: Float) {
+        logger.i(TAG, "Setting subtitle position Y percent to: $percentY")
+        settingsRepository.updateSubtitlePosition(percentY)
+    }
+
+    suspend fun setAutoRescanOnLaunch(enabled: Boolean) {
+        logger.i(TAG, "Setting auto rescan on launch to: $enabled")
+        settingsRepository.updateAutoRescanOnLaunch(enabled)
+    }
+
+    suspend fun setHeadsetDetection(enabled: Boolean) {
+        logger.i(TAG, "Setting headset detection to: $enabled")
+        settingsRepository.updateHeadsetDetection(enabled)
+    }
+
+    suspend fun setStopOnScreenOff(enabled: Boolean) {
+        logger.i(TAG, "Setting stop on screen off to: $enabled")
+        settingsRepository.updateStopOnScreenOff(enabled)
+    }
+
+    suspend fun setHardwareAcceleration(enabled: Boolean) {
+        logger.i(TAG, "Setting hardware acceleration to: $enabled")
+        settingsRepository.updateHardwareAcceleration(enabled)
+    }
 }

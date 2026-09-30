@@ -92,10 +92,10 @@ interface VideoDao {
     """)
     fun observeContinueWatching(threshold: Float): Flow<List<VideoWithMetadataTuple>>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @androidx.room.Upsert
     suspend fun insertVideos(videos: List<VideoEntity>)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @androidx.room.Upsert
     suspend fun insertVideo(video: VideoEntity)
 
     @Update

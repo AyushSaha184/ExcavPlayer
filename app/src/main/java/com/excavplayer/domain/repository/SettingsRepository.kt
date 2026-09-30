@@ -25,4 +25,9 @@ interface SettingsRepository {
     suspend fun updateDefaultScreenOrientation(orientation: String)
     suspend fun updateDefaultMediaFit(fit: String)
     suspend fun updateLastOpenedFolder(folderPath: String?)
+    suspend fun updateSubtitlePosition(percentY: Float)
+    suspend fun updateAutoRescanOnLaunch(enabled: Boolean)
+    suspend fun updateHeadsetDetection(enabled: Boolean)
+    suspend fun updateStopOnScreenOff(enabled: Boolean)
+    suspend fun updateHardwareAcceleration(enabled: Boolean)
 }
