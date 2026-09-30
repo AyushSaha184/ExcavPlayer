@@ -68,7 +68,8 @@ fun HomeScreen(
     onAddToPlaylist: (Long, Video) -> Unit,
     onCreatePlaylist: (String) -> Unit,
     onRenameVideo: (Video, String) -> Unit,
-    onDeleteVideo: (Video) -> Unit
+    onDeleteVideo: (Video) -> Unit,
+    onRemoveFromContinueWatching: (Video) -> Unit = {}
 ) {
     val context = LocalContext.current
     var hasStoragePermission by remember {
@@ -366,7 +367,8 @@ fun HomeScreen(
                                             onAddToPlaylist = { playlistVideoTarget = video },
                                             onRename = { renameVideoTarget = video },
                                             onProperties = { propertiesVideo = video },
-                                            onDelete = { deleteVideoTarget = video }
+                                            onDelete = { deleteVideoTarget = video },
+                                            onRemoveFromContinueWatching = { onRemoveFromContinueWatching(video) }
                                         )
                                     }
                                 }

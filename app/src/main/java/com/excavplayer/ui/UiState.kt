@@ -365,6 +365,14 @@ class ExcavViewModel @Inject constructor(
         }
     }
 
+    fun dismissFromContinueWatching(videoId: String) {
+        viewModelScope.launch {
+            logger.i(TAG, "dismissFromContinueWatching: $videoId")
+            library.dismissFromContinueWatching(videoId)
+            showMessage("Removed from Continue Watching")
+        }
+    }
+
     fun setDefaultScreenOrientation(orientation: String) {
         viewModelScope.launch {
             logger.i(TAG, "setDefaultScreenOrientation: $orientation")

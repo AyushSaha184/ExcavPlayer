@@ -9,6 +9,7 @@ interface PlaybackRepository {
     suspend fun getPlaybackState(videoId: String): PlaybackState?
     suspend fun savePlaybackState(state: PlaybackState)
     fun observeContinueWatching(threshold: Float = 0.95f): Flow<List<Video>>
+    suspend fun dismissFromContinueWatching(videoId: String)
     suspend fun clearPlaybackState(videoId: String)
     suspend fun clearAllPlaybackStates()
 }

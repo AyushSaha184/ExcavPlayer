@@ -52,6 +52,11 @@ class PlaybackRepositoryImpl @Inject constructor(
             .flowOn(dispatchers.io)
     }
 
+    override suspend fun dismissFromContinueWatching(videoId: String) = withContext(dispatchers.io) {
+        logger.i(TAG, "dismissFromContinueWatching: $videoId")
+        videoDao.dismissFromContinueWatching(videoId)
+    }
+
     override suspend fun clearPlaybackState(videoId: String) = withContext(dispatchers.io) {
         playbackDao.deletePlaybackState(videoId)
     }

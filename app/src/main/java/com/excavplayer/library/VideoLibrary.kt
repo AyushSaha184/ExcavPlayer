@@ -33,6 +33,9 @@ class VideoLibrary @Inject constructor(
     fun observeContinueWatching(threshold: Float = 0.95f): Flow<List<Video>> =
         playbackRepository.observeContinueWatching(threshold)
 
+    suspend fun dismissFromContinueWatching(videoId: String) =
+        playbackRepository.dismissFromContinueWatching(videoId)
+
     fun searchVideos(query: String): Flow<List<Video>> = videoRepository.searchVideos(query)
 
     suspend fun refresh(): ExcavResult<Int> {

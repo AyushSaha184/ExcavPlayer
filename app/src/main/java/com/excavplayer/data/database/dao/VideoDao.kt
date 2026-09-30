@@ -51,10 +51,24 @@ interface VideoDao {
         FROM videos v
         LEFT JOIN favorites f ON v.id = f.video_id
         LEFT JOIN playback_states p ON v.id = p.video_id
-        WHERE v.folder_path = :folderPath AND v.availability = 'AVAILABLE'
+        WHERE (
+            v.folder_path = :path1 
+            OR v.folder_path = :path2 
+            OR v.folder_path = :path3 
+            OR v.folder_path = :path4 
+            OR v.relative_path = :relPath1 
+            OR v.relative_path = :relPath2
+        ) AND v.availability = 'AVAILABLE'
         ORDER BY v.date_added DESC
     """)
-    fun observeVideosInFolder(folderPath: String): Flow<List<VideoWithMetadataTuple>>
+    fun observeVideosInFolder(
+        path1: String,
+        path2: String,
+        path3: String,
+        path4: String,
+        relPath1: String,
+        relPath2: String
+    ): Flow<List<VideoWithMetadataTuple>>
 
     @Query("""
         SELECT v.*, 
@@ -84,13 +98,18 @@ interface VideoDao {
         FROM videos v
         INNER JOIN playback_states p ON v.id = p.video_id
         LEFT JOIN favorites f ON v.id = f.video_id
+        LEFT JOIN dismissed_continue_watching d ON v.id = d.video_id
         WHERE p.current_position_ms > 5000 
           AND p.duration_ms > 0
           AND (CAST(p.current_position_ms AS REAL) / CAST(p.duration_ms AS REAL)) < :threshold
           AND v.availability = 'AVAILABLE'
+          AND d.video_id IS NULL
         ORDER BY p.last_updated_timestamp DESC
     """)
     fun observeContinueWatching(threshold: Float): Flow<List<VideoWithMetadataTuple>>
+
+    @Query("INSERT OR REPLACE INTO dismissed_continue_watching (video_id) VALUES (:videoId)")
+    suspend fun dismissFromContinueWatching(videoId: String)
 
     @androidx.room.Upsert
     suspend fun insertVideos(videos: List<VideoEntity>)

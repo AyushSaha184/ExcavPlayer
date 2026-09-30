@@ -51,6 +51,17 @@ fun FoldersScreen(
     var deleteVideoTarget by remember { mutableStateOf<Video?>(null) }
     var playlistVideoTarget by remember { mutableStateOf<Video?>(null) }
 
+    fun normalizePath(raw: String?): String {
+        val trimmed = raw.orEmpty().trim().trimEnd('/')
+        return when {
+            trimmed.isEmpty() || trimmed == "/storage/emulated/0" || trimmed == "/storage/emulated" || trimmed.equals("Internal Storage", ignoreCase = true) -> "/storage/emulated/0"
+            trimmed.startsWith("/storage/emulated/0") -> trimmed
+            trimmed.startsWith("/storage/") -> trimmed
+            trimmed.startsWith("/") -> trimmed
+            else -> "/storage/emulated/0/$trimmed"
+        }
+    }
+
     val defaultDownloadPath = remember {
         android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)?.absolutePath
             ?: "/storage/emulated/0/Download"
@@ -65,15 +76,23 @@ fun FoldersScreen(
                 it.name.equals("Downloads", ignoreCase = true) ||
                 it.path.endsWith("/Download", ignoreCase = true) ||
                 it.path.endsWith("/Downloads", ignoreCase = true)
-            } ?: Folder("Download", defaultDownloadPath, 0, 0)
-            onSelectFolder(downloadFolder)
+            }
+            val finalPath = if (downloadFolder != null) normalizePath(downloadFolder.path) else defaultDownloadPath
+            val finalFolder = Folder(
+                name = "Download",
+                path = finalPath,
+                videoCount = downloadFolder?.videoCount ?: 0,
+                totalSizeBytes = downloadFolder?.totalSizeBytes ?: 0L
+            )
+            onSelectFolder(finalFolder)
             initialFolderChecked = true
         }
     }
 
-    // Active directory path
-    val currentPath = selectedFolder?.path.orEmpty()
-    val normCurrent = if (currentPath.isEmpty()) "/storage/emulated/0" else currentPath.trimEnd('/')
+    // Active directory path normalized
+    val normCurrent = remember(selectedFolder) {
+        normalizePath(selectedFolder?.path)
+    }
 
     // Subfolders inside current directory: scan full device directories + database video stats
     val subfolders = remember(folders, normCurrent) {
@@ -92,9 +111,9 @@ fun FoldersScreen(
 
         // 2. Aggregate stats and discovered folders from MediaStore database
         folders.forEach { folder ->
-            val fPath = folder.path.trimEnd('/')
-            if (fPath != normCurrent && fPath.startsWith("$normCurrent/")) {
-                val relative = fPath.removePrefix("$normCurrent/").trimStart('/')
+            val fNorm = normalizePath(folder.path)
+            if (fNorm != normCurrent && fNorm.startsWith("$normCurrent/")) {
+                val relative = fNorm.removePrefix("$normCurrent/").trimStart('/')
                 val directChildName = relative.substringBefore('/')
                 val directChildPath = "$normCurrent/$directChildName"
                 val existing = childDirs[directChildPath] ?: Pair(0, 0L)
@@ -102,8 +121,8 @@ fun FoldersScreen(
                     existing.first + folder.videoCount,
                     existing.second + folder.totalSizeBytes
                 )
-            } else if ((normCurrent == "/storage/emulated/0" || normCurrent.isEmpty()) && !fPath.startsWith("/storage/emulated/0")) {
-                val segments = fPath.split('/').filter { it.isNotEmpty() }
+            } else if (normCurrent == "/storage/emulated/0" && !fNorm.startsWith("/storage/emulated/0")) {
+                val segments = fNorm.split('/').filter { it.isNotEmpty() }
                 if (segments.size >= 2) {
                     val rootSegment = "/" + segments.take(2).joinToString("/")
                     val existing = childDirs[rootSegment] ?: Pair(0, 0L)
@@ -126,54 +145,50 @@ fun FoldersScreen(
         }.sortedWith(compareByDescending<Folder> { it.videoCount > 0 }.thenBy { it.name.lowercase() })
     }
 
-    val canGoBack = selectedFolder != null && normCurrent != "/storage/emulated/0" && normCurrent.isNotEmpty()
+    val canGoBack = normCurrent != "/storage/emulated/0"
+
+    val selectPath: (String) -> Unit = { rawTarget ->
+        val targetPath = normalizePath(rawTarget)
+        if (targetPath == "/storage/emulated/0") {
+            onSelectFolder(Folder("Internal Storage", "/storage/emulated/0", 0, 0L))
+        } else {
+            val match = folders.find {
+                normalizePath(it.path) == targetPath || it.path == targetPath
+            } ?: Folder(
+                name = targetPath.substringAfterLast('/'),
+                path = targetPath,
+                videoCount = 0,
+                totalSizeBytes = 0L
+            )
+            onSelectFolder(match.copy(path = targetPath))
+        }
+    }
+
+    val navigateUp: () -> Unit = {
+        if (canGoBack) {
+            val parentPath = normCurrent.substringBeforeLast('/', "")
+            selectPath(if (parentPath.isEmpty() || parentPath == "/storage/emulated") "/storage/emulated/0" else parentPath)
+        }
+    }
 
     androidx.activity.compose.BackHandler(enabled = canGoBack) {
-        if (selectedFolder != null) {
-            val parentPath = selectedFolder.path.substringBeforeLast('/', "")
-            if (parentPath.isEmpty() || parentPath == "/storage/emulated/0" || parentPath == "/storage/emulated") {
-                onSelectFolder(Folder("Internal Storage", "/storage/emulated/0", 0, 0))
-            } else {
-                val parentFolder = folders.find { it.path == parentPath }
-                    ?: Folder(name = parentPath.substringAfterLast('/'), path = parentPath, videoCount = 0, totalSizeBytes = 0)
-                onSelectFolder(parentFolder)
-            }
-        }
+        navigateUp()
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
         // Top Breadcrumb and Navigation Bar (Right side of back button)
         BreadcrumbBar(
-            currentPath = if (currentPath.isEmpty()) "/storage/emulated/0" else currentPath,
-            onNavigateToPath = { path ->
-                if (path.isEmpty() || path == "/storage/emulated/0" || path == "/storage/emulated") {
-                    onSelectFolder(Folder("Internal Storage", "/storage/emulated/0", 0, 0))
-                } else {
-                    val match = folders.find { it.path == path }
-                        ?: Folder(name = path.substringAfterLast('/'), path = path, videoCount = 0, totalSizeBytes = 0)
-                    onSelectFolder(match)
-                }
-            },
-            onBack = {
-                if (canGoBack) {
-                    val parentPath = selectedFolder?.path?.substringBeforeLast('/', "").orEmpty()
-                    if (parentPath.isEmpty() || parentPath == "/storage/emulated/0" || parentPath == "/storage/emulated") {
-                        onSelectFolder(Folder("Internal Storage", "/storage/emulated/0", 0, 0))
-                    } else {
-                        val parentFolder = folders.find { it.path == parentPath }
-                            ?: Folder(name = parentPath.substringAfterLast('/'), path = parentPath, videoCount = 0, totalSizeBytes = 0)
-                        onSelectFolder(parentFolder)
-                    }
-                }
-            }
+            currentPath = normCurrent,
+            onNavigateToPath = selectPath,
+            onBack = navigateUp
         )
 
-        val isFolderEmpty = subfolders.isEmpty() && folderVideos.isEmpty() && (selectedFolder != null || folders.isEmpty())
+        val isFolderEmpty = subfolders.isEmpty() && folderVideos.isEmpty()
 
         if (isFolderEmpty) {
             EmptyState(
                 icon = Icons.Default.FolderOff,
-                label = if (selectedFolder != null) "No media or subfolders in ${selectedFolder.name}" else stringResource(R.string.empty_folders)
+                label = if (normCurrent == "/storage/emulated/0") "No media or folders in Internal Storage" else "No media or subfolders in ${selectedFolder?.name ?: "folder"}"
             )
         } else {
             LazyColumn(

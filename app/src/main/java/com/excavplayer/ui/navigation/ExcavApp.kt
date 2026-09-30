@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -22,6 +23,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -38,6 +40,7 @@ import com.excavplayer.ui.playlists.PlaylistsScreen
 import com.excavplayer.ui.search.SearchScreen
 import com.excavplayer.ui.settings.SettingsScreen
 import com.excavplayer.ui.theme.ExcavPalette
+import com.excavplayer.ui.theme.ExcavShapes
 
 @Composable
 fun ExcavApp(
@@ -77,8 +80,9 @@ fun ExcavApp(
         return
     }
 
-    BackHandler(enabled = searchOpen || library.selectedFolder != null) {
+    BackHandler(enabled = searchOpen || (tab != MainTab.FOLDERS && library.selectedFolder != null) || tab != MainTab.HOME) {
         if (searchOpen) searchOpen = false
+        else if (tab != MainTab.HOME) tab = MainTab.HOME
         else vm.closeFolder()
     }
 
@@ -147,7 +151,8 @@ fun ExcavApp(
                                     onAddToPlaylist = vm::addVideoToPlaylist,
                                     onCreatePlaylist = vm::createPlaylist,
                                     onRenameVideo = vm::renameVideo,
-                                    onDeleteVideo = vm::deleteVideo
+                                    onDeleteVideo = vm::deleteVideo,
+                                    onRemoveFromContinueWatching = { vm.dismissFromContinueWatching(it.id) }
                                 )
                                 MainTab.FOLDERS -> FoldersScreen(
                                     folders = library.folders,
@@ -221,32 +226,32 @@ fun ExcavApp(
                             .padding(horizontal = 16.dp)
                             .padding(bottom = if (searchOpen) 16.dp else 78.dp)
                             .align(Alignment.BottomCenter)
-                            .clip(RoundedCornerShape(16.dp))
+                            .clip(ExcavShapes.Pill)
+                            .border(1.dp, ExcavPalette.Line.copy(alpha = 0.6f), ExcavShapes.Pill)
                             .clickable {
                                 playerOpen = true
                             },
-                        color = ExcavPalette.SurfaceCard,
-                        shadowElevation = 14.dp,
-                        border = BorderStroke(1.dp, ExcavPalette.Blue.copy(alpha = 0.45f))
+                        color = Color(0xFF181B22),
+                        shadowElevation = 14.dp
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                                .padding(horizontal = 14.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(38.dp)
+                                    .size(34.dp)
                                     .clip(CircleShape)
-                                    .background(ExcavPalette.Blue.copy(alpha = 0.15f)),
+                                    .background(Color(0xFF232A3B)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Headphones,
                                     contentDescription = "Background Audio",
-                                    tint = ExcavPalette.Blue,
-                                    modifier = Modifier.size(20.dp)
+                                    tint = ExcavPalette.Text,
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
 
@@ -260,15 +265,15 @@ fun ExcavApp(
                                     color = ExcavPalette.Text,
                                     style = MaterialTheme.typography.bodyMedium.copy(
                                         fontWeight = FontWeight.SemiBold,
-                                        fontSize = 14.sp
+                                        fontSize = 13.sp
                                     ),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
                                     text = if (playerState.playback.isPlaying) "Playing in background" else "Paused",
-                                    color = ExcavPalette.Blue,
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp)
+                                    color = ExcavPalette.TextMuted,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp)
                                 )
                             }
 
@@ -282,13 +287,13 @@ fun ExcavApp(
                                         vm.player.resume()
                                     }
                                 },
-                                modifier = Modifier.size(36.dp)
+                                modifier = Modifier.size(34.dp)
                             ) {
                                 Icon(
                                     imageVector = if (playerState.playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                                     contentDescription = if (playerState.playback.isPlaying) "Pause" else "Play",
                                     tint = ExcavPalette.Text,
-                                    modifier = Modifier.size(24.dp)
+                                    modifier = Modifier.size(22.dp)
                                 )
                             }
 
@@ -296,13 +301,13 @@ fun ExcavApp(
                                 onClick = {
                                     vm.player.stop()
                                 },
-                                modifier = Modifier.size(36.dp)
+                                modifier = Modifier.size(34.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
                                     contentDescription = "Stop",
                                     tint = ExcavPalette.TextMuted,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         }

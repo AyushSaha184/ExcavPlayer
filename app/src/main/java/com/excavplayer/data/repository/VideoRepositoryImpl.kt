@@ -57,7 +57,18 @@ class VideoRepositoryImpl @Inject constructor(
     }
 
     override fun observeVideosInFolder(folderPath: String): Flow<List<Video>> {
-        return videoDao.observeVideosInFolder(folderPath)
+        val clean = folderPath.trim().trimEnd('/')
+        val rel = clean.removePrefix("/storage/emulated/0/").removePrefix("/storage/emulated/0").trimStart('/')
+        val abs = if (clean.startsWith("/storage/emulated/0")) clean else "/storage/emulated/0/$clean"
+
+        return videoDao.observeVideosInFolder(
+            path1 = clean,
+            path2 = abs,
+            path3 = rel,
+            path4 = if (rel.isNotEmpty()) "$rel/" else "",
+            relPath1 = if (rel.isNotEmpty()) "$rel/" else "",
+            relPath2 = rel
+        )
             .map { list -> list.map { it.toDomain() } }
             .flowOn(dispatchers.io)
     }

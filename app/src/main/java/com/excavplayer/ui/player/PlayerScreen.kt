@@ -116,15 +116,13 @@ fun PlayerScreen(
     var gestureHudProgress by remember { mutableFloatStateOf(0f) }
     var gestureHudIcon by remember { mutableStateOf<ImageVector?>(null) }
 
-    // Smooth Subtitle Dragging State
-    var localSubtitlePosition by remember { mutableFloatStateOf(settings.subtitleVerticalPositionPercent) }
-    var isDraggingSubtitle by remember { mutableStateOf(false) }
+    var lastDoubleTapSeekTime by remember { mutableLongStateOf(0L) }
     var activeSurfaceView by remember { mutableStateOf<android.view.SurfaceView?>(null) }
 
-    LaunchedEffect(settings.subtitleVerticalPositionPercent) {
-        if (!isDraggingSubtitle) {
-            localSubtitlePosition = settings.subtitleVerticalPositionPercent
-        }
+    // When returning to video player, reset background audio toggle state so button is OFF
+    LaunchedEffect(Unit) {
+        keepAudioOnBackground = false
+        vm.player.stopBackgroundPlay()
     }
 
     // Clear gesture HUD automatically
@@ -287,9 +285,11 @@ fun PlayerScreen(
                             val width = size.width
                             when {
                                 offset.x < width * 0.35f -> {
+                                    lastDoubleTapSeekTime = android.os.SystemClock.uptimeMillis()
                                     vm.player.seekBackward(10_000)
                                 }
                                 offset.x > width * 0.65f -> {
+                                    lastDoubleTapSeekTime = android.os.SystemClock.uptimeMillis()
                                     vm.player.seekForward(10_000)
                                 }
                                 else -> {
@@ -360,6 +360,12 @@ fun PlayerScreen(
                     setBackgroundColor(android.graphics.Color.BLACK)
                     setShutterBackgroundColor(android.graphics.Color.BLACK)
                     this.resizeMode = resizeMode
+                    subtitleView?.apply {
+                        setViewType(androidx.media3.ui.SubtitleView.VIEW_TYPE_CANVAS)
+                        setApplyEmbeddedStyles(false)
+                        setApplyEmbeddedFontSizes(false)
+                        setBottomPaddingFraction(0.08f)
+                    }
                 }
             },
             update = { playerView ->
@@ -374,8 +380,8 @@ fun PlayerScreen(
                 }
 
                 val (bgColor, edgeType, edgeColor) = when (settings.subtitleBackgroundStyle) {
-                    "Translucent Box" -> Triple(android.graphics.Color.argb(160, 0, 0, 0), androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_NONE, android.graphics.Color.BLACK)
-                    "None" -> Triple(android.graphics.Color.TRANSPARENT, androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_NONE, android.graphics.Color.BLACK)
+                    "Translucent Box" -> Triple(android.graphics.Color.argb(160, 0, 0, 0), androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_NONE, android.graphics.Color.TRANSPARENT)
+                    "None" -> Triple(android.graphics.Color.TRANSPARENT, androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_NONE, android.graphics.Color.TRANSPARENT)
                     else -> Triple(android.graphics.Color.TRANSPARENT, androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_OUTLINE, android.graphics.Color.BLACK)
                 }
 
@@ -385,23 +391,23 @@ fun PlayerScreen(
                     android.graphics.Color.TRANSPARENT,
                     edgeType,
                     edgeColor,
-                    null
+                    android.graphics.Typeface.SANS_SERIF
                 )
 
                 val currentTextSizeSp = settings.subtitleTextSize.toFloatOrNull() ?: when (settings.subtitleTextSize) {
-                    "Small" -> 13f
+                    "Small" -> 14f
                     "Large" -> 22f
                     "Extra Large" -> 28f
-                    else -> 17f
+                    else -> 18f
                 }
-                val textSizeRatio = (currentTextSizeSp / 300f).coerceIn(0.035f, 0.10f)
 
                 playerView.subtitleView?.apply {
+                    setViewType(androidx.media3.ui.SubtitleView.VIEW_TYPE_CANVAS)
                     setApplyEmbeddedStyles(false)
                     setApplyEmbeddedFontSizes(false)
                     setStyle(captionStyle)
-                    setFractionalTextSize(textSizeRatio)
-                    setBottomPaddingFraction(1f - localSubtitlePosition.coerceIn(0.05f, 0.95f))
+                    setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, currentTextSizeSp)
+                    setBottomPaddingFraction(0.08f)
                 }
 
                 // Display Refresh Rate Optimization (Judder-Free Playback)
@@ -440,67 +446,9 @@ fun PlayerScreen(
                 }
         )
 
-        // Draggable Subtitle Position Overlay (when subtitle sheet is open)
-        if (activeSheet == PlayerSheet.SUBTITLES) {
-            BoxWithConstraints(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .pointerInput(Unit) {
-                        detectDragGestures(
-                            onDragStart = { isDraggingSubtitle = true },
-                            onDragEnd = {
-                                isDraggingSubtitle = false
-                                vm.setSubtitlePosition(localSubtitlePosition)
-                            },
-                            onDragCancel = {
-                                isDraggingSubtitle = false
-                                vm.setSubtitlePosition(localSubtitlePosition)
-                            },
-                            onDrag = { change, dragAmount ->
-                                change.consume()
-                                localSubtitlePosition = (localSubtitlePosition + (dragAmount.y / size.height)).coerceIn(0.08f, 0.95f)
-                            }
-                        )
-                    }
-            ) {
-                val lineY = maxHeight * localSubtitlePosition.coerceIn(0.08f, 0.95f)
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .offset(y = lineY - 14.dp)
-                        .padding(horizontal = 24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Surface(
-                        shape = ExcavShapes.Pill,
-                        color = ExcavPalette.Ink.copy(alpha = 0.92f),
-                        border = BorderStroke(1.dp, ExcavPalette.BlueGlow),
-                        shadowElevation = 8.dp
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.UnfoldMore,
-                                contentDescription = null,
-                                tint = ExcavPalette.CyanGlow,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                text = "Subtitle: ${(localSubtitlePosition * 100).toInt()}% (Drag to move)",
-                                color = ExcavPalette.Text,
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // Buffering Indicator - clean spinner without buffering text
-        if (state.playback.playbackStatus == PlaybackStatus.BUFFERING) {
+        // Buffering Indicator - clean spinner without buffering text (suppressed during double-tap seek)
+        val isRecentlySeeking = (android.os.SystemClock.uptimeMillis() - lastDoubleTapSeekTime) < 1500L
+        if (state.playback.playbackStatus == PlaybackStatus.BUFFERING && !isRecentlySeeking) {
             Surface(
                 modifier = Modifier
                     .align(Alignment.Center)
@@ -726,41 +674,34 @@ fun PlayerScreen(
             }
         }
 
-        // Locked HUD Button
+        // Locked HUD Button (matches bottom-left lock button position)
         if (isLocked) {
             AnimatedVisibility(
                 visible = controlsVisible,
                 modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .statusBarsPadding()
-                    .padding(20.dp),
+                    .align(Alignment.BottomStart)
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
                 enter = fadeIn(),
                 exit = fadeOut()
             ) {
-                Surface(
+                IconButton(
+                    onClick = {
+                        isLocked = false
+                        vm.player.dispatch(PlayerCommand.SetScreenLocked(false))
+                    },
                     modifier = Modifier
-                        .clip(ExcavShapes.Pill)
-                        .border(1.dp, ExcavPalette.BlueGlow, ExcavShapes.Pill)
-                        .clickable { isLocked = false; vm.player.dispatch(PlayerCommand.SetScreenLocked(false)) },
-                    color = ExcavPalette.Ink.copy(alpha = 0.85f)
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.6f))
+                        .border(1.dp, ExcavPalette.Blue, CircleShape)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.LockOpen,
-                            contentDescription = stringResource(R.string.cd_unlock),
-                            tint = ExcavPalette.Blue,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = "Tap to Unlock",
-                            color = ExcavPalette.Text,
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Default.LockOpen,
+                        contentDescription = stringResource(R.string.cd_unlock),
+                        tint = ExcavPalette.Blue,
+                        modifier = Modifier.size(22.dp)
+                    )
                 }
             }
         } else {
@@ -1168,15 +1109,6 @@ private fun SheetContainer(
                     .fillMaxWidth()
                     .imePadding()
             ) {
-                // Top Pill Handle
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .padding(top = 10.dp, bottom = 4.dp)
-                        .size(width = 42.dp, height = 4.dp)
-                        .background(ExcavPalette.Line, ExcavShapes.Pill)
-                )
-
                 when (sheet) {
                     PlayerSheet.SUBTITLES -> SubtitleSheet(
                         state = state,
@@ -1185,7 +1117,6 @@ private fun SheetContainer(
                         onSetSize = vm::setSubtitleTextSize,
                         onSetColor = vm::setSubtitleTextColor,
                         onSetBg = vm::setSubtitleBackgroundStyle,
-                        onSetPosition = vm::setSubtitlePosition,
                         onPickSubtitle = onPickSubtitle,
                         onDismiss = onDismiss
                     )
@@ -1307,7 +1238,8 @@ private fun ChaptersSheet(
 
 // -----------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------
-// Subtitles Sheet with Live Preview on Left Side and Subtitle Controls on Right Side
+// -----------------------------------------------------------------------------------------
+// Subtitles Sheet with Clean Live Preview and Subtitle Customization
 // -----------------------------------------------------------------------------------------
 @Composable
 private fun SubtitleSheet(
@@ -1317,7 +1249,6 @@ private fun SubtitleSheet(
     onSetSize: (String) -> Unit,
     onSetColor: (String) -> Unit,
     onSetBg: (String) -> Unit,
-    onSetPosition: (Float) -> Unit,
     onPickSubtitle: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -1332,10 +1263,10 @@ private fun SubtitleSheet(
         else -> Color.Transparent
     }
     val currentTextSizeSp = settings.subtitleTextSize.toFloatOrNull() ?: when (settings.subtitleTextSize) {
-        "Small" -> 13f
+        "Small" -> 14f
         "Large" -> 22f
         "Extra Large" -> 28f
-        else -> 17f
+        else -> 18f
     }
     val previewFontSize = currentTextSizeSp.sp
 
@@ -1346,74 +1277,44 @@ private fun SubtitleSheet(
     ) {
         val isWide = maxWidth >= 520.dp
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalAlignment = Alignment.Top
-        ) {
-            // =========================================================================
-            // LEFT SIDE: Live Preview & Interactive Position Drag Area
-            // =========================================================================
-            Column(
-                modifier = Modifier
-                    .weight(if (isWide) 0.44f else 0.40f),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+        if (isWide) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalAlignment = Alignment.Top
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
+                // LEFT SIDE: Live Preview
+                Column(
+                    modifier = Modifier.weight(0.42f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "${(settings.subtitleVerticalPositionPercent * 100).toInt()}%",
-                        color = ExcavPalette.Blue,
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                        text = "Live Preview",
+                        color = ExcavPalette.TextSecondary,
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     )
-                }
-
-                // Simulated Screen / Video Display with Draggable Subtitle Position
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(if (isWide) 250.dp else 210.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .border(1.dp, ExcavPalette.Line, RoundedCornerShape(14.dp)),
-                    color = Color(0xFF090A0E)
-                ) {
-                    BoxWithConstraints(
+                    Surface(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                Brush.verticalGradient(
-                                    colors = listOf(
-                                        Color(0xFF141720),
-                                        Color(0xFF0B0D12),
-                                        Color(0xFF07080B)
-                                    )
-                                )
-                            )
-                            .pointerInput(Unit) {
-                                detectDragGestures { change, dragAmount ->
-                                    change.consume()
-                                    val newPercent = (settings.subtitleVerticalPositionPercent + (dragAmount.y / size.height)).coerceIn(0.08f, 0.95f)
-                                    onSetPosition(newPercent)
-                                }
-                            }
+                            .fillMaxWidth()
+                            .height(200.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .border(1.dp, ExcavPalette.Line, RoundedCornerShape(14.dp)),
+                        color = Color(0xFF090A0E)
                     ) {
-                        val subY = maxHeight * settings.subtitleVerticalPositionPercent.coerceIn(0.08f, 0.95f) - 16.dp
-
-                        // Sample Subtitle Box (Draggable)
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .offset(y = subY)
-                                .padding(horizontal = 8.dp),
+                                .fillMaxSize()
+                                .background(
+                                    Brush.verticalGradient(
+                                        listOf(Color(0xFF141720), Color(0xFF0B0D12), Color(0xFF07080B))
+                                    )
+                                ),
                             contentAlignment = Alignment.Center
                         ) {
                             Surface(
                                 color = previewBg,
                                 shape = RoundedCornerShape(4.dp),
-                                border = if (settings.subtitleBackgroundStyle == "Outline") BorderStroke(1.dp, Color.Black.copy(alpha = 0.8f)) else null
+                                border = if (settings.subtitleBackgroundStyle == "Outline") BorderStroke(1.dp, Color.Black.copy(alpha = 0.85f)) else null
                             ) {
                                 Text(
                                     text = "Sample Subtitle",
@@ -1421,261 +1322,304 @@ private fun SubtitleSheet(
                                     fontSize = previewFontSize,
                                     fontWeight = FontWeight.SemiBold,
                                     textAlign = TextAlign.Center,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
-
-                        // Top Drag Hint
-                        Surface(
-                            shape = ExcavShapes.Pill,
-                            color = ExcavPalette.Ink.copy(alpha = 0.75f),
-                            modifier = Modifier
-                                .align(Alignment.TopCenter)
-                                .padding(top = 8.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.UnfoldMore,
-                                    contentDescription = null,
-                                    tint = ExcavPalette.CyanGlow,
-                                    modifier = Modifier.size(12.dp)
-                                )
-                                Spacer(Modifier.width(4.dp))
-                                Text(
-                                    text = "Drag to reposition",
-                                    color = ExcavPalette.TextMuted,
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp)
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                                 )
                             }
                         }
                     }
                 }
 
-                // Reset Position Button
-                OutlinedButton(
-                    onClick = { onSetPosition(0.90f) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = ExcavPalette.TextMuted),
-                    contentPadding = PaddingValues(vertical = 4.dp, horizontal = 8.dp)
+                // RIGHT SIDE: Controls
+                Column(
+                    modifier = Modifier
+                        .weight(0.58f)
+                        .heightIn(max = 380.dp)
+                        .verticalScroll(rememberScrollState())
+                        .padding(end = 4.dp)
                 ) {
-                    Text("Reset", fontSize = 12.sp)
-                }
-            }
-
-            // =========================================================================
-            // RIGHT SIDE: Subtitle Menu (Tracks, Appearance, Sliders)
-            // =========================================================================
-            Column(
-                modifier = Modifier
-                    .weight(if (isWide) 0.56f else 0.60f)
-                    .heightIn(max = if (isWide) 380.dp else 320.dp)
-                    .verticalScroll(rememberScrollState())
-                    .padding(end = 4.dp)
-            ) {
-                Text(
-                    text = "Enable Subtitles",
-                    color = ExcavPalette.Text,
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
-                    ),
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-
-                // Off option
-                SubtitleRadioRow(
-                    title = "Off",
-                    isSelected = state.playback.selectedSubtitleTrackId == null,
-                    onClick = { player.selectSubtitleTrack(null) }
-                )
-
-                // Embedded and Loaded Subtitles
-                if (state.availableSubtitleTracks.isNotEmpty()) {
-                    state.availableSubtitleTracks.forEach { track ->
-                        val label = track.language?.let { "$it (Embedded)" } ?: track.label
-                        SubtitleRadioRow(
-                            title = label,
-                            isSelected = track.isSelected,
-                            onClick = { player.selectSubtitleTrack(track.id) }
-                        )
-                    }
-                } else {
-                    SubtitleRadioRow(
-                        title = "en (Embedded)",
-                        isSelected = state.playback.selectedSubtitleTrackId != null,
-                        onClick = { player.selectSubtitleTrack("mock_en") }
+                    SubtitleControlsContent(
+                        state = state,
+                        player = player,
+                        settings = settings,
+                        currentTextSizeSp = currentTextSizeSp,
+                        onSetSize = onSetSize,
+                        onSetColor = onSetColor,
+                        onSetBg = onSetBg,
+                        onPickSubtitle = onPickSubtitle
                     )
                 }
-
-                Spacer(Modifier.height(10.dp))
-
-                // Action Card: Add External Subtitle File (.srt, .vtt, .ass)
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                // Top Live Preview Card in portrait
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .height(86.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .border(1.dp, ExcavPalette.Line, RoundedCornerShape(12.dp))
-                        .clickable(onClick = onPickSubtitle),
-                    color = ExcavPalette.SurfaceCard
+                        .border(1.dp, ExcavPalette.Line, RoundedCornerShape(12.dp)),
+                    color = Color(0xFF090A0E)
                 ) {
-                    Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                        Text(
-                            text = "Add External Subtitle File",
-                            color = ExcavPalette.Text,
-                            style = MaterialTheme.typography.titleSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp
-                            )
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            text = ".srt, .vtt, .ass",
-                            color = ExcavPalette.TextMuted,
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp)
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(14.dp))
-
-                // Section: Subtitle Appearance
-                Text(
-                    text = "Appearance",
-                    color = ExcavPalette.Text,
-                    style = MaterialTheme.typography.titleSmall.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
-                    )
-                )
-                Spacer(Modifier.height(6.dp))
-
-                // Text Size (Slider)
-                Text(
-                    text = "Text Size",
-                    color = ExcavPalette.TextSecondary,
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp)
-                )
-                Spacer(Modifier.height(4.dp))
-
-                ExcavSleekSlider(
-                    value = currentTextSizeSp,
-                    onValueChange = { onSetSize(it.toInt().toString()) },
-                    valueRange = 12f..32f,
-                    startLabel = "12 sp",
-                    centerLabel = "${currentTextSizeSp.toInt()} sp",
-                    endLabel = "32 sp"
-                )
-
-                Spacer(Modifier.height(10.dp))
-
-                // Text Color
-                Text(
-                    text = "Text Color",
-                    color = ExcavPalette.TextSecondary,
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp)
-                )
-                Spacer(Modifier.height(4.dp))
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    listOf("White", "Yellow", "Cyan", "Green").forEach { colorOpt ->
-                        val isSel = settings.subtitleTextColor == colorOpt
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(Color(0xFF141720), Color(0xFF0B0D12), Color(0xFF07080B))
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Surface(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(ExcavShapes.Pill)
-                                .border(1.dp, if (isSel) ExcavPalette.BlueGlow else ExcavPalette.Line, ExcavShapes.Pill)
-                                .clickable { onSetColor(colorOpt) },
-                            color = if (isSel) ExcavPalette.Blue.copy(alpha = 0.2f) else ExcavPalette.SurfaceCard
+                            color = previewBg,
+                            shape = RoundedCornerShape(4.dp),
+                            border = if (settings.subtitleBackgroundStyle == "Outline") BorderStroke(1.dp, Color.Black.copy(alpha = 0.85f)) else null
                         ) {
                             Text(
-                                text = colorOpt,
-                                color = when (colorOpt) {
-                                    "Yellow" -> Color.Yellow
-                                    "Cyan" -> ExcavPalette.CyanGlow
-                                    "Green" -> Color.Green
-                                    else -> Color.White
-                                },
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
-                                    fontSize = 10.sp
-                                ),
+                                text = "Sample Subtitle",
+                                color = previewTextColor,
+                                fontSize = previewFontSize,
+                                fontWeight = FontWeight.SemiBold,
                                 textAlign = TextAlign.Center,
-                                modifier = Modifier.padding(vertical = 6.dp)
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                             )
                         }
                     }
                 }
 
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(12.dp))
 
-                // Background Style
-                Text(
-                    text = "Background Style",
-                    color = ExcavPalette.TextSecondary,
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp)
+                SubtitleControlsContent(
+                    state = state,
+                    player = player,
+                    settings = settings,
+                    currentTextSizeSp = currentTextSizeSp,
+                    onSetSize = onSetSize,
+                    onSetColor = onSetColor,
+                    onSetBg = onSetBg,
+                    onPickSubtitle = onPickSubtitle
                 )
-                Spacer(Modifier.height(4.dp))
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    listOf("Outline", "Translucent Box", "None").forEach { styleOpt ->
-                        val isSel = settings.subtitleBackgroundStyle == styleOpt
-                        Surface(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(ExcavShapes.Pill)
-                                .border(1.dp, if (isSel) ExcavPalette.BlueGlow else ExcavPalette.Line, ExcavShapes.Pill)
-                                .clickable { onSetBg(styleOpt) },
-                            color = if (isSel) ExcavPalette.Blue.copy(alpha = 0.2f) else ExcavPalette.SurfaceCard
-                        ) {
-                            Text(
-                                text = if (styleOpt == "Translucent Box") "Box" else styleOpt,
-                                color = if (isSel) ExcavPalette.Blue else ExcavPalette.Text,
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
-                                    fontSize = 10.sp
-                                ),
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.padding(vertical = 6.dp)
-                            )
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(14.dp))
-
-                // Section: Subtitle Delay (Sleek slider)
-                Text(
-                    text = "Subtitle Delay",
-                    color = ExcavPalette.Text,
-                    style = MaterialTheme.typography.titleSmall.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
-                    )
-                )
-                Spacer(Modifier.height(6.dp))
-
-                ExcavSleekSlider(
-                    value = state.subtitleDelayMs.toFloat(),
-                    onValueChange = { player.setSubtitleDelay(it.toLong()) },
-                    valueRange = -5000f..5000f,
-                    startLabel = "-5000 ms",
-                    centerLabel = if (state.subtitleDelayMs > 0) "+${state.subtitleDelayMs} ms" else "${state.subtitleDelayMs} ms",
-                    endLabel = "+5000 ms"
-                )
-
-                Spacer(Modifier.height(16.dp))
             }
         }
     }
+}
+
+@Composable
+private fun SubtitleControlsContent(
+    state: PlayerState,
+    player: PlayerManager,
+    settings: UserSettings,
+    currentTextSizeSp: Float,
+    onSetSize: (String) -> Unit,
+    onSetColor: (String) -> Unit,
+    onSetBg: (String) -> Unit,
+    onPickSubtitle: () -> Unit
+) {
+    Text(
+        text = "Enable Subtitles",
+        color = ExcavPalette.Text,
+        style = MaterialTheme.typography.titleMedium.copy(
+            fontWeight = FontWeight.Bold,
+            fontSize = 16.sp
+        ),
+        modifier = Modifier.padding(bottom = 8.dp)
+    )
+
+    // Off option
+    SubtitleRadioRow(
+        title = "Off",
+        isSelected = state.playback.selectedSubtitleTrackId == null,
+        onClick = { player.selectSubtitleTrack(null) }
+    )
+
+    // Embedded and Loaded Subtitles
+    if (state.availableSubtitleTracks.isNotEmpty()) {
+        state.availableSubtitleTracks.forEach { track ->
+            val label = track.language?.let { "$it (Embedded)" } ?: track.label
+            SubtitleRadioRow(
+                title = label,
+                isSelected = track.isSelected,
+                onClick = { player.selectSubtitleTrack(track.id) }
+            )
+        }
+    } else {
+        SubtitleRadioRow(
+            title = "en (Embedded)",
+            isSelected = state.playback.selectedSubtitleTrackId != null,
+            onClick = { player.selectSubtitleTrack("mock_en") }
+        )
+    }
+
+    Spacer(Modifier.height(10.dp))
+
+    // Action Card: Add External Subtitle File (.srt, .vtt, .ass)
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .border(1.dp, ExcavPalette.Line, RoundedCornerShape(12.dp))
+            .clickable(onClick = onPickSubtitle),
+        color = ExcavPalette.SurfaceCard
+    ) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Text(
+                text = "Add External Subtitle File",
+                color = ExcavPalette.Text,
+                style = MaterialTheme.typography.titleSmall.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = ".srt, .vtt, .ass",
+                color = ExcavPalette.TextMuted,
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp)
+            )
+        }
+    }
+
+    Spacer(Modifier.height(14.dp))
+
+    // Section: Subtitle Appearance
+    Text(
+        text = "Appearance",
+        color = ExcavPalette.Text,
+        style = MaterialTheme.typography.titleSmall.copy(
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp
+        )
+    )
+    Spacer(Modifier.height(6.dp))
+
+    // Text Size (Slider)
+    Text(
+        text = "Text Size",
+        color = ExcavPalette.TextSecondary,
+        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp)
+    )
+    Spacer(Modifier.height(4.dp))
+
+    ExcavSleekSlider(
+        value = currentTextSizeSp,
+        onValueChange = { onSetSize(it.toInt().toString()) },
+        valueRange = 12f..32f,
+        startLabel = "12 sp",
+        centerLabel = "${currentTextSizeSp.toInt()} sp",
+        endLabel = "32 sp"
+    )
+
+    Spacer(Modifier.height(10.dp))
+
+    // Text Color
+    Text(
+        text = "Text Color",
+        color = ExcavPalette.TextSecondary,
+        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp)
+    )
+    Spacer(Modifier.height(4.dp))
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        listOf("White", "Yellow", "Cyan", "Green").forEach { colorOpt ->
+            val isSel = settings.subtitleTextColor == colorOpt
+            Surface(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(ExcavShapes.Pill)
+                    .border(1.dp, if (isSel) ExcavPalette.BlueGlow else ExcavPalette.Line, ExcavShapes.Pill)
+                .clickable { onSetColor(colorOpt) },
+                color = if (isSel) ExcavPalette.Blue.copy(alpha = 0.2f) else ExcavPalette.SurfaceCard
+            ) {
+                Text(
+                    text = colorOpt,
+                    color = when (colorOpt) {
+                        "Yellow" -> Color.Yellow
+                        "Cyan" -> ExcavPalette.CyanGlow
+                        "Green" -> Color.Green
+                        else -> Color.White
+                    },
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
+                        fontSize = 10.sp
+                    ),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(vertical = 6.dp)
+                )
+            }
+        }
+    }
+
+    Spacer(Modifier.height(10.dp))
+
+    // Background Style
+    Text(
+        text = "Background Style",
+        color = ExcavPalette.TextSecondary,
+        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp)
+    )
+    Spacer(Modifier.height(4.dp))
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        listOf("Outline", "Translucent Box", "None").forEach { styleOpt ->
+            val isSel = settings.subtitleBackgroundStyle == styleOpt
+            Surface(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(ExcavShapes.Pill)
+                    .border(1.dp, if (isSel) ExcavPalette.BlueGlow else ExcavPalette.Line, ExcavShapes.Pill)
+                    .clickable { onSetBg(styleOpt) },
+                color = if (isSel) ExcavPalette.Blue.copy(alpha = 0.2f) else ExcavPalette.SurfaceCard
+            ) {
+                Text(
+                    text = if (styleOpt == "Translucent Box") "Box" else styleOpt,
+                    color = if (isSel) ExcavPalette.Blue else ExcavPalette.Text,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
+                        fontSize = 10.sp
+                    ),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(vertical = 6.dp)
+                )
+            }
+        }
+    }
+
+    Spacer(Modifier.height(14.dp))
+
+    // Section: Subtitle Delay (Sleek slider with zero marker and snap to 0)
+    Text(
+        text = "Subtitle Delay",
+        color = ExcavPalette.Text,
+        style = MaterialTheme.typography.titleSmall.copy(
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp
+        )
+    )
+    Spacer(Modifier.height(6.dp))
+
+    ExcavSleekSlider(
+        value = state.subtitleDelayMs.toFloat(),
+        onValueChange = { rawVal ->
+            val snapped = if (kotlin.math.abs(rawVal) < 200f) 0L else rawVal.toLong()
+            player.setSubtitleDelay(snapped)
+        },
+        valueRange = -5000f..5000f,
+        showZeroMarker = true,
+        startLabel = "-5000 ms",
+        centerLabel = if (state.subtitleDelayMs > 0) "+${state.subtitleDelayMs} ms" else "${state.subtitleDelayMs} ms",
+        endLabel = "+5000 ms"
+    )
+
+    Spacer(Modifier.height(16.dp))
 }
 
 @Composable

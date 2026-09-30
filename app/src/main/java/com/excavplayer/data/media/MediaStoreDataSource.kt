@@ -196,8 +196,9 @@ class MediaStoreDataSource @Inject constructor(
 
             if (relativePathColumn != -1 && !cursor.isNull(relativePathColumn)) {
                 relativePath = cursor.getString(relativePathColumn) ?: ""
-                folderPath = relativePath.trimEnd('/')
-                folderName = folderPath.substringAfterLast('/', folderPath)
+                val cleanRel = relativePath.trim().trim('/')
+                folderPath = if (cleanRel.isNotEmpty()) "/storage/emulated/0/$cleanRel" else "/storage/emulated/0"
+                folderName = cleanRel.substringAfterLast('/', cleanRel.ifEmpty { "Internal Storage" })
             } else if (dataColumn != -1 && !cursor.isNull(dataColumn)) {
                 val data = cursor.getString(dataColumn) ?: ""
                 val parentFile = File(data).parentFile
@@ -208,8 +209,8 @@ class MediaStoreDataSource @Inject constructor(
             }
 
             if (folderName.isEmpty() && bucketNameColumn != -1 && !cursor.isNull(bucketNameColumn)) {
-                folderName = cursor.getString(bucketNameColumn) ?: "Internal"
-                if (folderPath.isEmpty()) folderPath = folderName
+                folderName = cursor.getString(bucketNameColumn) ?: "Internal Storage"
+                if (folderPath.isEmpty()) folderPath = "/storage/emulated/0/$folderName"
             }
 
             videos.add(

@@ -72,6 +72,7 @@ class PlayerManager @Inject constructor(
     private val trackManager = TrackManager()
 
     private var currentSettings = UserSettings()
+    private var userDisabledSubtitlesForSession = false
 
     override val exoPlayer: ExoPlayer by lazy {
         val mediaCodecSelector = MediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
@@ -173,6 +174,7 @@ class PlayerManager @Inject constructor(
     override suspend fun play(video: Video, startPositionMs: Long?) = withContext(dispatchers.main) {
         logger.i(TAG, "play() called for video: ${video.id}")
         val settings = settingsRepository.userSettings.first()
+        userDisabledSubtitlesForSession = false
 
         val resumePos = startPositionMs ?: if (settings.autoResume) {
             val savedState = playbackRepository.getPlaybackState(video.id)
@@ -432,6 +434,7 @@ class PlayerManager @Inject constructor(
 
     override fun selectSubtitleTrack(trackId: String?) {
         logger.d(TAG, "selectSubtitleTrack: $trackId")
+        userDisabledSubtitlesForSession = (trackId == null)
         trackManager.selectTrack(exoPlayer, C.TRACK_TYPE_TEXT, trackId)
         _state.update {
             it.copy(playback = it.playback.copy(selectedSubtitleTrackId = trackId))
@@ -624,8 +627,8 @@ class PlayerManager @Inject constructor(
                 }
             }
 
-            // Auto-enable subtitles if enabled in user settings
-            if (currentSettings.subtitlesEnabled) {
+            // Auto-enable subtitles if enabled in user settings and not explicitly turned off for this video
+            if (currentSettings.subtitlesEnabled && !userDisabledSubtitlesForSession) {
                 if (selectedSubs == null && subs.isNotEmpty()) {
                     val preferredLang = currentSettings.preferredSubtitleLanguage
                     val matchingSub = if (!preferredLang.isNullOrBlank()) {
@@ -638,7 +641,7 @@ class PlayerManager @Inject constructor(
                     trackManager.selectTrack(exoPlayer, C.TRACK_TYPE_TEXT, matchingSub.id)
                     selectedSubs = matchingSub.id
                 }
-            } else {
+            } else if (!currentSettings.subtitlesEnabled || userDisabledSubtitlesForSession) {
                 if (selectedSubs != null) {
                     trackManager.selectTrack(exoPlayer, C.TRACK_TYPE_TEXT, null)
                     selectedSubs = null

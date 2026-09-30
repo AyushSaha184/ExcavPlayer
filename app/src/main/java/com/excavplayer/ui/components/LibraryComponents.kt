@@ -966,23 +966,34 @@ fun BreadcrumbBar(
     onNavigateToPath: (String) -> Unit,
     onBack: () -> Unit
 ) {
-    val parts = remember(currentPath) {
-        val trimmed = currentPath.trimEnd('/')
-        val list = mutableListOf<Pair<String, String>>()
+    val normCurrent = remember(currentPath) {
+        val trimmed = currentPath.trim().trimEnd('/')
+        when {
+            trimmed.isEmpty() || trimmed == "/storage/emulated/0" || trimmed == "/storage/emulated" || trimmed.equals("Internal Storage", ignoreCase = true) -> "/storage/emulated/0"
+            trimmed.startsWith("/storage/emulated/0") -> trimmed
+            trimmed.startsWith("/storage/") -> trimmed
+            trimmed.startsWith("/") -> trimmed
+            else -> "/storage/emulated/0/$trimmed"
+        }
+    }
 
-        if (trimmed.isEmpty() || trimmed == "/storage/emulated/0") {
-            list.add(Pair("Internal Storage", "/storage/emulated/0"))
-        } else if (trimmed.startsWith("/storage/emulated/0")) {
-            list.add(Pair("Internal Storage", "/storage/emulated/0"))
-            val sub = trimmed.removePrefix("/storage/emulated/0").trimStart('/')
-            val segments = sub.split('/').filter { it.isNotEmpty() }
-            var accumulated = "/storage/emulated/0"
-            for (seg in segments) {
-                accumulated += "/$seg"
-                list.add(Pair(seg, accumulated))
+    val parts = remember(normCurrent) {
+        val list = mutableListOf<Pair<String, String>>()
+        list.add(Pair("Internal Storage", "/storage/emulated/0"))
+
+        if (normCurrent.startsWith("/storage/emulated/0")) {
+            val sub = normCurrent.removePrefix("/storage/emulated/0").trimStart('/')
+            if (sub.isNotEmpty()) {
+                val segments = sub.split('/').filter { it.isNotEmpty() }
+                var accumulated = "/storage/emulated/0"
+                for (seg in segments) {
+                    accumulated += "/$seg"
+                    list.add(Pair(seg, accumulated))
+                }
             }
-        } else if (trimmed.startsWith("/storage/")) {
-            val sub = trimmed.removePrefix("/storage/").trimStart('/')
+        } else if (normCurrent.startsWith("/storage/")) {
+            list.clear()
+            val sub = normCurrent.removePrefix("/storage/").trimStart('/')
             val segments = sub.split('/').filter { it.isNotEmpty() }
             if (segments.isNotEmpty()) {
                 val cardId = segments[0]
@@ -993,17 +1004,14 @@ fun BreadcrumbBar(
                     list.add(Pair(segments[i], accumulated))
                 }
             } else {
-                list.add(Pair("Storage", trimmed))
+                list.add(Pair("Storage", normCurrent))
             }
         } else {
-            val segments = trimmed.split('/').filter { it.isNotEmpty() }
+            val segments = normCurrent.split('/').filter { it.isNotEmpty() }
             var accumulated = ""
             for (seg in segments) {
                 accumulated += "/$seg"
                 list.add(Pair(seg, accumulated))
-            }
-            if (list.isEmpty()) {
-                list.add(Pair("Internal Storage", "/storage/emulated/0"))
             }
         }
         list
@@ -1084,7 +1092,8 @@ fun VideoOptionsMenu(
     onAddToPlaylist: () -> Unit,
     onRename: () -> Unit,
     onProperties: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onRemoveFromContinueWatching: (() -> Unit)? = null
 ) {
     DropdownMenu(
         expanded = expanded,
@@ -1093,6 +1102,23 @@ fun VideoOptionsMenu(
             .background(ExcavPalette.SurfaceCard)
             .border(1.dp, ExcavPalette.Line, RoundedCornerShape(12.dp))
     ) {
+        if (onRemoveFromContinueWatching != null) {
+            DropdownMenuItem(
+                text = { Text("Remove from Continue Watching", color = ExcavPalette.Text) },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.VisibilityOff,
+                        contentDescription = null,
+                        tint = ExcavPalette.TextMuted
+                    )
+                },
+                onClick = {
+                    onRemoveFromContinueWatching()
+                    onDismiss()
+                }
+            )
+            HorizontalDivider(thickness = 0.5.dp, color = ExcavPalette.Line.copy(alpha = 0.5f))
+        }
         DropdownMenuItem(
             text = { Text(if (isFavorite) "Remove from Favorites" else "Add to Favorites", color = ExcavPalette.Text) },
             leadingIcon = {
@@ -1634,7 +1660,8 @@ fun ExcavSleekSlider(
     modifier: Modifier = Modifier,
     startLabel: String? = null,
     centerLabel: String? = null,
-    endLabel: String? = null
+    endLabel: String? = null,
+    showZeroMarker: Boolean = false
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
         Slider(
@@ -1668,13 +1695,14 @@ fun ExcavSleekSlider(
                     ((sliderState.value - valueRange.start) / (valueRange.endInclusive - valueRange.start)).coerceIn(0f, 1f)
                 } else 0f
 
-                Box(
+                BoxWithConstraints(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(6.dp)
                         .clip(RoundedCornerShape(3.dp))
                         .background(Color(0xFF232A3B))
                 ) {
+                    val fullWidth = maxWidth
                     Box(
                         modifier = Modifier
                             .fillMaxHeight()
@@ -1686,6 +1714,16 @@ fun ExcavSleekSlider(
                                 )
                             )
                     )
+                    if (showZeroMarker && valueRange.start < 0f && valueRange.endInclusive > 0f) {
+                        val zeroFrac = (-valueRange.start) / (valueRange.endInclusive - valueRange.start)
+                        Box(
+                            modifier = Modifier
+                                .offset(x = fullWidth * zeroFrac - 1.dp)
+                                .width(2.5.dp)
+                                .fillMaxHeight()
+                                .background(Color.White.copy(alpha = 0.9f))
+                        )
+                    }
                 }
             }
         )

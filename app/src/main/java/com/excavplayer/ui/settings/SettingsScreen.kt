@@ -224,14 +224,6 @@ fun SettingsScreen(
                     checked = settings.rememberVolume,
                     onCheckedChange = { vm.setRememberVolume(it) }
                 )
-                SettingsDivider()
-                SettingsSwitchRow(
-                    icon = Icons.Default.RecordVoiceOver,
-                    title = "Dialogue Booster",
-                    subtitle = "Enhance vocal frequencies and clarify speech across videos",
-                    checked = settings.dialogueBoostEnabled,
-                    onCheckedChange = { vm.setDialogueBoost(it) }
-                )
             }
 
             Spacer(Modifier.height(20.dp))

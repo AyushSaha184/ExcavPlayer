@@ -12,6 +12,7 @@ import com.excavplayer.data.database.dao.PlaybackDao
 import com.excavplayer.data.database.dao.PlaylistDao
 import com.excavplayer.data.database.dao.SubtitlePreferenceDao
 import com.excavplayer.data.database.dao.VideoDao
+import com.excavplayer.data.database.entity.DismissedContinueWatchingEntity
 import com.excavplayer.data.database.entity.FavoriteEntity
 import com.excavplayer.data.database.entity.FolderEntity
 import com.excavplayer.data.database.entity.MediaSourceEntity
@@ -30,9 +31,10 @@ import com.excavplayer.data.database.entity.VideoEntity
         PlaylistItemEntity::class,
         SubtitlePreferenceEntity::class,
         MediaSourceEntity::class,
-        FolderEntity::class
+        FolderEntity::class,
+        DismissedContinueWatchingEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 abstract class ExcavDatabase : RoomDatabase() {
@@ -53,13 +55,19 @@ abstract class ExcavDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `dismissed_continue_watching` (`video_id` TEXT NOT NULL, PRIMARY KEY(`video_id`), FOREIGN KEY(`video_id`) REFERENCES `videos`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE)")
+            }
+        }
+
         fun buildDatabase(context: Context): ExcavDatabase {
             return Room.databaseBuilder(
                 context.applicationContext,
                 ExcavDatabase::class.java,
                 DATABASE_NAME
             )
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .fallbackToDestructiveMigration()
                 .build()
         }
