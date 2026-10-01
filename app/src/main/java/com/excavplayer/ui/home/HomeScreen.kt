@@ -22,6 +22,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import com.excavplayer.ui.components.GlassmorphicBackButton
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOff
 import androidx.compose.material.icons.filled.LockOpen
@@ -35,6 +37,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -132,90 +135,90 @@ fun HomeScreen(
             videos.filter { it.folderPath == group.path || it.folderName == group.name }.ifEmpty { group.videos }
         }
 
-        Column(modifier = Modifier.fillMaxSize()) {
-            // Group Header with Back Button
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(
-                    onClick = { selectedGroup = null },
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(CircleShape)
-                        .background(ExcavPalette.SurfaceCard)
-                        .border(1.dp, ExcavPalette.Line, CircleShape)
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
-                        tint = ExcavPalette.Text,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                Spacer(Modifier.width(12.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = group.name,
-                        color = ExcavPalette.Text,
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp
-                        ),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = "${groupVideos.size} ${if (groupVideos.size == 1) "video" else "videos"} • ${formatFileSize(groupVideos.sumOf { it.sizeBytes })}",
-                        color = ExcavPalette.TextMuted,
-                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp)
-                    )
-                }
-            }
-
+        Box(modifier = Modifier.fillMaxSize()) {
             if (groupVideos.isEmpty()) {
-                EmptyState(
-                    icon = Icons.Default.VideoLibrary,
-                    label = "No videos in ${group.name}"
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp, vertical = 24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    EmptyState(
+                        icon = Icons.Default.VideoLibrary,
+                        label = "No videos in ${group.name}"
+                    )
+                }
             } else {
                 LazyColumn(
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 64.dp, bottom = 90.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(groupVideos, key = { it.id }) { video ->
-                        Box {
-                            ListVideoRow(
-                                video = video,
-                                onClick = { onPlay(video) },
-                                onMoreClick = { selectedVideoForMenu = video }
-                            )
-
-                            if (selectedVideoForMenu?.id == video.id) {
-                                val isFav = favorites.any { it.id == video.id }
-                                VideoOptionsMenu(
-                                    expanded = true,
-                                    video = video,
-                                    isFavorite = isFav,
-                                    onDismiss = { selectedVideoForMenu = null },
-                                    onToggleFavorite = { onToggleFavorite(video) },
-                                    onAddToPlaylist = { playlistVideoTarget = video },
-                                    onRename = { renameVideoTarget = video },
-                                    onProperties = { propertiesVideo = video },
-                                    onDelete = { deleteVideoTarget = video }
-                                )
+                        ListVideoRow(
+                            video = video,
+                            onClick = { onPlay(video) },
+                            onMoreClick = { selectedVideoForMenu = video },
+                            dropdownMenu = {
+                                if (selectedVideoForMenu?.id == video.id) {
+                                    val isFav = favorites.any { it.id == video.id }
+                                    VideoOptionsMenu(
+                                        expanded = true,
+                                        video = video,
+                                        isFavorite = isFav,
+                                        onDismiss = { selectedVideoForMenu = null },
+                                        onToggleFavorite = { onToggleFavorite(video) },
+                                        onAddToPlaylist = { playlistVideoTarget = video },
+                                        onRename = { renameVideoTarget = video },
+                                        onProperties = { propertiesVideo = video },
+                                        onDelete = { deleteVideoTarget = video }
+                                    )
+                                }
                             }
-                        }
+                        )
                     }
 
                     item {
                         Spacer(Modifier.height(80.dp))
+                    }
+                }
+            }
+
+            // Floating Group Header with Glass Back Button
+            ProgressiveHeaderContainer(
+                modifier = Modifier.align(Alignment.TopCenter),
+                fadeHeight = 20.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    GlassmorphicBackButton(
+                        onClick = { selectedGroup = null },
+                        size = 38.dp
+                    )
+
+                    Spacer(Modifier.width(12.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = group.name,
+                            color = ExcavPalette.Text,
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp
+                            ),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = "${groupVideos.size} ${if (groupVideos.size == 1) "video" else "videos"} • ${formatFileSize(groupVideos.sumOf { it.sizeBytes })}",
+                            color = ExcavPalette.TextMuted,
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp)
+                        )
                     }
                 }
             }
@@ -224,7 +227,7 @@ fun HomeScreen(
         // Main Home View
         LazyVerticalGrid(
             columns = GridCells.Adaptive(160.dp),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 62.dp, bottom = 90.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.fillMaxSize()
@@ -280,9 +283,10 @@ fun HomeScreen(
 
                             Spacer(Modifier.height(16.dp))
 
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 Button(
                                     onClick = {
@@ -293,6 +297,7 @@ fun HomeScreen(
                                         }
                                         permissionLauncher.launch(permissions)
                                     },
+                                    modifier = Modifier.fillMaxWidth(),
                                     colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
                                     shape = ExcavShapes.Pill
                                 ) {
@@ -318,6 +323,7 @@ fun HomeScreen(
                                         }
                                         context.startActivity(intent)
                                     },
+                                    modifier = Modifier.fillMaxWidth(),
                                     shape = ExcavShapes.Pill
                                 ) {
                                     Icon(
@@ -349,29 +355,28 @@ fun HomeScreen(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             items(continueWatching, key = { "cw_${it.id}" }) { video ->
-                                Box {
-                                    ContinueWatchingRowCard(
-                                        video = video,
-                                        onClick = { onPlay(video) },
-                                        onMoreClick = { selectedVideoForMenu = video }
-                                    )
-
-                                    if (selectedVideoForMenu?.id == video.id) {
-                                        val isFav = favorites.any { it.id == video.id }
-                                        VideoOptionsMenu(
-                                            expanded = true,
-                                            video = video,
-                                            isFavorite = isFav,
-                                            onDismiss = { selectedVideoForMenu = null },
-                                            onToggleFavorite = { onToggleFavorite(video) },
-                                            onAddToPlaylist = { playlistVideoTarget = video },
-                                            onRename = { renameVideoTarget = video },
-                                            onProperties = { propertiesVideo = video },
-                                            onDelete = { deleteVideoTarget = video },
-                                            onRemoveFromContinueWatching = { onRemoveFromContinueWatching(video) }
-                                        )
+                                ContinueWatchingRowCard(
+                                    video = video,
+                                    onClick = { onPlay(video) },
+                                    onMoreClick = { selectedVideoForMenu = video },
+                                    dropdownMenu = {
+                                        if (selectedVideoForMenu?.id == video.id) {
+                                            val isFav = favorites.any { it.id == video.id }
+                                            VideoOptionsMenu(
+                                                expanded = true,
+                                                video = video,
+                                                isFavorite = isFav,
+                                                onDismiss = { selectedVideoForMenu = null },
+                                                onToggleFavorite = { onToggleFavorite(video) },
+                                                onAddToPlaylist = { playlistVideoTarget = video },
+                                                onRename = { renameVideoTarget = video },
+                                                onProperties = { propertiesVideo = video },
+                                                onDelete = { deleteVideoTarget = video },
+                                                onRemoveFromContinueWatching = { onRemoveFromContinueWatching(video) }
+                                            )
+                                        }
                                     }
-                                }
+                                )
                             }
                         }
                     }

@@ -10,6 +10,7 @@ import com.excavplayer.domain.model.Playlist
 import com.excavplayer.domain.model.RepeatMode
 import com.excavplayer.domain.model.UserSettings
 import com.excavplayer.domain.model.Video
+import com.excavplayer.domain.model.NaturalVideoComparator
 import com.excavplayer.library.PlaylistManager
 import com.excavplayer.library.VideoLibrary
 import com.excavplayer.player.core.PlayerManager
@@ -153,14 +154,23 @@ class ExcavViewModel @Inject constructor(
         }
     }
 
-    fun play(video: Video) {
+    fun play(video: Video, contextList: List<Video>? = null) {
         logger.i(TAG, "play() invoked for video: ${video.displayName} [id=${video.id}]")
         val currentFolderVideos = libraryState.value.folderVideos
         val allVideos = libraryState.value.videos
-        val activeList = if (selectedFolder.value != null && currentFolderVideos.isNotEmpty()) {
-            currentFolderVideos
-        } else {
-            allVideos
+        val activeList = when {
+            contextList != null && contextList.isNotEmpty() -> contextList
+            selectedFolder.value != null && currentFolderVideos.isNotEmpty() -> currentFolderVideos
+            else -> {
+                val sameFolderVideos = allVideos.filter {
+                    it.folderPath.isNotEmpty() && it.folderPath.equals(video.folderPath, ignoreCase = true)
+                }
+                if (sameFolderVideos.size > 1) {
+                    sameFolderVideos.sortedWith(NaturalVideoComparator)
+                } else {
+                    allVideos
+                }
+            }
         }
         val items = if (activeList.any { it.id == video.id }) activeList else listOf(video)
         val index = items.indexOfFirst { it.id == video.id }.coerceAtLeast(0)

@@ -53,6 +53,12 @@ sealed class PlaybackError(
         override val cause: Throwable? = null
     ) : PlaybackError(message, cause, isRecoverable = true)
 
+    data class SourceError(
+        override val message: String = "Media source read error",
+        override val cause: Throwable? = null,
+        val recoverable: Boolean = true
+    ) : PlaybackError(message, cause, isRecoverable = recoverable)
+
     data class UnknownError(
         override val message: String,
         override val cause: Throwable? = null

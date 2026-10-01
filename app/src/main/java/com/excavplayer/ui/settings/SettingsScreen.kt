@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import com.excavplayer.ui.components.GlassmorphicBackButton
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -29,7 +30,12 @@ import androidx.compose.ui.unit.sp
 import com.excavplayer.R
 import com.excavplayer.domain.model.RepeatMode
 import com.excavplayer.ui.ExcavViewModel
+import com.excavplayer.ui.components.ProgressiveHeaderBlur
+import com.excavplayer.ui.components.ProgressiveHeaderContainer
 import com.excavplayer.ui.components.SleekRadioButton
+import com.excavplayer.ui.components.darkUltraThinBlur
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.excavplayer.ui.components.SleekSwitch
 import com.excavplayer.ui.theme.ExcavPalette
 import com.excavplayer.ui.theme.ExcavShapes
@@ -46,46 +52,17 @@ fun SettingsScreen(
     val settings by vm.userSettings.collectAsState()
     var activeDialog by rememberSaveable { mutableStateOf(SettingDialog.NONE) }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(ExcavPalette.Ink)
-            .statusBarsPadding()
     ) {
-        // Top Bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (onBack != null) {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = stringResource(R.string.cd_back),
-                        tint = ExcavPalette.Text
-                    )
-                }
-                Spacer(Modifier.width(4.dp))
-            } else {
-                Spacer(Modifier.width(8.dp))
-            }
-            Text(
-                text = stringResource(R.string.settings),
-                color = ExcavPalette.Text,
-                style = MaterialTheme.typography.titleLarge.copy(
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            )
-        }
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(horizontal = 16.dp)
+                .padding(top = 70.dp, bottom = 90.dp)
         ) {
             // Section 1: Playback
             SettingsSectionHeader(title = "Playback")
@@ -291,6 +268,34 @@ fun SettingsScreen(
             }
 
             Spacer(Modifier.height(40.dp))
+        }
+
+        // Top Floating Glass Header
+        ProgressiveHeaderContainer(
+            modifier = Modifier.align(Alignment.TopCenter),
+            fadeHeight = 20.dp
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (onBack != null) {
+                    GlassmorphicBackButton(onClick = onBack)
+                    Spacer(Modifier.width(8.dp))
+                } else {
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(
+                    text = stringResource(R.string.settings),
+                    color = ExcavPalette.Text,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                )
+            }
         }
     }
 
@@ -572,66 +577,87 @@ private fun <T> RadioChoiceDialog(
     onSelect: (T) -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = title,
-                color = ExcavPalette.Text,
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-            )
-        },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-            ) {
-                options.forEach { option ->
-                    val isSelected = option == selected
-                    val sub = subtitleFor?.invoke(option)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(if (isSelected) ExcavPalette.Blue.copy(alpha = 0.12f) else Color.Transparent)
-                            .clickable { onSelect(option) }
-                            .padding(horizontal = 12.dp, vertical = if (sub != null) 10.dp else 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        SleekRadioButton(
-                            selected = isSelected,
-                            onClick = { onSelect(option) }
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = labelFor(option),
-                                color = if (isSelected) ExcavPalette.Blue else ExcavPalette.Text,
-                                style = MaterialTheme.typography.bodyLarge.copy(
-                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
-                                )
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.90f)
+                .wrapContentHeight()
+                .darkUltraThinBlur(
+                    shape = RoundedCornerShape(22.dp),
+                    backgroundColor = Color(0xE6101216),
+                    strokeColor = Color.White.copy(alpha = 0.18f)
+                )
+                .padding(22.dp)
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = title,
+                    color = ExcavPalette.Text,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 19.sp
+                    ),
+                    modifier = Modifier.padding(bottom = 14.dp)
+                )
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 380.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    options.forEach { option ->
+                        val isSelected = option == selected
+                        val sub = subtitleFor?.invoke(option)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (isSelected) ExcavPalette.Blue.copy(alpha = 0.14f) else Color.Transparent)
+                                .clickable { onSelect(option) }
+                                .padding(horizontal = 12.dp, vertical = if (sub != null) 10.dp else 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            SleekRadioButton(
+                                selected = isSelected,
+                                onClick = { onSelect(option) }
                             )
-                            if (sub != null) {
-                                Spacer(Modifier.height(2.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = sub,
-                                    color = ExcavPalette.TextMuted,
-                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp)
+                                    text = labelFor(option),
+                                    color = if (isSelected) ExcavPalette.Blue else ExcavPalette.Text,
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                                    )
                                 )
+                                if (sub != null) {
+                                    Spacer(Modifier.height(2.dp))
+                                    Text(
+                                        text = sub,
+                                        color = ExcavPalette.TextMuted,
+                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp)
+                                    )
+                                }
                             }
                         }
                     }
                 }
+
+                Spacer(Modifier.height(14.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text(stringResource(R.string.cancel), color = ExcavPalette.TextMuted, fontWeight = FontWeight.Medium)
+                    }
+                }
             }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel), color = ExcavPalette.TextMuted)
-            }
-        },
-        containerColor = ExcavPalette.SurfaceCard,
-        shape = ExcavShapes.Card
-    )
+        }
+    }
 }

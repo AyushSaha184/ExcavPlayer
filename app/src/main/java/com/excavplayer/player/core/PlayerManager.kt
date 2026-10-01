@@ -16,7 +16,9 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.mediacodec.MediaCodecUtil
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import androidx.media3.extractor.DefaultExtractorsFactory
 import com.excavplayer.domain.model.UserSettings
 import com.excavplayer.core.coroutine.DispatcherProvider
 import com.excavplayer.core.logging.AppLogger
@@ -107,7 +109,12 @@ class PlayerManager @Inject constructor(
             .setUsage(C.USAGE_MEDIA)
             .build()
 
+        val extractorsFactory = DefaultExtractorsFactory()
+            .setConstantBitrateSeekingEnabled(true)
+        val mediaSourceFactory = DefaultMediaSourceFactory(context, extractorsFactory)
+
         ExoPlayer.Builder(context, renderersFactory)
+            .setMediaSourceFactory(mediaSourceFactory)
             .setTrackSelector(trackSelector)
             .setAudioAttributes(audioAttributes, /* handleAudioFocus = */ true)
             .setHandleAudioBecomingNoisy(false) // We manage audio becoming noisy with explicit receiver
@@ -237,8 +244,16 @@ class PlayerManager @Inject constructor(
 
     override fun resume() {
         logger.d(TAG, "resume()")
-        if (exoPlayer.playbackState == Player.STATE_ENDED) {
+        val curVid = _state.value.currentVideo
+        if (exoPlayer.playbackState == Player.STATE_ENDED ||
+            exoPlayer.playbackState == Player.STATE_IDLE ||
+            _state.value.playback.playbackStatus == PlaybackStatus.ENDED
+        ) {
+            if (exoPlayer.currentMediaItem == null && curVid != null) {
+                exoPlayer.setMediaItem(buildMediaItem(curVid))
+            }
             exoPlayer.seekTo(0)
+            exoPlayer.prepare()
         }
         exoPlayer.play()
         becomingNoisyReceiver.register()
@@ -246,8 +261,12 @@ class PlayerManager @Inject constructor(
     }
 
     override fun seekTo(positionMs: Long) {
-        val target = positionMs.coerceIn(0L, exoPlayer.duration.coerceAtLeast(0L))
+        val dur = exoPlayer.duration.takeIf { it > 0 } ?: _state.value.playback.durationMs.coerceAtLeast(0L)
+        val target = positionMs.coerceIn(0L, dur.coerceAtLeast(0L))
         logger.d(TAG, "seekTo: $target ms")
+        if (exoPlayer.playbackState == Player.STATE_IDLE) {
+            exoPlayer.prepare()
+        }
         exoPlayer.seekTo(target)
         _state.update {
             it.copy(playback = it.playback.copy(currentPositionMs = target))
@@ -703,6 +722,76 @@ class PlayerManager @Inject constructor(
         }
 
         override fun onPlayerError(error: PlaybackException) {
+            val duration = exoPlayer.duration.takeIf { it > 0 }
+                ?: _state.value.playback.durationMs.takeIf { it > 0 }
+                ?: _state.value.currentVideo?.durationMs?.takeIf { it > 0 }
+                ?: 0L
+            val currentPos = exoPlayer.currentPosition.coerceAtLeast(0L).takeIf { it > 0 }
+                ?: _state.value.playback.currentPositionMs
+            val bufferedPos = exoPlayer.bufferedPosition.coerceAtLeast(0L).takeIf { it > 0 }
+                ?: _state.value.playback.bufferedPositionMs
+
+            val remainingMs = if (duration > 0) (duration - currentPos).coerceAtLeast(0L) else Long.MAX_VALUE
+            val progressPercent = if (duration > 0) (currentPos.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else 0f
+
+            // Check if error occurred when the video is about to end (e.g. premature EOF / truncated credits / audio-video duration mismatch)
+            val isNearEnd = duration > 10_000L && (
+                remainingMs <= 60_000L ||
+                progressPercent >= 0.90f ||
+                (bufferedPos > 0 && bufferedPos >= duration - 3_000L)
+            )
+
+            val isEofOrNearEndSourceError = error.errorCode == PlaybackException.ERROR_CODE_IO_UNSPECIFIED ||
+                error.errorCode == PlaybackException.ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE ||
+                error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED ||
+                error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED ||
+                error.errorCode == PlaybackException.ERROR_CODE_DECODING_FAILED ||
+                error.cause is java.io.EOFException ||
+                error.cause?.message?.contains("EOF", ignoreCase = true) == true ||
+                error.message?.contains("Source error", ignoreCase = true) == true ||
+                error.errorCodeName.contains("IO", ignoreCase = true)
+
+            if (isNearEnd && isEofOrNearEndSourceError) {
+                logger.w(
+                    TAG,
+                    "Playback encountered EOF / source error near completion ($currentPos/$duration ms, remaining: $remainingMs ms). " +
+                        "Treating as natural playback completion."
+                )
+
+                becomingNoisyReceiver.unregister()
+                persistenceManager.stopPeriodicSave()
+
+                val completedPlayback = _state.value.playback.copy(
+                    playbackStatus = PlaybackStatus.ENDED,
+                    isPlaying = false,
+                    currentPositionMs = duration,
+                    durationMs = duration,
+                    lastUpdatedTimestamp = System.currentTimeMillis()
+                )
+
+                _state.update {
+                    it.copy(
+                        error = null,
+                        playback = completedPlayback
+                    )
+                }
+
+                playerScope.launch {
+                    persistenceManager.saveImmediate(completedPlayback, _state.value.currentVideo)
+
+                    // Autoplay next in queue if available
+                    val settings = settingsRepository.userSettings.first()
+                    if (settings.autoplayNextVideo) {
+                        val nextVideo = queue.next()
+                        if (nextVideo != null) {
+                            logger.i(TAG, "Autoplaying next video after near-end EOF: ${nextVideo.displayName}")
+                            play(nextVideo)
+                        }
+                    }
+                }
+                return
+            }
+
             val mappedError = PlayerErrorMapper.map(error)
             logger.e(TAG, "Playback error: ${mappedError.message}", error)
             _state.update { it.copy(error = mappedError) }

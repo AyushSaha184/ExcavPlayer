@@ -55,3 +55,53 @@ data class Video(
             return "VIDEO"
         }
 }
+
+object NaturalOrderComparator : Comparator<String> {
+    override fun compare(str1: String?, str2: String?): Int {
+        val s1 = str1.orEmpty()
+        val s2 = str2.orEmpty()
+        var i1 = 0
+        var i2 = 0
+        while (i1 < s1.length && i2 < s2.length) {
+            val c1 = s1[i1]
+            val c2 = s2[i2]
+            if (c1.isDigit() && c2.isDigit()) {
+                var j1 = i1
+                while (j1 < s1.length && s1[j1].isDigit()) j1++
+                var j2 = i2
+                while (j2 < s2.length && s2[j2].isDigit()) j2++
+
+                val numStr1 = s1.substring(i1, j1)
+                val numStr2 = s2.substring(i2, j2)
+
+                val trimmed1 = numStr1.trimStart('0')
+                val trimmed2 = numStr2.trimStart('0')
+
+                val cmp = if (trimmed1.length != trimmed2.length) {
+                    trimmed1.length.compareTo(trimmed2.length)
+                } else {
+                    trimmed1.compareTo(trimmed2)
+                }
+
+                if (cmp != 0) return cmp
+
+                val lenCmp = numStr1.length.compareTo(numStr2.length)
+                if (lenCmp != 0) return lenCmp
+
+                i1 = j1
+                i2 = j2
+            } else {
+                val cmp = c1.lowercaseChar().compareTo(c2.lowercaseChar())
+                if (cmp != 0) return cmp
+                i1++
+                i2++
+            }
+        }
+        return s1.length.compareTo(s2.length)
+    }
+}
+
+val NaturalVideoComparator: Comparator<Video> = Comparator { v1, v2 ->
+    NaturalOrderComparator.compare(v1.displayName, v2.displayName)
+}
+

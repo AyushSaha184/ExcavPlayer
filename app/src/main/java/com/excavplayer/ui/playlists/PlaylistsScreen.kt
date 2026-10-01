@@ -7,12 +7,23 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import com.excavplayer.ui.components.GlassmorphicBackButton
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.*
@@ -21,6 +32,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -42,7 +54,7 @@ fun PlaylistsScreen(
     onCreate: (String) -> Unit,
     onRename: (Long, String) -> Unit,
     onDelete: (Long) -> Unit,
-    onPlay: (Video) -> Unit = {},
+    onPlay: (Video, List<Video>) -> Unit = { _, _ -> },
     onToggleFavorite: (Video) -> Unit = {},
     onAddToPlaylist: (Long, Video) -> Unit = { _, _ -> },
     onRenameVideo: (Video, String) -> Unit = { _, _ -> },
@@ -70,203 +82,199 @@ fun PlaylistsScreen(
         val playlistItems by observePlaylistItems(playlist.id).collectAsState(initial = emptyList())
         val videos = remember(playlistItems) { playlistItems.mapNotNull { it.video } }
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp)
-        ) {
-            // Header with Back Button and Title
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(
-                    onClick = { selectedPlaylist = null },
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(CircleShape)
-                        .background(ExcavPalette.SurfaceCard)
-                        .border(1.dp, ExcavPalette.Line, CircleShape)
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
-                        tint = ExcavPalette.Text,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                Spacer(Modifier.width(12.dp))
-
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = playlist.title,
-                        color = ExcavPalette.Text,
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = "${videos.size} ${if (videos.size == 1) "video" else "videos"}",
-                        color = ExcavPalette.TextMuted,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-
-                if (videos.isNotEmpty()) {
-                    Button(
-                        onClick = { onPlay(videos.first()) },
-                        colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
-                        shape = ExcavShapes.Pill,
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PlayArrow,
-                            contentDescription = null,
-                            tint = ExcavPalette.Ink,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text("Play", color = ExcavPalette.Ink, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-
+        Box(modifier = Modifier.fillMaxSize()) {
             if (videos.isEmpty()) {
-                EmptyState(
-                    icon = Icons.Default.VideoLibrary,
-                    label = "No videos in \"${playlist.title}\""
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp, vertical = 24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    EmptyState(
+                        icon = Icons.Default.VideoLibrary,
+                        label = "No videos in \"${playlist.title}\""
+                    )
+                }
             } else {
                 LazyColumn(
-                    contentPadding = PaddingValues(bottom = 90.dp, top = 6.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 64.dp, bottom = 90.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(videos, key = { it.id }) { video ->
-                        Box {
-                            ListVideoRow(
-                                video = video,
-                                onClick = { onPlay(video) },
-                                onMoreClick = { selectedVideoForMenu = video }
-                            )
-
-                            DropdownMenu(
-                                expanded = selectedVideoForMenu?.id == video.id,
-                                onDismissRequest = { selectedVideoForMenu = null },
-                                modifier = Modifier
-                                    .background(ExcavPalette.SurfaceCard)
-                                    .border(1.dp, ExcavPalette.Line, RoundedCornerShape(12.dp))
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("Remove from Playlist", color = ExcavPalette.Error) },
-                                    onClick = {
-                                        onRemoveFromPlaylist(playlist.id, video.id)
-                                        selectedVideoForMenu = null
-                                    }
-                                )
-                                val isFav = favorites.any { it.id == video.id }
-                                DropdownMenuItem(
-                                    text = { Text(if (isFav) "Remove from Favorites" else "Add to Favorites", color = ExcavPalette.Text) },
-                                    onClick = {
-                                        onToggleFavorite(video)
-                                        selectedVideoForMenu = null
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Rename", color = ExcavPalette.Text) },
-                                    onClick = {
-                                        renameVideoTarget = video
-                                        selectedVideoForMenu = null
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Properties", color = ExcavPalette.Text) },
-                                    onClick = {
-                                        propertiesVideo = video
-                                        selectedVideoForMenu = null
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Delete", color = ExcavPalette.Error) },
-                                    onClick = {
-                                        deleteVideoTarget = video
-                                        selectedVideoForMenu = null
-                                    }
-                                )
+                        ListVideoRow(
+                            video = video,
+                            onClick = { onPlay(video, videos) },
+                            onMoreClick = { selectedVideoForMenu = video },
+                            dropdownMenu = {
+                                DropdownMenu(
+                                    expanded = selectedVideoForMenu?.id == video.id,
+                                    onDismissRequest = { selectedVideoForMenu = null },
+                                    modifier = Modifier.darkUltraThinBlur(
+                                        shape = RoundedCornerShape(14.dp),
+                                        backgroundColor = Color(0xF2101216),
+                                        strokeColor = Color.White.copy(alpha = 0.16f)
+                                    )
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Remove from Playlist", color = ExcavPalette.Error) },
+                                        leadingIcon = { Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = ExcavPalette.Error) },
+                                        onClick = {
+                                            onRemoveFromPlaylist(playlist.id, video.id)
+                                            selectedVideoForMenu = null
+                                        }
+                                    )
+                                    val isFav = favorites.any { it.id == video.id }
+                                    DropdownMenuItem(
+                                        text = { Text(if (isFav) "Remove from Favorites" else "Add to Favorites", color = ExcavPalette.Text) },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                                contentDescription = null,
+                                                tint = ExcavPalette.Text
+                                            )
+                                        },
+                                        onClick = {
+                                            onToggleFavorite(video)
+                                            selectedVideoForMenu = null
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Rename", color = ExcavPalette.Text) },
+                                        leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, tint = ExcavPalette.Text) },
+                                        onClick = {
+                                            renameVideoTarget = video
+                                            selectedVideoForMenu = null
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Properties", color = ExcavPalette.Text) },
+                                        leadingIcon = { Icon(Icons.Default.Info, contentDescription = null, tint = ExcavPalette.Text) },
+                                        onClick = {
+                                            propertiesVideo = video
+                                            selectedVideoForMenu = null
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Delete", color = ExcavPalette.Error) },
+                                        leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = ExcavPalette.Error) },
+                                        onClick = {
+                                            deleteVideoTarget = video
+                                            selectedVideoForMenu = null
+                                        }
+                                    )
+                                }
                             }
+                        )
+                    }
+                }
+            }
+
+            // Floating Header with Back Button and Title
+            ProgressiveHeaderContainer(
+                modifier = Modifier.align(Alignment.TopCenter),
+                fadeHeight = 20.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    GlassmorphicBackButton(
+                        onClick = { selectedPlaylist = null },
+                        size = 38.dp
+                    )
+
+                    Spacer(Modifier.width(12.dp))
+
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = playlist.title,
+                            color = ExcavPalette.Text,
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = "${videos.size} ${if (videos.size == 1) "video" else "videos"}",
+                            color = ExcavPalette.TextMuted,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    if (videos.isNotEmpty()) {
+                        Button(
+                            onClick = { onPlay(videos.first(), videos) },
+                            colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
+                            shape = ExcavShapes.Pill,
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                tint = ExcavPalette.Ink,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text("Play", color = ExcavPalette.Ink, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
             }
         }
     } else {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp)
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(160.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 62.dp, bottom = 90.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxSize()
         ) {
-            SectionTitle(stringResource(R.string.playlists)) {
-                Button(
-                    onClick = { isCreateDialogOpen = true },
-                    colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
-                    shape = ExcavShapes.Pill,
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = stringResource(R.string.cd_add_playlist),
-                        tint = ExcavPalette.Ink,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        text = "New",
-                        color = ExcavPalette.Ink,
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
-                    )
-                }
-            }
-
-            if (playlists.isEmpty()) {
-                EmptyState(
-                    icon = Icons.AutoMirrored.Filled.QueueMusic,
-                    label = stringResource(R.string.empty_playlists)
-                ) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                SectionTitle(stringResource(R.string.playlists)) {
                     Button(
                         onClick = { isCreateDialogOpen = true },
                         colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
-                        shape = ExcavShapes.Pill
+                        shape = ExcavShapes.Pill,
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
                     ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = stringResource(R.string.cd_add_playlist),
+                            tint = ExcavPalette.Ink,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
                         Text(
-                            text = stringResource(R.string.new_playlist),
+                            text = "New",
                             color = ExcavPalette.Ink,
-                            fontWeight = FontWeight.Bold
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
                         )
                     }
                 }
-            } else {
-                LazyColumn(
-                    contentPadding = PaddingValues(bottom = 90.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(playlists, key = { it.id }) { playlist ->
-                        Box {
-                            PlaylistRow(
-                                playlist = playlist,
-                                onOverflow = { menuForPlaylistId = playlist.id },
-                                onClick = { selectedPlaylist = playlist }
-                            )
+            }
 
+            if (playlists.isNotEmpty()) {
+                gridItems(playlists, key = { "playlist_${it.id}" }) { playlist ->
+                    val playlistItems by observePlaylistItems(playlist.id).collectAsState(initial = emptyList())
+                    val videos = remember(playlistItems) { playlistItems.mapNotNull { item -> item.video } }
+
+                    PlaylistGridCard(
+                        playlist = playlist,
+                        videos = videos,
+                        onOverflow = { menuForPlaylistId = playlist.id },
+                        onClick = { selectedPlaylist = playlist },
+                        dropdownMenu = {
                             DropdownMenu(
                                 expanded = menuForPlaylistId == playlist.id,
                                 onDismissRequest = { menuForPlaylistId = null },
-                                modifier = Modifier
-                                    .background(ExcavPalette.SurfaceCard)
-                                    .border(1.dp, ExcavPalette.Line, ExcavShapes.Card)
+                                modifier = Modifier.darkUltraThinBlur(
+                                    shape = RoundedCornerShape(14.dp),
+                                    backgroundColor = Color(0xF2101216),
+                                    strokeColor = Color.White.copy(alpha = 0.16f)
+                                )
                             ) {
                                 DropdownMenuItem(
                                     text = { Text(stringResource(R.string.rename), color = ExcavPalette.Text) },
@@ -284,7 +292,7 @@ fun PlaylistsScreen(
                                 )
                             }
                         }
-                    }
+                    )
                 }
             }
         }
@@ -359,47 +367,70 @@ private fun PlaylistNameDialog(
 ) {
     var name by rememberSaveable(initialValue) { mutableStateOf(initialValue) }
 
-    AlertDialog(
+    androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = title,
-                color = ExcavPalette.Text,
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-            )
-        },
-        text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text(stringResource(R.string.playlist_name), color = ExcavPalette.TextMuted) },
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = ExcavPalette.Blue,
-                    unfocusedBorderColor = ExcavPalette.Line,
-                    focusedTextColor = ExcavPalette.Text,
-                    unfocusedTextColor = ExcavPalette.Text
-                ),
-                modifier = Modifier.fillMaxWidth()
-            )
-        },
-        confirmButton = {
-            Button(
-                enabled = name.isNotBlank(),
-                onClick = { onConfirm(name.trim()) },
-                colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
-                shape = ExcavShapes.Pill
-            ) {
-                Text(confirmButtonLabel, color = ExcavPalette.Ink, fontWeight = FontWeight.Bold)
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.90f)
+                .wrapContentHeight()
+                .darkUltraThinBlur(
+                    shape = RoundedCornerShape(22.dp),
+                    backgroundColor = Color(0xE6101216),
+                    strokeColor = Color.White.copy(alpha = 0.18f)
+                )
+                .padding(22.dp)
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = title,
+                    color = ExcavPalette.Text,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 19.sp
+                    ),
+                    modifier = Modifier.padding(bottom = 14.dp)
+                )
+
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text(stringResource(R.string.playlist_name), color = ExcavPalette.TextMuted) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = ExcavPalette.Blue,
+                        unfocusedBorderColor = ExcavPalette.Line,
+                        focusedTextColor = ExcavPalette.Text,
+                        unfocusedTextColor = ExcavPalette.Text,
+                        focusedContainerColor = Color(0x33141822),
+                        unfocusedContainerColor = Color(0x33141822)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(Modifier.height(20.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text(stringResource(R.string.cancel), color = ExcavPalette.TextMuted, fontWeight = FontWeight.Medium)
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Button(
+                        enabled = name.isNotBlank(),
+                        onClick = { onConfirm(name.trim()) },
+                        colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
+                        shape = ExcavShapes.Pill
+                    ) {
+                        Text(confirmButtonLabel, color = ExcavPalette.Ink, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel), color = ExcavPalette.TextMuted)
-            }
-        },
-        containerColor = ExcavPalette.SurfaceCard,
-        shape = ExcavShapes.Card
-    )
+        }
+    }
 }

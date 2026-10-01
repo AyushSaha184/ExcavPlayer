@@ -1,5 +1,6 @@
 package com.excavplayer.ui.search
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,6 +22,12 @@ import com.excavplayer.ui.components.EmptyState
 import com.excavplayer.ui.components.ListVideoRow
 import com.excavplayer.ui.theme.ExcavPalette
 
+import androidx.compose.ui.graphics.Color
+import com.excavplayer.ui.components.GlassmorphicBackButton
+import com.excavplayer.ui.components.GlassmorphicItem
+import com.excavplayer.ui.components.ProgressiveHeaderBlur
+import com.excavplayer.ui.components.ProgressiveHeaderContainer
+
 @Composable
 fun SearchScreen(
     query: String,
@@ -29,74 +36,86 @@ fun SearchScreen(
     onBack: () -> Unit,
     onPlay: (Video) -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-            .padding(horizontal = 16.dp)
+    Box(
+        modifier = Modifier.fillMaxSize()
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = stringResource(R.string.cd_back),
-                    tint = ExcavPalette.Text
+        if (query.isNotBlank() && results.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp, vertical = 24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                EmptyState(
+                    icon = Icons.Default.SearchOff,
+                    label = stringResource(R.string.empty_search)
                 )
             }
-            Spacer(Modifier.width(8.dp))
-            OutlinedTextField(
-                value = query,
-                onValueChange = onQueryChange,
-                modifier = Modifier.weight(1f),
-                placeholder = { Text(stringResource(R.string.search), color = ExcavPalette.TextMuted) },
-                singleLine = true,
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = null,
-                        tint = ExcavPalette.TextMuted
-                    )
-                },
-                trailingIcon = {
-                    if (query.isNotEmpty()) {
-                        IconButton(onClick = { onQueryChange("") }) {
-                            Icon(
-                                imageVector = Icons.Default.Clear,
-                                contentDescription = null,
-                                tint = ExcavPalette.TextMuted
-                            )
-                        }
-                    }
-                },
-                shape = RoundedCornerShape(14.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = ExcavPalette.Blue,
-                    unfocusedBorderColor = ExcavPalette.Line,
-                    focusedContainerColor = ExcavPalette.SurfaceCard,
-                    unfocusedContainerColor = ExcavPalette.SurfaceCard,
-                    focusedTextColor = ExcavPalette.Text,
-                    unfocusedTextColor = ExcavPalette.Text
-                )
-            )
-        }
-
-        if (query.isNotBlank() && results.isEmpty()) {
-            EmptyState(
-                icon = Icons.Default.SearchOff,
-                label = stringResource(R.string.empty_search)
-            )
         } else {
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(top = 12.dp, bottom = 90.dp)
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 74.dp, bottom = 90.dp),
+                modifier = Modifier.fillMaxSize()
             ) {
                 items(results, key = { it.id }) { video ->
                     ListVideoRow(video = video, onClick = { onPlay(video) })
+                }
+            }
+        }
+
+        // Floating Top Glass Search Bar
+        ProgressiveHeaderContainer(
+            modifier = Modifier.align(Alignment.TopCenter),
+            fadeHeight = 20.dp
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                GlassmorphicBackButton(onClick = onBack)
+                Spacer(Modifier.width(10.dp))
+                GlassmorphicItem(
+                    modifier = Modifier.weight(1f),
+                    cornerRadius = 20,
+                    blurRadius = 15
+                ) {
+                    TextField(
+                        value = query,
+                        onValueChange = onQueryChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text(stringResource(R.string.search), color = ExcavPalette.TextMuted) },
+                        singleLine = true,
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = null,
+                                tint = ExcavPalette.TextMuted
+                            )
+                        },
+                        trailingIcon = {
+                            if (query.isNotEmpty()) {
+                                IconButton(onClick = { onQueryChange("") }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Clear,
+                                        contentDescription = null,
+                                        tint = ExcavPalette.TextMuted
+                                    )
+                                }
+                            }
+                        },
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            disabledContainerColor = Color.Transparent,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            disabledIndicatorColor = Color.Transparent,
+                            focusedTextColor = ExcavPalette.Text,
+                            unfocusedTextColor = ExcavPalette.Text
+                        )
+                    )
                 }
             }
         }

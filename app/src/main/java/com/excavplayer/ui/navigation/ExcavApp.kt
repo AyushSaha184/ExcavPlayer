@@ -20,6 +20,8 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -50,6 +52,7 @@ fun ExcavApp(
     var tab by rememberSaveable { mutableStateOf(MainTab.HOME) }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var playerOpen by rememberSaveable { mutableStateOf(false) }
+
 
     val library by vm.libraryState.collectAsState()
     val settings by vm.userSettings.collectAsState()
@@ -86,53 +89,53 @@ fun ExcavApp(
         else vm.closeFolder()
     }
 
+    val hazeState = rememberHazeState()
+
     Scaffold(
         containerColor = ExcavPalette.Ink
     ) { padding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            Column(Modifier.fillMaxSize()) {
-                if (searchOpen) {
-                    SearchScreen(
-                        query = library.searchQuery,
-                        results = library.searchResults,
-                        onQueryChange = vm::setSearchQuery,
-                        onBack = { searchOpen = false },
-                        onPlay = {
-                            vm.play(it)
-                            playerOpen = true
-                        }
-                    )
-                } else {
-                    if (tab != MainTab.SETTINGS) {
-                        BrandHeader(
-                            onSearch = { searchOpen = true },
-                            onRefresh = { vm.refreshLibrary() }
+        CompositionLocalProvider(LocalHazeState provides hazeState) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .hazeSource(state = hazeState)
+                ) {
+                    if (searchOpen) {
+                        SearchScreen(
+                            query = library.searchQuery,
+                            results = library.searchResults,
+                            onQueryChange = vm::setSearchQuery,
+                            onBack = { searchOpen = false },
+                            onPlay = {
+                                vm.play(it)
+                                playerOpen = true
+                            }
                         )
-                    }
-
-                    if (library.loading) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(24.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(
-                                color = ExcavPalette.Blue,
-                                strokeWidth = 2.5.dp
-                            )
-                        }
                     } else {
-                        AnimatedContent(
-                            targetState = tab,
-                            transitionSpec = { fadeIn() togetherWith fadeOut() },
-                            label = "tab_content"
-                        ) { currentTab ->
-                            when (currentTab) {
+                        if (library.loading) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    color = ExcavPalette.Blue,
+                                    strokeWidth = 2.5.dp
+                                )
+                            }
+                        } else {
+                            AnimatedContent(
+                                targetState = tab,
+                                transitionSpec = { fadeIn() togetherWith fadeOut() },
+                                label = "tab_content"
+                            ) { currentTab ->
+                                when (currentTab) {
                                 MainTab.HOME -> HomeScreen(
                                     continueWatching = if (settings.continueWatchingEnabled) library.continueWatching else emptyList(),
                                     folders = library.folders,
@@ -158,13 +161,14 @@ fun ExcavApp(
                                     folders = library.folders,
                                     selectedFolder = library.selectedFolder,
                                     folderVideos = library.folderVideos,
+                                    videos = library.videos,
                                     playlists = library.playlists,
                                     favorites = library.favorites,
                                     onSelectFolder = { folder ->
                                         if (folder == null) vm.closeFolder() else vm.openFolder(folder)
                                     },
                                     onPlay = {
-                                        vm.play(it)
+                                        vm.play(it, library.folderVideos)
                                         playerOpen = true
                                     },
                                     onToggleFavorite = vm::toggleFavorite,
@@ -179,8 +183,8 @@ fun ExcavApp(
                                     onCreate = vm::createPlaylist,
                                     onRename = vm::renamePlaylist,
                                     onDelete = vm::deletePlaylist,
-                                    onPlay = {
-                                        vm.play(it)
+                                    onPlay = { vid, list ->
+                                        vm.play(vid, list)
                                         playerOpen = true
                                     },
                                     onToggleFavorite = vm::toggleFavorite,
@@ -194,7 +198,7 @@ fun ExcavApp(
                                     videos = library.favorites,
                                     playlists = library.playlists,
                                     onPlay = {
-                                        vm.play(it)
+                                        vm.play(it, library.favorites)
                                         playerOpen = true
                                     },
                                     onToggleFavorite = vm::toggleFavorite,
@@ -211,6 +215,15 @@ fun ExcavApp(
                         }
                     }
                 }
+            }
+
+            // Top Floating Glass Brand Header
+            if (!searchOpen && tab != MainTab.SETTINGS) {
+                BrandHeader(
+                    onSearch = { searchOpen = true },
+                    onRefresh = { vm.refreshLibrary() },
+                    modifier = Modifier.align(Alignment.TopCenter)
+                )
             }
 
             // Sleek Floating Mini Player when audio is playing in the background
@@ -315,7 +328,7 @@ fun ExcavApp(
                 }
             }
 
-            // Pure Floating Bottom Navbar (No solid background wall bar)
+            // Pure Floating Glass Bottom Navbar
             if (!searchOpen) {
                 Box(
                     modifier = Modifier
@@ -352,4 +365,6 @@ fun ExcavApp(
         }
     }
 }
+}
+
 

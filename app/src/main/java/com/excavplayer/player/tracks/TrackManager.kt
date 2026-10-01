@@ -21,7 +21,7 @@ class TrackManager {
                 val mediaTrackGroup = group.mediaTrackGroup
                 for (i in 0 until mediaTrackGroup.length) {
                     val format = mediaTrackGroup.getFormat(i)
-                    val id = format.id ?: "audio_${group.hashCode()}_$i"
+                    val id = format.id ?: "audio_${mediaTrackGroup.id}_$i"
                     val label = buildAudioLabel(format, i)
                     val isSelected = group.isTrackSelected(i)
                     audioTracks.add(
@@ -49,7 +49,7 @@ class TrackManager {
                 val mediaTrackGroup = group.mediaTrackGroup
                 for (i in 0 until mediaTrackGroup.length) {
                     val format = mediaTrackGroup.getFormat(i)
-                    val id = format.id ?: "video_${group.hashCode()}_$i"
+                    val id = format.id ?: "video_${mediaTrackGroup.id}_$i"
                     val isSelected = group.isTrackSelected(i)
                     videoTracks.add(
                         VideoTrack(
@@ -76,7 +76,7 @@ class TrackManager {
                 val mediaTrackGroup = group.mediaTrackGroup
                 for (i in 0 until mediaTrackGroup.length) {
                     val format = mediaTrackGroup.getFormat(i)
-                    val id = format.id ?: "sub_${group.hashCode()}_$i"
+                    val id = format.id ?: "sub_${mediaTrackGroup.id}_$i"
                     val label = buildSubtitleLabel(format, i)
                     val isSelected = group.isTrackSelected(i)
                     subtitleTracks.add(
@@ -125,10 +125,10 @@ class TrackManager {
                 for (i in 0 until mediaTrackGroup.length) {
                     val format = mediaTrackGroup.getFormat(i)
                     val id = format.id ?: when (trackType) {
-                        C.TRACK_TYPE_AUDIO -> "audio_${group.hashCode()}_$i"
-                        C.TRACK_TYPE_VIDEO -> "video_${group.hashCode()}_$i"
-                        C.TRACK_TYPE_TEXT -> "sub_${group.hashCode()}_$i"
-                        else -> "track_${group.hashCode()}_$i"
+                        C.TRACK_TYPE_AUDIO -> "audio_${mediaTrackGroup.id}_$i"
+                        C.TRACK_TYPE_VIDEO -> "video_${mediaTrackGroup.id}_$i"
+                        C.TRACK_TYPE_TEXT -> "sub_${mediaTrackGroup.id}_$i"
+                        else -> "track_${mediaTrackGroup.id}_$i"
                     }
                     if (id == targetTrackId) {
                         builder.setOverrideForType(TrackSelectionOverride(mediaTrackGroup, i))

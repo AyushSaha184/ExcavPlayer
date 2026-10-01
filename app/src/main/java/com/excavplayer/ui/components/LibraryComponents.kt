@@ -35,18 +35,31 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.toBitmap
 import com.excavplayer.R
 import com.excavplayer.domain.model.Folder
 import com.excavplayer.domain.model.Playlist
@@ -55,145 +68,150 @@ import com.excavplayer.media.thumbnail.ThumbnailLoader
 import com.excavplayer.ui.UserMessage
 import com.excavplayer.ui.theme.*
 import dagger.hilt.android.EntryPointAccessors
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.materials.CupertinoMaterials
+import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 
 @Composable
-fun BrandHeader(onSearch: () -> Unit, onRefresh: (() -> Unit)? = null) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 18.dp, end = 18.dp, top = 6.dp, bottom = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
+fun BrandHeader(
+    onSearch: () -> Unit,
+    onRefresh: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+    hazeState: HazeState = LocalHazeState.current
+) {
+    val context = LocalContext.current
+    val iconBitmap = remember(context) {
+        try {
+            ContextCompat.getDrawable(context, R.mipmap.ic_launcher)?.toBitmap(
+                width = 96,
+                height = 96,
+                config = Bitmap.Config.ARGB_8888
+            )?.asImageBitmap()
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    ProgressiveHeaderContainer(
+        modifier = modifier,
+        hazeState = hazeState,
+        fadeHeight = 24.dp
     ) {
-        Box(
+        Row(
             modifier = Modifier
-                .size(38.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(ExcavPalette.Blue, ExcavPalette.BlueDeep)
-                    )
+                .fillMaxWidth()
+                .padding(start = 18.dp, end = 18.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (iconBitmap != null) {
+                Image(
+                    bitmap = iconBitmap,
+                    contentDescription = stringResource(R.string.cd_logo),
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(12.dp))
                 )
-                .border(1.dp, ExcavPalette.BlueGlow, RoundedCornerShape(12.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.PlayArrow,
-                contentDescription = stringResource(R.string.cd_logo),
-                tint = ExcavPalette.Ink,
-                modifier = Modifier.size(22.dp)
-            )
-        }
-        Spacer(Modifier.width(12.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = "Excav",
-                color = ExcavPalette.Text,
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-            )
-            Text(
-                text = "Player",
-                color = ExcavPalette.Blue,
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-            )
-        }
-        Spacer(Modifier.weight(1f))
-        // Search button first, then Refresh button with gap and translucent background
-        IconButton(
-            onClick = onSearch,
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(Color(0xDD181B22))
-                .border(1.dp, ExcavPalette.Line.copy(alpha = 0.5f), CircleShape)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Search,
-                contentDescription = stringResource(R.string.cd_search),
-                tint = ExcavPalette.Text,
-                modifier = Modifier.size(20.dp)
-            )
-        }
-        if (onRefresh != null) {
-            Spacer(Modifier.width(10.dp))
-            IconButton(
-                onClick = onRefresh,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xDD181B22))
-                    .border(1.dp, ExcavPalette.Line.copy(alpha = 0.5f), CircleShape)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Refresh,
-                    contentDescription = stringResource(R.string.refresh),
-                    tint = ExcavPalette.Text,
-                    modifier = Modifier.size(20.dp)
+            } else {
+                Image(
+                    painter = painterResource(id = R.mipmap.ic_launcher_foreground),
+                    contentDescription = stringResource(R.string.cd_logo),
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(12.dp))
                 )
             }
+            Spacer(Modifier.width(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Excav",
+                    color = ExcavPalette.Text,
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                )
+                Text(
+                    text = "Player",
+                    color = ExcavPalette.TextMuted,
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            GlassmorphicHeaderActions(
+                onSearch = onSearch,
+                onRefresh = onRefresh,
+                hazeState = hazeState
+            )
         }
     }
 }
 
 @Composable
-fun BottomNav(selected: MainTab, onSelect: (MainTab) -> Unit) {
+fun BottomNav(
+    selected: MainTab,
+    onSelect: (MainTab) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val glassShape = RoundedCornerShape(32.dp)
+
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = 20.dp, vertical = 10.dp)
     ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(ExcavShapes.Pill)
-                .border(1.dp, ExcavPalette.Line.copy(alpha = 0.5f), ExcavShapes.Pill),
-            color = Color(0xDD181B22),
-            shadowElevation = 12.dp
+        GlassmorphicItem(
+            modifier = Modifier.fillMaxWidth(),
+            cornerRadius = 32,
+            blurRadius = 15
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                    .padding(horizontal = 6.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.SpaceAround,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 MainTab.entries.forEach { tab ->
                     val isSelected = selected == tab
-                    val interactionSource = remember { MutableInteractionSource() }
-                    Box(
+                    val pillShape = RoundedCornerShape(22.dp)
+
+                    Column(
                         modifier = Modifier
                             .weight(1f)
-                            .clip(ExcavShapes.Pill)
-                            .background(if (isSelected) ExcavPalette.Blue.copy(alpha = 0.16f) else Color.Transparent)
+                            .padding(horizontal = 2.dp)
+                            .clip(pillShape)
+                            .background(
+                                if (isSelected) Color.White.copy(alpha = 0.18f) else Color.Transparent
+                            )
+                            .border(
+                                width = 0.5.dp,
+                                color = if (isSelected) Color.White.copy(alpha = 0.30f) else Color.Transparent,
+                                shape = pillShape
+                            )
                             .clickable(
-                                interactionSource = interactionSource,
+                                interactionSource = remember { MutableInteractionSource() },
                                 indication = null
                             ) { onSelect(tab) }
-                            .padding(vertical = 8.dp),
-                        contentAlignment = Alignment.Center
+                            .padding(vertical = 7.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                imageVector = tab.icon,
-                                contentDescription = tab.label,
-                                tint = if (isSelected) ExcavPalette.Blue else ExcavPalette.TextSecondary,
-                                modifier = Modifier.size(22.dp)
-                            )
-                            Spacer(Modifier.height(3.dp))
-                            Text(
-                                text = tab.label,
-                                color = if (isSelected) ExcavPalette.Blue else ExcavPalette.TextSecondary,
-                                style = MaterialTheme.typography.labelMedium.copy(
-                                    fontSize = 10.sp,
-                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium
-                                ),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
+                        Icon(
+                            imageVector = tab.icon,
+                            contentDescription = tab.label,
+                            tint = if (isSelected) Color.White else Color.White.copy(alpha = 0.65f),
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(Modifier.height(3.dp))
+                        Text(
+                            text = tab.label,
+                            color = if (isSelected) Color.White else Color.White.copy(alpha = 0.65f),
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontSize = 10.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                            ),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
             }
@@ -205,7 +223,7 @@ enum class MainTab(val label: String, val icon: ImageVector) {
     HOME("Home", Icons.Default.Home),
     FOLDERS("Folders", Icons.Default.Folder),
     PLAYLISTS("Playlists", Icons.AutoMirrored.Filled.QueueMusic),
-    FAVORITES("Favorites", Icons.Default.FavoriteBorder),
+    FAVORITES("Favorites", Icons.Default.Favorite),
     SETTINGS("Settings", Icons.Default.Settings)
 }
 
@@ -268,7 +286,8 @@ fun EmptyState(icon: ImageVector, label: String, action: (@Composable () -> Unit
 fun VideoCard(
     video: Video,
     onClick: () -> Unit,
-    onMoreClick: (() -> Unit)? = null
+    onMoreClick: (() -> Unit)? = null,
+    dropdownMenu: (@Composable () -> Unit)? = null
 ) {
     val resLabel = formatResolution(video.width, video.height)
 
@@ -352,17 +371,20 @@ fun VideoCard(
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp)
                     )
                 }
-                if (onMoreClick != null) {
-                    IconButton(
-                        onClick = onMoreClick,
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.MoreVert,
-                            contentDescription = stringResource(R.string.cd_more),
-                            tint = ExcavPalette.TextMuted,
-                            modifier = Modifier.size(18.dp)
-                        )
+                if (onMoreClick != null || dropdownMenu != null) {
+                    Box {
+                        IconButton(
+                            onClick = { onMoreClick?.invoke() },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = stringResource(R.string.cd_more),
+                                tint = ExcavPalette.TextMuted,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        dropdownMenu?.invoke()
                     }
                 }
             }
@@ -374,7 +396,8 @@ fun VideoCard(
 fun PosterCard(
     video: Video,
     onClick: () -> Unit,
-    onMoreClick: (() -> Unit)? = null
+    onMoreClick: (() -> Unit)? = null,
+    dropdownMenu: (@Composable () -> Unit)? = null
 ) {
     val resLabel = formatResolution(video.width, video.height)
 
@@ -440,17 +463,20 @@ fun PosterCard(
                         style = MaterialTheme.typography.bodyMedium.copy(fontSize = 11.sp)
                     )
                 }
-                if (onMoreClick != null) {
-                    IconButton(
-                        onClick = onMoreClick,
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.MoreVert,
-                            contentDescription = stringResource(R.string.cd_more),
-                            tint = ExcavPalette.TextMuted,
-                            modifier = Modifier.size(16.dp)
-                        )
+                if (onMoreClick != null || dropdownMenu != null) {
+                    Box {
+                        IconButton(
+                            onClick = { onMoreClick?.invoke() },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = stringResource(R.string.cd_more),
+                                tint = ExcavPalette.TextMuted,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        dropdownMenu?.invoke()
                     }
                 }
             }
@@ -492,85 +518,102 @@ fun GroupThumbnail(videos: List<Video>, modifier: Modifier = Modifier) {
     }
 }
 
+@OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
 fun GroupCard(
     groupName: String,
     videos: List<Video>,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    hazeState: HazeState = LocalHazeState.current
 ) {
     val totalSize = videos.sumOf { it.sizeBytes }
     val totalCount = videos.size
+    val cardShape = RoundedCornerShape(28.dp)
 
     Surface(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .clip(ExcavShapes.Card)
-            .border(1.dp, ExcavPalette.Line, ExcavShapes.Card)
+            .clip(cardShape)
+            .border(1.dp, Color(0xFF343B45), cardShape)
             .clickable(onClick = onClick),
-        color = ExcavPalette.SurfaceCard
+        color = Color(0xFF191D23)
     ) {
-        Column {
+        Column(
+            modifier = Modifier.fillMaxWidth()
+        ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(16f / 9f)
+                    .padding(bottom = 12.dp)
             ) {
-                GroupThumbnail(videos, Modifier.fillMaxSize())
-
-                // Count Badge
-                Text(
-                    text = "$totalCount ${if (totalCount == 1) "Video" else "Videos"}",
-                    color = ExcavPalette.Text,
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold),
+                GroupThumbnail(
+                    videos = videos,
                     modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(6.dp)
-                        .background(ExcavPalette.Ink.copy(alpha = 0.88f), RoundedCornerShape(6.dp))
-                        .border(0.5.dp, ExcavPalette.Line, RoundedCornerShape(6.dp))
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                        .fillMaxWidth()
+                        .aspectRatio(1.38f)
+                        .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 16.dp, bottomEnd = 16.dp))
                 )
-            }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
+
+                // Overlapping Folder Pill Badge (CircleShape / True Pill, Haze Blur, No Border)
+                Row(
                     modifier = Modifier
-                        .size(34.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(ExcavPalette.Yellow.copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center
+                        .align(Alignment.BottomStart)
+                        .padding(start = 12.dp)
+                        .offset(y = 12.dp)
+                        .clip(CircleShape)
+                        .hazeEffect(
+                            state = hazeState,
+                            style = CupertinoMaterials.ultraThin(containerColor = Color(0x991E2430))
+                        )
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
                         imageVector = Icons.Default.Folder,
                         contentDescription = null,
-                        tint = ExcavPalette.Yellow,
-                        modifier = Modifier.size(18.dp)
+                        tint = Color(0xFFFFC44D),
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(Modifier.width(5.dp))
+                    Text(
+                        text = "$totalCount ${if (totalCount == 1) "Video" else "Videos"}",
+                        color = Color(0xFFF5F7FA),
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     )
                 }
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = groupName,
-                        color = ExcavPalette.Text,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            }
+
+            // Centered Title and Size
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = groupName,
+                    color = Color(0xFFF5F7FA),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
                     )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = formatFileSize(totalSize),
-                        color = ExcavPalette.TextMuted,
-                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp)
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = formatFileSize(totalSize),
+                    color = Color(0xFF9AA3B2),
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Normal
                     )
-                }
-                Icon(
-                    imageVector = Icons.Default.ChevronRight,
-                    contentDescription = null,
-                    tint = ExcavPalette.TextMuted,
-                    modifier = Modifier.size(18.dp)
                 )
             }
         }
@@ -581,7 +624,8 @@ fun GroupCard(
 fun ContinueWatchingRowCard(
     video: Video,
     onClick: () -> Unit,
-    onMoreClick: () -> Unit
+    onMoreClick: (() -> Unit)? = null,
+    dropdownMenu: (@Composable () -> Unit)? = null
 ) {
     val progress = ((video.resumePositionMs ?: 0L).toFloat() / video.durationMs.coerceAtLeast(1L)).coerceIn(0f, 1f)
     val watched = video.resumePositionMs ?: 0L
@@ -668,16 +712,21 @@ fun ContinueWatchingRowCard(
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp)
                     )
                 }
-                IconButton(
-                    onClick = onMoreClick,
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = stringResource(R.string.cd_more),
-                        tint = ExcavPalette.TextMuted,
-                        modifier = Modifier.size(16.dp)
-                    )
+                if (onMoreClick != null || dropdownMenu != null) {
+                    Box {
+                        IconButton(
+                            onClick = { onMoreClick?.invoke() },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = stringResource(R.string.cd_more),
+                                tint = ExcavPalette.TextMuted,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        dropdownMenu?.invoke()
+                    }
                 }
             }
         }
@@ -773,18 +822,17 @@ fun FolderRow(folder: Folder, onClick: () -> Unit) {
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
-            Icon(
-                imageVector = Icons.Default.ChevronRight,
-                contentDescription = stringResource(R.string.cd_open),
-                tint = ExcavPalette.TextMuted,
-                modifier = Modifier.size(20.dp)
-            )
         }
     }
 }
 
 @Composable
-fun PlaylistRow(playlist: Playlist, onOverflow: () -> Unit, onClick: () -> Unit) {
+fun PlaylistRow(
+    playlist: Playlist,
+    onOverflow: () -> Unit,
+    onClick: () -> Unit,
+    dropdownMenu: (@Composable () -> Unit)? = null
+) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -801,14 +849,14 @@ fun PlaylistRow(playlist: Playlist, onOverflow: () -> Unit, onClick: () -> Unit)
                 modifier = Modifier
                     .size(52.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(ExcavPalette.Blue.copy(alpha = 0.12f))
-                    .border(1.dp, ExcavPalette.Blue.copy(alpha = 0.25f), RoundedCornerShape(12.dp)),
+                    .background(Color(0xFFFFC44D).copy(alpha = 0.12f))
+                    .border(1.dp, Color(0xFFFFC44D).copy(alpha = 0.25f), RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Filled.QueueMusic,
+                    imageVector = Icons.Default.Folder,
                     contentDescription = stringResource(R.string.cd_playlist),
-                    tint = ExcavPalette.Blue,
+                    tint = Color(0xFFFFC44D),
                     modifier = Modifier.size(26.dp)
                 )
             }
@@ -828,22 +876,275 @@ fun PlaylistRow(playlist: Playlist, onOverflow: () -> Unit, onClick: () -> Unit)
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
-            IconButton(onClick = onOverflow) {
-                Icon(
-                    imageVector = Icons.Default.MoreVert,
-                    contentDescription = stringResource(R.string.cd_more),
-                    tint = ExcavPalette.TextMuted
+            Box {
+                IconButton(onClick = onOverflow) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = stringResource(R.string.cd_more),
+                        tint = ExcavPalette.TextMuted
+                    )
+                }
+                dropdownMenu?.invoke()
+            }
+        }
+    }
+}
+@OptIn(ExperimentalHazeMaterialsApi::class)
+@Composable
+fun FolderGridCard(
+    folder: Folder,
+    videos: List<Video> = emptyList(),
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    hazeState: HazeState = LocalHazeState.current
+) {
+    val totalSize = if (folder.totalSizeBytes > 0) folder.totalSizeBytes else videos.sumOf { it.sizeBytes }
+    val totalCount = if (folder.videoCount > 0) folder.videoCount else videos.size
+    val cardShape = RoundedCornerShape(28.dp)
+
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(cardShape)
+            .border(1.dp, Color(0xFF343B45), cardShape)
+            .clickable(onClick = onClick),
+        color = Color(0xFF191D23)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp)
+            ) {
+                GroupThumbnail(
+                    videos = videos,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1.38f)
+                        .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 16.dp, bottomEnd = 16.dp))
+                )
+
+                // Overlapping Folder Pill Badge (CircleShape / True Pill, Haze Blur, No Border)
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(start = 12.dp)
+                        .offset(y = 12.dp)
+                        .clip(CircleShape)
+                        .hazeEffect(
+                            state = hazeState,
+                            style = CupertinoMaterials.ultraThin(containerColor = Color(0x991E2430))
+                        )
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Folder,
+                        contentDescription = null,
+                        tint = Color(0xFFFFC44D),
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(Modifier.width(5.dp))
+                    Text(
+                        text = "$totalCount ${if (totalCount == 1) "Video" else "Videos"}",
+                        color = Color(0xFFF5F7FA),
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    )
+                }
+            }
+
+            // Centered Title and Size
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = folder.name,
+                    color = Color(0xFFF5F7FA),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = if (totalSize > 0) formatFileSize(totalSize) else "$totalCount ${if (totalCount == 1) "video" else "videos"}",
+                    color = Color(0xFF9AA3B2),
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Normal
+                    )
                 )
             }
         }
     }
 }
 
+@OptIn(ExperimentalHazeMaterialsApi::class)
+@Composable
+fun PlaylistGridCard(
+    playlist: Playlist,
+    videos: List<Video> = emptyList(),
+    onOverflow: () -> Unit,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    hazeState: HazeState = LocalHazeState.current,
+    dropdownMenu: (@Composable () -> Unit)? = null
+) {
+    val totalCount = playlist.itemCount
+    val cardShape = RoundedCornerShape(28.dp)
+
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(cardShape)
+            .border(1.dp, Color(0xFF343B45), cardShape)
+            .clickable(onClick = onClick),
+        color = Color(0xFF191D23)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp)
+            ) {
+                if (videos.isNotEmpty()) {
+                    GroupThumbnail(
+                        videos = videos,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(1.38f)
+                            .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 16.dp, bottomEnd = 16.dp))
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(1.38f)
+                            .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 16.dp, bottomEnd = 16.dp))
+                            .background(Color(0xFF232834)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Folder,
+                            contentDescription = null,
+                            tint = Color(0xFFFFC44D).copy(alpha = 0.8f),
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
+                }
+
+                // Overlapping Playlist Pill Badge (CircleShape / True Pill, Haze Blur, No Border)
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(start = 12.dp)
+                        .offset(y = 12.dp)
+                        .clip(CircleShape)
+                        .hazeEffect(
+                            state = hazeState,
+                            style = CupertinoMaterials.ultraThin(containerColor = Color(0x991E2430))
+                        )
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Folder,
+                        contentDescription = null,
+                        tint = Color(0xFFFFC44D),
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(Modifier.width(5.dp))
+                    Text(
+                        text = "$totalCount ${if (totalCount == 1) "Video" else "Videos"}",
+                        color = Color(0xFFF5F7FA),
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    )
+                }
+
+                // Three-dot Overflow Button on Bottom-Right (Overlapping Edge, CircleShape, Haze Blur, No Border)
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 12.dp)
+                        .offset(y = 12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .hazeEffect(
+                                state = hazeState,
+                                style = CupertinoMaterials.ultraThin(containerColor = Color(0x991E2430))
+                            )
+                            .clickable(onClick = onOverflow),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = stringResource(R.string.cd_more),
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    dropdownMenu?.invoke()
+                }
+            }
+
+            // Centered Title and Video Count Subtitle
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = playlist.title,
+                    color = Color(0xFFF5F7FA),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = "$totalCount ${if (totalCount == 1) "video" else "videos"}",
+                    color = Color(0xFF9AA3B2),
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Normal
+                    )
+                )
+            }
+        }
+    }
+}
 @Composable
 fun ListVideoRow(
     video: Video,
     onClick: () -> Unit,
-    onMoreClick: (() -> Unit)? = null
+    onMoreClick: (() -> Unit)? = null,
+    dropdownMenu: (@Composable () -> Unit)? = null
 ) {
     val resLabel = formatResolution(video.width, video.height)
     val sizeStr = formatFileSize(video.sizeBytes)
@@ -946,14 +1247,17 @@ fun ListVideoRow(
                 }
             }
 
-            if (onMoreClick != null) {
-                IconButton(onClick = onMoreClick) {
-                    Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = stringResource(R.string.cd_more),
-                        tint = ExcavPalette.TextMuted,
-                        modifier = Modifier.size(20.dp)
-                    )
+            if (onMoreClick != null || dropdownMenu != null) {
+                Box {
+                    IconButton(onClick = { onMoreClick?.invoke() }) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = stringResource(R.string.cd_more),
+                            tint = ExcavPalette.TextMuted,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    dropdownMenu?.invoke()
                 }
             }
         }
@@ -964,7 +1268,8 @@ fun ListVideoRow(
 fun BreadcrumbBar(
     currentPath: String,
     onNavigateToPath: (String) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val normCurrent = remember(currentPath) {
         val trimmed = currentPath.trim().trimEnd('/')
@@ -1019,63 +1324,57 @@ fun BreadcrumbBar(
 
     val canGoBack = parts.size > 1
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
+    ProgressiveHeaderContainer(
+        modifier = modifier,
+        fadeHeight = 20.dp
     ) {
-        IconButton(
-            onClick = onBack,
-            enabled = canGoBack,
-            modifier = Modifier
-                .size(36.dp)
-                .clip(CircleShape)
-                .background(ExcavPalette.SurfaceCard)
-                .border(1.dp, if (canGoBack) ExcavPalette.Line else ExcavPalette.Line.copy(alpha = 0.3f), CircleShape)
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Back",
-                tint = if (canGoBack) ExcavPalette.Text else ExcavPalette.TextMuted.copy(alpha = 0.4f),
-                modifier = Modifier.size(18.dp)
-            )
-        }
-
-        Spacer(Modifier.width(10.dp))
-
         Row(
             modifier = Modifier
-                .weight(1f)
-                .horizontalScroll(rememberScrollState()),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            parts.forEachIndexed { idx, part ->
-                val isLast = idx == parts.size - 1
-                Surface(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable(enabled = !isLast) { onNavigateToPath(part.second) },
-                    color = if (isLast) ExcavPalette.Blue.copy(alpha = 0.18f) else Color.Transparent
-                ) {
-                    Text(
-                        text = part.first,
-                        color = if (isLast) ExcavPalette.Blue else ExcavPalette.TextSecondary,
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontWeight = if (isLast) FontWeight.Bold else FontWeight.Medium,
-                            fontSize = 13.sp
-                        ),
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                }
-                if (!isLast) {
-                    Icon(
-                        imageVector = Icons.Default.ChevronRight,
-                        contentDescription = null,
-                        tint = ExcavPalette.TextMuted,
-                        modifier = Modifier.size(14.dp)
-                    )
+            GlassmorphicBackButton(
+                onClick = onBack,
+                enabled = canGoBack,
+                size = 36.dp
+            )
+
+            Spacer(Modifier.width(10.dp))
+
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                parts.forEachIndexed { idx, part ->
+                    val isLast = idx == parts.size - 1
+                    Surface(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(enabled = !isLast) { onNavigateToPath(part.second) },
+                        color = if (isLast) ExcavPalette.Blue.copy(alpha = 0.18f) else Color.Transparent
+                    ) {
+                        Text(
+                            text = part.first,
+                            color = if (isLast) ExcavPalette.Blue else ExcavPalette.TextSecondary,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = if (isLast) FontWeight.Bold else FontWeight.Medium,
+                                fontSize = 13.sp
+                            ),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                    if (!isLast) {
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = null,
+                            tint = ExcavPalette.TextMuted,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
                 }
             }
         }
@@ -1098,9 +1397,12 @@ fun VideoOptionsMenu(
     DropdownMenu(
         expanded = expanded,
         onDismissRequest = onDismiss,
-        modifier = Modifier
-            .background(ExcavPalette.SurfaceCard)
-            .border(1.dp, ExcavPalette.Line, RoundedCornerShape(12.dp))
+        offset = DpOffset(x = 0.dp, y = 0.dp),
+        modifier = Modifier.darkUltraThinBlur(
+            shape = RoundedCornerShape(14.dp),
+            backgroundColor = Color(0xF2101216),
+            strokeColor = Color.White.copy(alpha = 0.16f)
+        )
     ) {
         if (onRemoveFromContinueWatching != null) {
             DropdownMenuItem(
@@ -1125,7 +1427,7 @@ fun VideoOptionsMenu(
                 Icon(
                     imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                     contentDescription = null,
-                    tint = if (isFavorite) ExcavPalette.Pink else ExcavPalette.Text
+                    tint = ExcavPalette.Text
                 )
             },
             onClick = {
@@ -1135,7 +1437,7 @@ fun VideoOptionsMenu(
         )
         DropdownMenuItem(
             text = { Text("Add to Playlist", color = ExcavPalette.Text) },
-            leadingIcon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, null, tint = ExcavPalette.Blue) },
+            leadingIcon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, null, tint = ExcavPalette.Text) },
             onClick = {
                 onAddToPlaylist()
                 onDismiss()
@@ -1171,47 +1473,68 @@ fun VideoOptionsMenu(
 
 @Composable
 fun VideoPropertiesDialog(video: Video, onDismiss: () -> Unit) {
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = "File Properties",
-                color = ExcavPalette.Text,
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-            )
-        },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                PropertyItem(label = "Title", value = video.displayName)
-                PropertyItem(label = "Resolution", value = formatResolution(video.width, video.height) ?: "Standard")
-                PropertyItem(label = "Duration", value = video.formattedDuration)
-                PropertyItem(label = "File Size", value = formatFileSize(video.sizeBytes))
-                PropertyItem(label = "Format", value = video.fileFormat)
-                if (video.folderName.isNotBlank()) {
-                    PropertyItem(label = "Folder", value = video.folderName)
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.90f)
+                .wrapContentHeight()
+                .darkUltraThinBlur(
+                    shape = RoundedCornerShape(22.dp),
+                    backgroundColor = Color(0xE6101216),
+                    strokeColor = Color.White.copy(alpha = 0.18f)
+                )
+                .padding(22.dp)
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "File Properties",
+                    color = ExcavPalette.Text,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 19.sp
+                    ),
+                    modifier = Modifier.padding(bottom = 14.dp)
+                )
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    PropertyItem(label = "Title", value = video.displayName)
+                    PropertyItem(label = "Resolution", value = formatResolution(video.width, video.height) ?: "Standard")
+                    PropertyItem(label = "Duration", value = video.formattedDuration)
+                    PropertyItem(label = "File Size", value = formatFileSize(video.sizeBytes))
+                    PropertyItem(label = "Format", value = video.fileFormat)
+                    if (video.folderName.isNotBlank()) {
+                        PropertyItem(label = "Folder", value = video.folderName)
+                    }
+                    if (video.relativePath.isNotBlank()) {
+                        PropertyItem(label = "Location", value = video.relativePath)
+                    }
                 }
-                if (video.relativePath.isNotBlank()) {
-                    PropertyItem(label = "Location", value = video.relativePath)
+
+                Spacer(Modifier.height(18.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Button(
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
+                        shape = ExcavShapes.Pill
+                    ) {
+                        Text("Close", color = ExcavPalette.Ink, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
-        },
-        confirmButton = {
-            Button(
-                onClick = onDismiss,
-                colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
-                shape = ExcavShapes.Pill
-            ) {
-                Text("Close", color = ExcavPalette.Ink, fontWeight = FontWeight.Bold)
-            }
-        },
-        containerColor = ExcavPalette.SurfaceCard,
-        shape = ExcavShapes.Card
-    )
+        }
+    }
 }
 
 @Composable
@@ -1239,52 +1562,75 @@ fun RenameVideoDialog(
 ) {
     var name by remember(video.displayName) { mutableStateOf(video.displayName) }
 
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = "Rename Video",
-                color = ExcavPalette.Text,
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-            )
-        },
-        text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text("Video Name", color = ExcavPalette.TextMuted) },
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = ExcavPalette.Blue,
-                    unfocusedBorderColor = ExcavPalette.Line,
-                    focusedTextColor = ExcavPalette.Text,
-                    unfocusedTextColor = ExcavPalette.Text
-                ),
-                modifier = Modifier.fillMaxWidth()
-            )
-        },
-        confirmButton = {
-            Button(
-                enabled = name.isNotBlank() && name.trim() != video.displayName,
-                onClick = {
-                    onRename(name.trim())
-                    onDismiss()
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
-                shape = ExcavShapes.Pill
-            ) {
-                Text(stringResource(R.string.rename), color = ExcavPalette.Ink, fontWeight = FontWeight.Bold)
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.90f)
+                .wrapContentHeight()
+                .darkUltraThinBlur(
+                    shape = RoundedCornerShape(22.dp),
+                    backgroundColor = Color(0xE6101216),
+                    strokeColor = Color.White.copy(alpha = 0.18f)
+                )
+                .padding(22.dp)
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Rename Video",
+                    color = ExcavPalette.Text,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 19.sp
+                    ),
+                    modifier = Modifier.padding(bottom = 14.dp)
+                )
+
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Video Name", color = ExcavPalette.TextMuted) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = ExcavPalette.Blue,
+                        unfocusedBorderColor = ExcavPalette.Line,
+                        focusedTextColor = ExcavPalette.Text,
+                        unfocusedTextColor = ExcavPalette.Text,
+                        focusedContainerColor = Color(0x33141822),
+                        unfocusedContainerColor = Color(0x33141822)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(Modifier.height(20.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text(stringResource(R.string.cancel), color = ExcavPalette.TextMuted, fontWeight = FontWeight.Medium)
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Button(
+                        enabled = name.isNotBlank() && name.trim() != video.displayName,
+                        onClick = {
+                            onRename(name.trim())
+                            onDismiss()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
+                        shape = ExcavShapes.Pill
+                    ) {
+                        Text(stringResource(R.string.rename), color = ExcavPalette.Ink, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel), color = ExcavPalette.TextMuted)
-            }
-        },
-        containerColor = ExcavPalette.SurfaceCard,
-        shape = ExcavShapes.Card
-    )
+        }
+    }
 }
 
 @Composable
@@ -1293,45 +1639,82 @@ fun DeleteConfirmDialog(
     onDelete: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        icon = {
-            Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = ExcavPalette.Error, modifier = Modifier.size(32.dp))
-        },
-        title = {
-            Text(
-                text = "Delete Video?",
-                color = ExcavPalette.Text,
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-            )
-        },
-        text = {
-            Text(
-                text = "Are you sure you want to delete \"${video.displayName}\"? This file will be removed from your library.",
-                color = ExcavPalette.TextSecondary,
-                style = MaterialTheme.typography.bodyMedium
-            )
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    onDelete()
-                    onDismiss()
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Error),
-                shape = ExcavShapes.Pill
-            ) {
-                Text(stringResource(R.string.delete), color = Color.White, fontWeight = FontWeight.Bold)
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.90f)
+                .wrapContentHeight()
+                .darkUltraThinBlur(
+                    shape = RoundedCornerShape(22.dp),
+                    backgroundColor = Color(0xE6101216),
+                    strokeColor = Color.White.copy(alpha = 0.18f)
+                )
+                .padding(22.dp)
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(ExcavPalette.Error.copy(alpha = 0.15f))
+                            .border(1.dp, ExcavPalette.Error.copy(alpha = 0.35f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DeleteOutline,
+                            contentDescription = null,
+                            tint = ExcavPalette.Error,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        text = "Delete Video?",
+                        color = ExcavPalette.Text,
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 19.sp
+                        )
+                    )
+                }
+
+                Spacer(Modifier.height(14.dp))
+
+                Text(
+                    text = "Are you sure you want to delete \"${video.displayName}\"? This file will be removed from your library.",
+                    color = ExcavPalette.TextSecondary,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp, lineHeight = 20.sp)
+                )
+
+                Spacer(Modifier.height(20.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text(stringResource(R.string.cancel), color = ExcavPalette.TextMuted, fontWeight = FontWeight.Medium)
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Button(
+                        onClick = {
+                            onDelete()
+                            onDismiss()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Error),
+                        shape = ExcavShapes.Pill
+                    ) {
+                        Text(stringResource(R.string.delete), color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel), color = ExcavPalette.TextMuted)
-            }
-        },
-        containerColor = ExcavPalette.SurfaceCard,
-        shape = ExcavShapes.Card
-    )
+        }
+    }
 }
 
 @Composable
@@ -1345,125 +1728,151 @@ fun AddToPlaylistDialog(
     var isCreatingNew by remember { mutableStateOf(false) }
     var newPlaylistName by remember { mutableStateOf("") }
 
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = if (isCreatingNew) "Create & Add" else "Add to Playlist",
-                color = ExcavPalette.Text,
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-            )
-        },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 360.dp)
-            ) {
-                if (isCreatingNew) {
-                    OutlinedTextField(
-                        value = newPlaylistName,
-                        onValueChange = { newPlaylistName = it },
-                        label = { Text("Playlist Name", color = ExcavPalette.TextMuted) },
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = ExcavPalette.Blue,
-                            unfocusedBorderColor = ExcavPalette.Line,
-                            focusedTextColor = ExcavPalette.Text,
-                            unfocusedTextColor = ExcavPalette.Text
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                } else {
-                    if (playlists.isEmpty()) {
-                        Text(
-                            text = "No playlists found. Create a new playlist below.",
-                            color = ExcavPalette.TextSecondary,
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(vertical = 12.dp)
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.90f)
+                .wrapContentHeight()
+                .darkUltraThinBlur(
+                    shape = RoundedCornerShape(22.dp),
+                    backgroundColor = Color(0xE6101216),
+                    strokeColor = Color.White.copy(alpha = 0.18f)
+                )
+                .padding(22.dp)
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = if (isCreatingNew) "Create & Add" else "Add to Playlist",
+                    color = ExcavPalette.Text,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 19.sp
+                    ),
+                    modifier = Modifier.padding(bottom = 14.dp)
+                )
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 340.dp)
+                ) {
+                    if (isCreatingNew) {
+                        OutlinedTextField(
+                            value = newPlaylistName,
+                            onValueChange = { newPlaylistName = it },
+                            label = { Text("Playlist Name", color = ExcavPalette.TextMuted) },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = ExcavPalette.Blue,
+                                unfocusedBorderColor = ExcavPalette.Line,
+                                focusedTextColor = ExcavPalette.Text,
+                                unfocusedTextColor = ExcavPalette.Text,
+                                focusedContainerColor = Color(0x33141822),
+                                unfocusedContainerColor = Color(0x33141822)
+                            ),
+                            modifier = Modifier.fillMaxWidth()
                         )
                     } else {
-                        androidx.compose.foundation.lazy.LazyColumn(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            items(playlists.size) { index ->
-                                val playlist = playlists[index]
-                                Surface(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .border(1.dp, ExcavPalette.Line, RoundedCornerShape(10.dp))
-                                        .clickable {
-                                            onSelectPlaylist(playlist.id)
-                                            onDismiss()
-                                        },
-                                    color = ExcavPalette.InkElevated
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                        verticalAlignment = Alignment.CenterVertically
+                        if (playlists.isEmpty()) {
+                            Text(
+                                text = "No playlists found. Create a new playlist below.",
+                                color = ExcavPalette.TextSecondary,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(vertical = 12.dp)
+                            )
+                        } else {
+                            androidx.compose.foundation.lazy.LazyColumn(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(playlists.size) { index ->
+                                    val playlist = playlists[index]
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .darkUltraThinBlur(
+                                                shape = RoundedCornerShape(12.dp),
+                                                backgroundColor = Color(0x6617191E),
+                                                strokeColor = Color.White.copy(alpha = 0.08f)
+                                            )
+                                            .clickable {
+                                                onSelectPlaylist(playlist.id)
+                                                onDismiss()
+                                            }
+                                            .padding(horizontal = 12.dp, vertical = 10.dp)
                                     ) {
-                                        Icon(
-                                            imageVector = Icons.AutoMirrored.Filled.QueueMusic,
-                                            contentDescription = null,
-                                            tint = ExcavPalette.Blue,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                        Spacer(Modifier.width(10.dp))
-                                        Text(
-                                            text = playlist.title,
-                                            color = ExcavPalette.Text,
-                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                        Text(
-                                            text = "${playlist.itemCount}",
-                                            color = ExcavPalette.TextMuted,
-                                            style = MaterialTheme.typography.bodySmall
-                                        )
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.AutoMirrored.Filled.QueueMusic,
+                                                contentDescription = null,
+                                                tint = ExcavPalette.Blue,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                            Spacer(Modifier.width(10.dp))
+                                            Text(
+                                                text = playlist.title,
+                                                color = ExcavPalette.Text,
+                                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            Text(
+                                                text = "${playlist.itemCount}",
+                                                color = ExcavPalette.TextMuted,
+                                                style = MaterialTheme.typography.bodySmall
+                                            )
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
-            }
-        },
-        confirmButton = {
-            if (isCreatingNew) {
-                Button(
-                    enabled = newPlaylistName.isNotBlank(),
-                    onClick = {
-                        onCreatePlaylist(newPlaylistName.trim())
-                        onDismiss()
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
-                    shape = ExcavShapes.Pill
+
+                Spacer(Modifier.height(18.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Create", color = ExcavPalette.Ink, fontWeight = FontWeight.Bold)
-                }
-            } else {
-                Button(
-                    onClick = { isCreatingNew = true },
-                    colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
-                    shape = ExcavShapes.Pill
-                ) {
-                    Icon(Icons.Default.Add, null, tint = ExcavPalette.Ink, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("New Playlist", color = ExcavPalette.Ink, fontWeight = FontWeight.Bold)
+                    TextButton(onClick = onDismiss) {
+                        Text(stringResource(R.string.cancel), color = ExcavPalette.TextMuted, fontWeight = FontWeight.Medium)
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    if (isCreatingNew) {
+                        Button(
+                            enabled = newPlaylistName.isNotBlank(),
+                            onClick = {
+                                onCreatePlaylist(newPlaylistName.trim())
+                                onDismiss()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
+                            shape = ExcavShapes.Pill
+                        ) {
+                            Text("Create", color = ExcavPalette.Ink, fontWeight = FontWeight.Bold)
+                        }
+                    } else {
+                        Button(
+                            onClick = { isCreatingNew = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
+                            shape = ExcavShapes.Pill
+                        ) {
+                            Icon(Icons.Default.Add, null, tint = ExcavPalette.Ink, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("New Playlist", color = ExcavPalette.Ink, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel), color = ExcavPalette.TextMuted)
-            }
-        },
-        containerColor = ExcavPalette.SurfaceCard,
-        shape = ExcavShapes.Card
-    )
+        }
+    }
 }
 
 @Composable
@@ -1578,12 +1987,12 @@ fun SleekSwitch(
         onCheckedChange = onCheckedChange,
         modifier = modifier,
         colors = SwitchDefaults.colors(
-            checkedThumbColor = Color.White,
-            checkedTrackColor = ExcavPalette.Blue,
-            checkedBorderColor = ExcavPalette.Blue,
-            uncheckedThumbColor = ExcavPalette.TextMuted,
-            uncheckedTrackColor = ExcavPalette.InkElevated,
-            uncheckedBorderColor = ExcavPalette.Line
+            checkedThumbColor = Color.White.copy(alpha = 0.85f),
+            checkedTrackColor = ExcavPalette.GrayDark.copy(alpha = 0.5f),
+            checkedBorderColor = ExcavPalette.GrayDark.copy(alpha = 0.4f),
+            uncheckedThumbColor = ExcavPalette.TextMuted.copy(alpha = 0.6f),
+            uncheckedTrackColor = ExcavPalette.InkElevated.copy(alpha = 0.6f),
+            uncheckedBorderColor = ExcavPalette.Line.copy(alpha = 0.5f)
         )
     )
 }
@@ -1670,7 +2079,7 @@ fun ExcavSleekSlider(
             valueRange = valueRange,
             colors = SliderDefaults.colors(
                 thumbColor = Color.White,
-                activeTrackColor = Color(0xFF00B0FF),
+                activeTrackColor = ExcavPalette.Blue,
                 inactiveTrackColor = Color(0xFF232A3B)
             ),
             thumb = {
@@ -1679,14 +2088,14 @@ fun ExcavSleekSlider(
                         .size(17.dp)
                         .clip(CircleShape)
                         .background(Color.White)
-                        .border(2.5.dp, Color(0xFF00B0FF), CircleShape),
+                        .border(2.5.dp, ExcavPalette.Blue, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Box(
                         modifier = Modifier
                             .size(5.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF00B0FF))
+                            .background(ExcavPalette.Blue)
                     )
                 }
             },
@@ -1710,7 +2119,7 @@ fun ExcavSleekSlider(
                             .clip(RoundedCornerShape(3.dp))
                             .background(
                                 Brush.horizontalGradient(
-                                    listOf(Color(0xFF00B0FF), Color(0xFF00E5FF))
+                                    listOf(ExcavPalette.Silver, ExcavPalette.Blue)
                                 )
                             )
                     )

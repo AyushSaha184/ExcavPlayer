@@ -47,6 +47,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Shape
+import com.excavplayer.ui.components.darkUltraThinBlur
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
@@ -64,6 +66,17 @@ import com.excavplayer.ui.theme.ExcavShapes
 import kotlinx.coroutines.delay
 
 private enum class PlayerSheet { SUBTITLES, AUDIO, SPEED, CHAPTERS }
+
+@Composable
+private fun Modifier.playerGlass(
+    shape: Shape = CircleShape,
+    fallbackBg: Color = Color(0xD9141822)
+): Modifier = this.glassmorphicBlur(
+    shape = shape,
+    backgroundColor = fallbackBg,
+    strokeColor = Color.White.copy(alpha = 0.22f),
+    strokeWidth = 0.5.dp
+)
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -380,7 +393,7 @@ fun PlayerScreen(
                 }
 
                 val (bgColor, edgeType, edgeColor) = when (settings.subtitleBackgroundStyle) {
-                    "Translucent Box" -> Triple(android.graphics.Color.argb(160, 0, 0, 0), androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_NONE, android.graphics.Color.TRANSPARENT)
+                    "Translucent Box" -> Triple(android.graphics.Color.argb(190, 0, 0, 0), androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_NONE, android.graphics.Color.TRANSPARENT)
                     "None" -> Triple(android.graphics.Color.TRANSPARENT, androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_NONE, android.graphics.Color.TRANSPARENT)
                     else -> Triple(android.graphics.Color.TRANSPARENT, androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_OUTLINE, android.graphics.Color.BLACK)
                 }
@@ -396,6 +409,7 @@ fun PlayerScreen(
 
                 val currentTextSizeSp = settings.subtitleTextSize.toFloatOrNull() ?: when (settings.subtitleTextSize) {
                     "Small" -> 14f
+                    "Medium" -> 18f
                     "Large" -> 22f
                     "Extra Large" -> 28f
                     else -> 18f
@@ -446,62 +460,44 @@ fun PlayerScreen(
                 }
         )
 
-        // Buffering Indicator - clean spinner without buffering text (suppressed during double-tap seek)
-        val isRecentlySeeking = (android.os.SystemClock.uptimeMillis() - lastDoubleTapSeekTime) < 1500L
-        if (state.playback.playbackStatus == PlaybackStatus.BUFFERING && !isRecentlySeeking) {
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .clip(CircleShape)
-                    .border(1.dp, ExcavPalette.BlueGlow, CircleShape),
-                color = ExcavPalette.Ink.copy(alpha = 0.85f)
-            ) {
-                Box(
-                    modifier = Modifier.padding(12.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        color = ExcavPalette.Blue,
-                        strokeWidth = 2.5.dp
-                    )
-                }
-            }
-        }
-
-        // Gesture HUD Overlay - sleek minimal bar, no bulky bubble background
+        // Gesture HUD Overlay - frosted glass box for volume and brightness gestures
         if (gestureHudText != null) {
-            Column(
+            Box(
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .playerGlass(RoundedCornerShape(24.dp))
+                    .padding(horizontal = 24.dp, vertical = 20.dp),
+                contentAlignment = Alignment.Center
             ) {
-                gestureHudIcon?.let { icon ->
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = ExcavPalette.Blue,
-                        modifier = Modifier.size(30.dp)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    gestureHudIcon?.let { icon ->
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = ExcavPalette.Blue,
+                            modifier = Modifier.size(32.dp)
+                        )
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    Text(
+                        text = gestureHudText.orEmpty(),
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     )
-                    Spacer(Modifier.height(4.dp))
-                }
-                Text(
-                    text = gestureHudText.orEmpty(),
-                    color = Color.White,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                )
-                if (gestureHudProgress > 0f) {
-                    Spacer(Modifier.height(6.dp))
-                    LinearProgressIndicator(
-                        progress = { gestureHudProgress },
-                        modifier = Modifier
-                            .width(100.dp)
-                            .height(3.dp)
-                            .clip(ExcavShapes.Pill),
-                        color = ExcavPalette.Blue,
-                        trackColor = Color(0x55FFFFFF)
-                    )
+                    if (gestureHudProgress > 0f) {
+                        Spacer(Modifier.height(10.dp))
+                        LinearProgressIndicator(
+                            progress = { gestureHudProgress },
+                            modifier = Modifier
+                                .width(120.dp)
+                                .height(4.dp)
+                                .clip(ExcavShapes.Pill),
+                            color = ExcavPalette.Blue,
+                            trackColor = Color.White.copy(alpha = 0.25f)
+                        )
+                    }
                 }
             }
         }
@@ -562,8 +558,9 @@ fun PlayerScreen(
         // Floating Next Episode Pill
         val hasNextInQueue = queue.currentIndex in 0 until (queue.items.size - 1)
         val remainingMs = state.playback.durationMs - state.playback.currentPositionMs
-        val isNearEnd = state.playback.durationMs > 20_000 && remainingMs in 1L..35_000L
-        if (hasNextInQueue && (isNearEnd || activeChapter?.type == ChapterType.OUTRO)) {
+        val isNearEnd = state.playback.durationMs > 20_000 && remainingMs in 0L..45_000L
+        val isAtEnd = state.playback.playbackStatus == PlaybackStatus.ENDED
+        if (hasNextInQueue && (isNearEnd || isAtEnd || activeChapter?.type == ChapterType.OUTRO)) {
             val nextVid = queue.items[queue.currentIndex + 1]
             Box(
                 modifier = Modifier
@@ -691,10 +688,8 @@ fun PlayerScreen(
                         vm.player.dispatch(PlayerCommand.SetScreenLocked(false))
                     },
                     modifier = Modifier
-                        .size(38.dp)
-                        .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.6f))
-                        .border(1.dp, ExcavPalette.Blue, CircleShape)
+                        .size(44.dp)
+                        .playerGlass(CircleShape)
                 ) {
                     Icon(
                         imageVector = Icons.Default.LockOpen,
@@ -743,7 +738,11 @@ fun PlayerScreen(
                         gestureHudIcon = Icons.Default.RecordVoiceOver
                     },
                     isDialogueBoostActive = settings.dialogueBoostEnabled,
-                    onCycleResizeMode = cycleResizeMode
+                    onCycleResizeMode = cycleResizeMode,
+                    hasPrevious = queue.currentIndex > 0,
+                    onPlayPrevious = { vm.playQueueItem(queue.currentIndex - 1) },
+                    hasNext = queue.currentIndex in 0 until (queue.items.size - 1),
+                    onPlayNext = { vm.playQueueItem(queue.currentIndex + 1) }
                 )
             }
         }
@@ -774,7 +773,11 @@ private fun PlayerControlsOverlay(
     isBackgroundAudioActive: Boolean,
     onToggleDialogueBoost: () -> Unit,
     isDialogueBoostActive: Boolean,
-    onCycleResizeMode: () -> Unit
+    onCycleResizeMode: () -> Unit,
+    hasPrevious: Boolean,
+    onPlayPrevious: () -> Unit,
+    hasNext: Boolean,
+    onPlayNext: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -782,36 +785,36 @@ private fun PlayerControlsOverlay(
             .windowInsetsPadding(WindowInsets.safeDrawing)
             .padding(horizontal = 16.dp, vertical = 10.dp)
     ) {
-        // Top Bar: Back button, Marquee Title (No resolution/size subtext), Subtitle (CC) & Audio Track Buttons ONLY
+        // Top Bar: Back button, Marquee Title, Dialogue Booster, Subtitle (CC), Audio Track
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(
                 onClick = onClose,
                 modifier = Modifier
-                    .size(42.dp)
-                    .clip(CircleShape)
-                    .background(Color.Black.copy(alpha = 0.6f))
-                    .border(1.dp, ExcavPalette.Line.copy(alpha = 0.6f), CircleShape)
+                    .size(44.dp)
+                    .playerGlass(CircleShape)
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = stringResource(R.string.cd_back),
-                    tint = ExcavPalette.Text
+                    tint = Color.White,
+                    modifier = Modifier.size(22.dp)
                 )
             }
 
-            Spacer(Modifier.width(14.dp))
+            Spacer(Modifier.width(16.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                // Title with motion marquee scrolling if text exceeds width
                 Text(
                     text = state.currentVideo?.displayName.orEmpty().ifEmpty { "Playing Media" },
-                    color = ExcavPalette.Text,
+                    color = Color.White,
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontWeight = FontWeight.Bold,
-                        fontSize = 17.sp
+                        fontSize = 16.sp
                     ),
                     maxLines = 1,
                     modifier = Modifier.basicMarquee()
@@ -820,46 +823,52 @@ private fun PlayerControlsOverlay(
 
             Spacer(Modifier.width(12.dp))
 
-            // Dialogue Booster Button (Left side of subtitle option)
+            // Dialogue Booster Button
             IconButton(
                 onClick = onToggleDialogueBoost,
-                modifier = Modifier.size(38.dp)
+                modifier = Modifier
+                    .size(44.dp)
+                    .playerGlass(CircleShape)
             ) {
                 Icon(
                     imageVector = Icons.Default.RecordVoiceOver,
                     contentDescription = "Dialogue Booster",
-                    tint = if (isDialogueBoostActive) ExcavPalette.Blue else ExcavPalette.Text,
+                    tint = if (isDialogueBoostActive) ExcavPalette.Blue else Color.White,
                     modifier = Modifier.size(22.dp)
                 )
             }
 
-            Spacer(Modifier.width(4.dp))
+            Spacer(Modifier.width(10.dp))
 
-            // Subtitle Button (CC) - Clean floating button
+            // Subtitle Button (CC)
             val hasSubtitles = state.playback.selectedSubtitleTrackId != null
             IconButton(
                 onClick = { onOpenSheet(PlayerSheet.SUBTITLES) },
-                modifier = Modifier.size(38.dp)
+                modifier = Modifier
+                    .size(44.dp)
+                    .playerGlass(CircleShape)
             ) {
                 Icon(
                     imageVector = Icons.Default.ClosedCaption,
                     contentDescription = stringResource(R.string.cd_subtitles),
-                    tint = if (hasSubtitles) ExcavPalette.Blue else ExcavPalette.Text,
+                    tint = if (hasSubtitles) ExcavPalette.Blue else Color.White,
                     modifier = Modifier.size(24.dp)
                 )
             }
 
-            Spacer(Modifier.width(4.dp))
+            Spacer(Modifier.width(10.dp))
 
-            // Audio Track Button (Musical Note) - Clean floating button
+            // Audio Track Button
             IconButton(
                 onClick = { onOpenSheet(PlayerSheet.AUDIO) },
-                modifier = Modifier.size(38.dp)
+                modifier = Modifier
+                    .size(44.dp)
+                    .playerGlass(CircleShape)
             ) {
                 Icon(
                     imageVector = Icons.Default.MusicNote,
                     contentDescription = stringResource(R.string.audio_tracks),
-                    tint = ExcavPalette.Text,
+                    tint = Color.White,
                     modifier = Modifier.size(22.dp)
                 )
             }
@@ -867,26 +876,59 @@ private fun PlayerControlsOverlay(
 
         Spacer(Modifier.weight(1f))
 
-        // Center Transport Controls - Clean subtle Play/Pause Button (no bulky bubble)
-        Box(
+        // Center Transport Controls - Frosted Glass Previous, Play/Pause, Next Buttons
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            contentAlignment = Alignment.Center
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            IconButton(
+                enabled = hasPrevious,
+                onClick = onPlayPrevious,
+                modifier = Modifier
+                    .size(50.dp)
+                    .playerGlass(CircleShape)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.SkipPrevious,
+                    contentDescription = "Previous Video",
+                    tint = if (hasPrevious) Color.White else Color.White.copy(alpha = 0.35f),
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+
+            Spacer(Modifier.width(28.dp))
+
             IconButton(
                 onClick = {
                     if (state.playback.isPlaying) player.pause() else player.resume()
                 },
                 modifier = Modifier
-                    .size(56.dp)
-                    .clip(CircleShape)
-                    .background(Color.Black.copy(alpha = 0.55f))
-                    .border(1.dp, ExcavPalette.Blue.copy(alpha = 0.45f), CircleShape)
+                    .size(64.dp)
+                    .playerGlass(CircleShape)
             ) {
                 Icon(
                     imageVector = if (state.playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                     contentDescription = stringResource(R.string.cd_play_pause),
                     tint = Color.White,
-                    modifier = Modifier.size(34.dp)
+                    modifier = Modifier.size(36.dp)
+                )
+            }
+
+            Spacer(Modifier.width(28.dp))
+
+            IconButton(
+                enabled = hasNext,
+                onClick = onPlayNext,
+                modifier = Modifier
+                    .size(50.dp)
+                    .playerGlass(CircleShape)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.SkipNext,
+                    contentDescription = "Next Video",
+                    tint = if (hasNext) Color.White else Color.White.copy(alpha = 0.35f),
+                    modifier = Modifier.size(28.dp)
                 )
             }
         }
@@ -907,17 +949,17 @@ private fun PlayerControlsOverlay(
             ) {
                 Text(
                     text = formatDuration(position),
-                    color = ExcavPalette.Text,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 )
                 Text(
                     text = formatDuration(duration),
-                    color = ExcavPalette.TextMuted,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp)
+                    color = Color.White.copy(alpha = 0.65f),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium, fontSize = 14.sp)
                 )
             }
 
-            Spacer(Modifier.height(2.dp))
+            Spacer(Modifier.height(4.dp))
 
             ExcavSleekSlider(
                 value = position.toFloat(),
@@ -926,9 +968,9 @@ private fun PlayerControlsOverlay(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(14.dp))
 
-            // Bottom Buttons Row: Clean icons without background boxes
+            // Bottom Floating Glass Pills:
             // Left: Screen Lock, Picture-in-Picture, Screen Orientation, Chapters
             // Right: Playback Speed, Background Play Audio, Fullscreen / Aspect Ratio
             Row(
@@ -936,20 +978,23 @@ private fun PlayerControlsOverlay(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Left group
+                // Left Pill
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .playerGlass(RoundedCornerShape(32.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Screen Lock
                     IconButton(
                         onClick = onLock,
-                        modifier = Modifier.size(38.dp)
+                        modifier = Modifier.size(40.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Lock,
                             contentDescription = stringResource(R.string.cd_lock),
-                            tint = ExcavPalette.Text,
+                            tint = Color.White,
                             modifier = Modifier.size(22.dp)
                         )
                     }
@@ -957,78 +1002,79 @@ private fun PlayerControlsOverlay(
                     // Picture in Picture
                     IconButton(
                         onClick = onPip,
-                        modifier = Modifier.size(38.dp)
+                        modifier = Modifier.size(40.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.PictureInPictureAlt,
                             contentDescription = "Picture-in-Picture",
-                            tint = ExcavPalette.Text,
+                            tint = Color.White,
                             modifier = Modifier.size(22.dp)
                         )
                     }
 
-                    // Screen Orientation Toggle (Cycles one by one)
+                    // Screen Orientation Toggle
                     IconButton(
                         onClick = onCycleOrientation,
-                        modifier = Modifier.size(38.dp)
+                        modifier = Modifier.size(40.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.ScreenRotation,
                             contentDescription = "Screen Orientation",
-                            tint = ExcavPalette.Text,
+                            tint = Color.White,
                             modifier = Modifier.size(22.dp)
                         )
                     }
 
-                    // Chapters Button (active if chapters present, greyed out if none)
+                    // Chapters Button
                     val hasChapters = state.chapters.isNotEmpty()
                     IconButton(
                         enabled = hasChapters,
                         onClick = { onOpenSheet(PlayerSheet.CHAPTERS) },
-                        modifier = Modifier.size(38.dp)
+                        modifier = Modifier.size(40.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Bookmarks,
                             contentDescription = "Chapters & Timeline",
-                            tint = if (hasChapters) ExcavPalette.Text else ExcavPalette.TextMuted.copy(alpha = 0.35f),
+                            tint = if (hasChapters) Color.White else Color.White.copy(alpha = 0.35f),
                             modifier = Modifier.size(22.dp)
                         )
                     }
                 }
 
-                // Right group: Playback Speed, Background Play Audio, Fullscreen
+                // Right Pill: Playback Speed, Background Play Audio, Fullscreen
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .playerGlass(RoundedCornerShape(32.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Playback Speed Pill
-                    Surface(
+                    // Playback Speed Pill Button
+                    Box(
                         modifier = Modifier
-                            .clip(ExcavShapes.Pill)
-                            .border(1.dp, ExcavPalette.Line, ExcavShapes.Pill)
-                            .clickable { onOpenSheet(PlayerSheet.SPEED) },
-                        color = Color.Transparent
+                            .clickable { onOpenSheet(PlayerSheet.SPEED) }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = "${state.playback.playbackSpeed}x",
-                            color = ExcavPalette.Text,
+                            color = Color.White,
                             style = MaterialTheme.typography.labelMedium.copy(
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp
-                            ),
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                fontSize = 13.sp
+                            )
                         )
                     }
 
                     // Background Play Audio Toggle
                     IconButton(
                         onClick = onToggleBackgroundAudio,
-                        modifier = Modifier.size(38.dp)
+                        modifier = Modifier.size(40.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Headphones,
                             contentDescription = "Background Play Audio",
-                            tint = if (isBackgroundAudioActive) ExcavPalette.Blue else ExcavPalette.Text,
+                            tint = if (isBackgroundAudioActive) ExcavPalette.Blue else Color.White,
                             modifier = Modifier.size(22.dp)
                         )
                     }
@@ -1036,12 +1082,12 @@ private fun PlayerControlsOverlay(
                     // Fullscreen / Aspect Ratio Cycle
                     IconButton(
                         onClick = onCycleResizeMode,
-                        modifier = Modifier.size(38.dp)
+                        modifier = Modifier.size(40.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.AspectRatio,
                             contentDescription = "Fullscreen & Aspect Ratio",
-                            tint = ExcavPalette.Text,
+                            tint = Color.White,
                             modifier = Modifier.size(22.dp)
                         )
                     }
@@ -1064,26 +1110,32 @@ private fun SheetContainer(
 ) {
     val settings by vm.userSettings.collectAsState()
 
-    // Controls on the left: Chapters
-    // Controls on the right: Playback Speed, Audio / Language, Subtitles
-    val isLeftAligned = sheet == PlayerSheet.CHAPTERS
-    val alignment = if (isLeftAligned) Alignment.BottomStart else Alignment.BottomEnd
+    // Alignment and padding matching trigger button locations:
+    // Subtitles & Audio -> Top bar on right (Alignment.TopEnd)
+    // Speed -> Bottom bar on right (Alignment.BottomEnd)
+    // Chapters -> Bottom bar on left (Alignment.BottomStart)
+    val alignment = when (sheet) {
+        PlayerSheet.SUBTITLES, PlayerSheet.AUDIO -> Alignment.TopEnd
+        PlayerSheet.SPEED -> Alignment.BottomEnd
+        PlayerSheet.CHAPTERS -> Alignment.BottomStart
+    }
+
+    val containerPadding = when (sheet) {
+        PlayerSheet.SUBTITLES, PlayerSheet.AUDIO -> PaddingValues(top = 56.dp, end = 16.dp, bottom = 16.dp, start = 16.dp)
+        PlayerSheet.SPEED -> PaddingValues(bottom = 76.dp, end = 16.dp, top = 16.dp, start = 16.dp)
+        PlayerSheet.CHAPTERS -> PaddingValues(bottom = 76.dp, start = 16.dp, top = 16.dp, end = 16.dp)
+    }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.55f))
+            .background(Color.Black.copy(alpha = 0.60f))
             .clickable(onClick = onDismiss)
             .windowInsetsPadding(WindowInsets.safeDrawing)
-            .padding(
-                start = if (isLeftAligned) 20.dp else 12.dp,
-                end = if (!isLeftAligned) 20.dp else 12.dp,
-                bottom = 16.dp,
-                top = 16.dp
-            ),
+            .padding(containerPadding),
         contentAlignment = alignment
     ) {
-        Surface(
+        Box(
             modifier = Modifier
                 .clickable(enabled = false) {}
                 .widthIn(
@@ -1095,14 +1147,11 @@ private fun SheetContainer(
                         PlayerSheet.SPEED -> 320.dp
                     }
                 )
-                .clip(RoundedCornerShape(18.dp))
-                .border(
-                    1.dp,
-                    ExcavPalette.Line,
-                    RoundedCornerShape(18.dp)
-                ),
-            color = ExcavPalette.SurfaceCard,
-            shadowElevation = 16.dp
+                .darkUltraThinBlur(
+                    shape = RoundedCornerShape(22.dp),
+                    backgroundColor = Color(0xE80E121B),
+                    strokeColor = Color.White.copy(alpha = 0.18f)
+                )
         ) {
             Column(
                 modifier = Modifier
@@ -1448,10 +1497,11 @@ private fun SubtitleControlsContent(
             )
         }
     } else {
-        SubtitleRadioRow(
-            title = "en (Embedded)",
-            isSelected = state.playback.selectedSubtitleTrackId != null,
-            onClick = { player.selectSubtitleTrack("mock_en") }
+        Text(
+            text = "No embedded subtitles found",
+            color = ExcavPalette.TextMuted,
+            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp)
         )
     }
 

@@ -9,7 +9,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.InstallMobile
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -17,12 +16,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import com.excavplayer.R
+import androidx.compose.ui.window.DialogProperties
 import com.excavplayer.ui.theme.ExcavPalette
 import com.excavplayer.ui.theme.ExcavShapes
 import com.excavplayer.update.GitHubAsset
@@ -38,36 +36,37 @@ fun UpdateDialog(
 ) {
     when (updateState) {
         is UpdateState.UpdateAvailable -> {
-            Dialog(onDismissRequest = onDismiss) {
-                Surface(
+            Dialog(
+                onDismissRequest = onDismiss,
+                properties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
+                        .fillMaxWidth(0.90f)
                         .wrapContentHeight()
-                        .clip(ExcavShapes.Card)
-                        .border(1.dp, ExcavPalette.BlueGlow, ExcavShapes.Card),
-                    color = ExcavPalette.InkElevated,
-                    shadowElevation = 24.dp
+                        .darkUltraThinBlur(
+                            shape = RoundedCornerShape(24.dp),
+                            backgroundColor = Color(0xE6101216),
+                            strokeColor = Color.White.copy(alpha = 0.18f)
+                        )
+                        .padding(22.dp)
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(22.dp)
-                    ) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
                         // Header
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
                                 modifier = Modifier
                                     .size(44.dp)
                                     .clip(CircleShape)
-                                    .background(ExcavPalette.Blue.copy(alpha = 0.18f))
-                                    .border(1.dp, ExcavPalette.Blue.copy(alpha = 0.4f), CircleShape),
+                                    .background(ExcavPalette.Blue.copy(alpha = 0.15f))
+                                    .border(1.dp, ExcavPalette.Blue.copy(alpha = 0.35f), CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.SystemUpdate,
                                     contentDescription = null,
                                     tint = ExcavPalette.Blue,
-                                    modifier = Modifier.size(24.dp)
+                                    modifier = Modifier.size(22.dp)
                                 )
                             }
                             Spacer(Modifier.width(14.dp))
@@ -100,21 +99,23 @@ fun UpdateDialog(
                             color = ExcavPalette.TextSecondary,
                             style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
                         )
-                        Spacer(Modifier.height(6.dp))
+                        Spacer(Modifier.height(8.dp))
 
-                        Surface(
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .heightIn(max = 200.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .border(1.dp, ExcavPalette.Line, RoundedCornerShape(12.dp)),
-                            color = ExcavPalette.SurfaceCard
+                                .darkUltraThinBlur(
+                                    shape = RoundedCornerShape(14.dp),
+                                    backgroundColor = Color(0x6617191E),
+                                    strokeColor = Color.White.copy(alpha = 0.08f)
+                                )
+                                .padding(14.dp)
                         ) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .verticalScroll(rememberScrollState())
-                                    .padding(14.dp)
                             ) {
                                 val bodyText = updateState.release.body?.trim()?.ifEmpty { "Performance improvements and bug fixes." }
                                     ?: "Performance improvements and bug fixes."
@@ -181,21 +182,22 @@ fun UpdateDialog(
         }
 
         is UpdateState.Downloading -> {
-            Dialog(onDismissRequest = {}) {
-                Surface(
+            Dialog(
+                onDismissRequest = {},
+                properties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
+                        .fillMaxWidth(0.88f)
                         .wrapContentHeight()
-                        .clip(ExcavShapes.Card)
-                        .border(1.dp, ExcavPalette.BlueGlow, ExcavShapes.Card),
-                    color = ExcavPalette.InkElevated,
-                    shadowElevation = 24.dp
+                        .darkUltraThinBlur(
+                            shape = RoundedCornerShape(24.dp),
+                            backgroundColor = Color(0xE6101216),
+                            strokeColor = Color.White.copy(alpha = 0.18f)
+                        )
+                        .padding(22.dp)
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(22.dp)
-                    ) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(24.dp),

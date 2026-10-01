@@ -69,7 +69,7 @@ class VideoRepositoryImpl @Inject constructor(
             relPath1 = if (rel.isNotEmpty()) "$rel/" else "",
             relPath2 = rel
         )
-            .map { list -> list.map { it.toDomain() } }
+            .map { list -> list.map { it.toDomain() }.sortedWith(com.excavplayer.domain.model.NaturalVideoComparator) }
             .flowOn(dispatchers.io)
     }
 

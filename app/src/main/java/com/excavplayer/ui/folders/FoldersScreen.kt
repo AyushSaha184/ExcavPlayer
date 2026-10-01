@@ -30,11 +30,17 @@ import com.excavplayer.ui.components.*
 import com.excavplayer.ui.theme.ExcavPalette
 import com.excavplayer.ui.theme.ExcavShapes
 
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
+
 @Composable
 fun FoldersScreen(
     folders: List<Folder>,
     selectedFolder: Folder?,
     folderVideos: List<Video>,
+    videos: List<Video> = emptyList(),
     playlists: List<Playlist>,
     favorites: List<Video>,
     onSelectFolder: (Folder?) -> Unit,
@@ -175,70 +181,83 @@ fun FoldersScreen(
         navigateUp()
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Top Breadcrumb and Navigation Bar (Right side of back button)
-        BreadcrumbBar(
-            currentPath = normCurrent,
-            onNavigateToPath = selectPath,
-            onBack = navigateUp
-        )
-
+    Box(modifier = Modifier.fillMaxSize()) {
         val isFolderEmpty = subfolders.isEmpty() && folderVideos.isEmpty()
 
         if (isFolderEmpty) {
-            EmptyState(
-                icon = Icons.Default.FolderOff,
-                label = if (normCurrent == "/storage/emulated/0") "No media or folders in Internal Storage" else "No media or subfolders in ${selectedFolder?.name ?: "folder"}"
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp, vertical = 24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                EmptyState(
+                    icon = Icons.Default.FolderOff,
+                    label = if (normCurrent == "/storage/emulated/0") "No media or folders in Internal Storage" else "No media or subfolders in ${selectedFolder?.name ?: "folder"}"
+                )
+            }
         } else {
-            LazyColumn(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(160.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 62.dp, bottom = 90.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-                // Section 1: Child Subfolders (No title header)
+                // Section 1: Child Subfolders (Home-style folder grid cards)
                 if (subfolders.isNotEmpty()) {
-                    items(subfolders, key = { "folder_${it.path}" }) { folder ->
-                        FolderRow(
+                    gridItems(subfolders, key = { "folder_${it.path}" }) { folder ->
+                        val subfolderVids = remember(folder.path, videos) {
+                            videos.filter {
+                                it.folderPath == folder.path ||
+                                it.folderPath.startsWith("${folder.path}/") ||
+                                (it.folderName.isNotEmpty() && it.folderName.equals(folder.name, ignoreCase = true))
+                            }
+                        }
+                        FolderGridCard(
                             folder = folder,
+                            videos = subfolderVids,
                             onClick = { onSelectFolder(folder) }
                         )
                     }
                 }
 
-                // Section 2: Videos directly in this directory (No title header)
+                // Section 2: Videos directly in this directory (Spanning full line width as list rows)
                 if (folderVideos.isNotEmpty()) {
-                    items(folderVideos, key = { "video_${it.id}" }) { video ->
-                        Box {
-                            ListVideoRow(
-                                video = video,
-                                onClick = { onPlay(video) },
-                                onMoreClick = { selectedVideoForMenu = video }
-                            )
-
-                            if (selectedVideoForMenu?.id == video.id) {
-                                val isFav = favorites.any { it.id == video.id }
-                                VideoOptionsMenu(
-                                    expanded = true,
-                                    video = video,
-                                    isFavorite = isFav,
-                                    onDismiss = { selectedVideoForMenu = null },
-                                    onToggleFavorite = { onToggleFavorite(video) },
-                                    onAddToPlaylist = { playlistVideoTarget = video },
-                                    onRename = { renameVideoTarget = video },
-                                    onProperties = { propertiesVideo = video },
-                                    onDelete = { deleteVideoTarget = video }
-                                )
+                    gridItems(folderVideos, key = { "video_${it.id}" }, span = { GridItemSpan(maxLineSpan) }) { video ->
+                        ListVideoRow(
+                            video = video,
+                            onClick = { onPlay(video) },
+                            onMoreClick = { selectedVideoForMenu = video },
+                            dropdownMenu = {
+                                if (selectedVideoForMenu?.id == video.id) {
+                                    val isFav = favorites.any { it.id == video.id }
+                                    VideoOptionsMenu(
+                                        expanded = true,
+                                        video = video,
+                                        isFavorite = isFav,
+                                        onDismiss = { selectedVideoForMenu = null },
+                                        onToggleFavorite = { onToggleFavorite(video) },
+                                        onAddToPlaylist = { playlistVideoTarget = video },
+                                        onRename = { renameVideoTarget = video },
+                                        onProperties = { propertiesVideo = video },
+                                        onDelete = { deleteVideoTarget = video }
+                                    )
+                                }
                             }
-                        }
+                        )
                     }
-                }
-
-                item {
-                    Spacer(Modifier.height(80.dp))
                 }
             }
         }
+
+        // Top Floating Breadcrumb Bar
+        BreadcrumbBar(
+            currentPath = normCurrent,
+            onNavigateToPath = selectPath,
+            onBack = navigateUp,
+            modifier = Modifier.align(Alignment.TopCenter)
+        )
     }
 
     // Modals & Dialogs

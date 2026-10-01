@@ -54,6 +54,14 @@ object PlayerErrorMapper {
                     cause = error
                 )
             }
+            PlaybackException.ERROR_CODE_IO_UNSPECIFIED,
+            PlaybackException.ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE -> {
+                PlaybackError.SourceError(
+                    message = "Error reading media source: ${error.message ?: error.errorCodeName}",
+                    cause = error,
+                    recoverable = true
+                )
+            }
             else -> {
                 PlaybackError.UnknownError(
                     message = "Playback error: ${error.errorCodeName} ($message)",

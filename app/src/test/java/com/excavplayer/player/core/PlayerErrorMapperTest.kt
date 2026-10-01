@@ -76,4 +76,31 @@ class PlayerErrorMapperTest {
         assertThat(domainError).isInstanceOf(PlaybackError.NetworkSourceError::class.java)
         assertThat(domainError.isRecoverable).isTrue()
     }
+
+    @Test
+    fun `maps unspecified io error to SourceError with recoverable true`() {
+        val ex = PlaybackException(
+            "Source error",
+            null,
+            PlaybackException.ERROR_CODE_IO_UNSPECIFIED
+        )
+
+        val domainError = PlayerErrorMapper.map(ex)
+        assertThat(domainError).isInstanceOf(PlaybackError.SourceError::class.java)
+        assertThat(domainError.isRecoverable).isTrue()
+        assertThat(domainError.message).contains("Source error")
+    }
+
+    @Test
+    fun `maps read position out of range to SourceError with recoverable true`() {
+        val ex = PlaybackException(
+            "EOF reached",
+            null,
+            PlaybackException.ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE
+        )
+
+        val domainError = PlayerErrorMapper.map(ex)
+        assertThat(domainError).isInstanceOf(PlaybackError.SourceError::class.java)
+        assertThat(domainError.isRecoverable).isTrue()
+    }
 }

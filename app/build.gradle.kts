@@ -30,7 +30,7 @@ android {
         applicationId = "com.excavplayer"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
+        versionCode = 3
         versionName = appVersion
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -118,6 +118,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.navigation.compose)
+    implementation("dev.chrisbanes.haze:haze:1.6.0")
+    implementation("dev.chrisbanes.haze:haze-materials:1.6.0")
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     // AndroidX Core & Lifecycle

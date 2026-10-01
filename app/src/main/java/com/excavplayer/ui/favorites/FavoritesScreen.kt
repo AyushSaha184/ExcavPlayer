@@ -50,43 +50,40 @@ fun FavoritesScreen(
             .fillMaxSize()
             .padding(horizontal = 16.dp)
     ) {
-        SectionTitle(stringResource(R.string.favorites))
-
         if (videos.isEmpty()) {
-            EmptyState(
-                icon = Icons.Default.FavoriteBorder,
-                label = stringResource(R.string.empty_favorites)
-            )
+            // Empty — no placeholder
         } else {
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(160.dp),
-                contentPadding = PaddingValues(bottom = 90.dp),
+                contentPadding = PaddingValues(top = 62.dp, bottom = 90.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
+                item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                    SectionTitle(stringResource(R.string.favorites))
+                }
                 items(videos, key = { it.id }) { video ->
-                    Box {
-                        CompactFavoriteCard(
-                            video = video,
-                            onClick = { onPlay(video) },
-                            onMoreClick = { selectedVideoForMenu = video }
-                        )
-
-                        if (selectedVideoForMenu?.id == video.id) {
-                            VideoOptionsMenu(
-                                expanded = true,
-                                video = video,
-                                isFavorite = true,
-                                onDismiss = { selectedVideoForMenu = null },
-                                onToggleFavorite = { onToggleFavorite(video) },
-                                onAddToPlaylist = { playlistVideoTarget = video },
-                                onRename = { renameVideoTarget = video },
-                                onProperties = { propertiesVideo = video },
-                                onDelete = { deleteVideoTarget = video }
-                            )
+                    CompactFavoriteCard(
+                        video = video,
+                        onClick = { onPlay(video) },
+                        onMoreClick = { selectedVideoForMenu = video },
+                        dropdownMenu = {
+                            if (selectedVideoForMenu?.id == video.id) {
+                                VideoOptionsMenu(
+                                    expanded = true,
+                                    video = video,
+                                    isFavorite = true,
+                                    onDismiss = { selectedVideoForMenu = null },
+                                    onToggleFavorite = { onToggleFavorite(video) },
+                                    onAddToPlaylist = { playlistVideoTarget = video },
+                                    onRename = { renameVideoTarget = video },
+                                    onProperties = { propertiesVideo = video },
+                                    onDelete = { deleteVideoTarget = video }
+                                )
+                            }
                         }
-                    }
+                    )
                 }
             }
         }
@@ -130,7 +127,8 @@ fun FavoritesScreen(
 fun CompactFavoriteCard(
     video: Video,
     onClick: () -> Unit,
-    onMoreClick: () -> Unit
+    onMoreClick: (() -> Unit)? = null,
+    dropdownMenu: (@Composable () -> Unit)? = null
 ) {
     val resLabel = remember(video.width, video.height, video.displayName) {
         val r = formatResolution(video.width, video.height)
@@ -282,16 +280,21 @@ fun CompactFavoriteCard(
                     }
                 }
 
-                IconButton(
-                    onClick = onMoreClick,
-                    modifier = Modifier.size(24.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = stringResource(R.string.cd_more),
-                        tint = ExcavPalette.TextMuted,
-                        modifier = Modifier.size(16.dp)
-                    )
+                if (onMoreClick != null || dropdownMenu != null) {
+                    Box {
+                        IconButton(
+                            onClick = { onMoreClick?.invoke() },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = stringResource(R.string.cd_more),
+                                tint = ExcavPalette.TextMuted,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        dropdownMenu?.invoke()
+                    }
                 }
             }
         }

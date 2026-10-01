@@ -18,11 +18,19 @@ object ExcavPalette {
     val TextSecondary = Color(0xFFCBD5E1)
     val TextMuted = Color(0xFF8E9BAE)
 
-    // Sleek Titanium & Ice-Silver Accents
-    val Blue = Color(0xFF38BDF8)
-    val BlueDeep = Color(0xFF0284C7)
-    val BlueGlow = Color(0x3338BDF8)
-    val CyanGlow = Color(0xFF38BDF8)
+    // Dedicated Brand Logo Blue (Kept for the top logo and "Player" title on top only)
+    val LogoBlue = Color(0xFF38BDF8)
+    val LogoBlueDeep = Color(0xFF0284C7)
+    val LogoBlueGlow = Color(0x3338BDF8)
+
+    // Sleek Titanium Gray Accents (Replaces blue accents everywhere else in the app)
+    val Gray = Color(0xFFCBD5E1)
+    val GrayDark = Color(0xFF64748B)
+    val GrayGlow = Color(0x33CBD5E1)
+    val Blue = Color(0xFFCBD5E1)
+    val BlueDeep = Color(0xFF64748B)
+    val BlueGlow = Color(0x33CBD5E1)
+    val CyanGlow = Color(0xFFCBD5E1)
     val Silver = Color(0xFFE2E8F0)
 
     // Auxiliary Accent Colors
