@@ -37,7 +37,10 @@ fun FavoritesScreen(
     onAddToPlaylist: (Long, Video) -> Unit,
     onCreatePlaylist: (String) -> Unit,
     onRenameVideo: (Video, String) -> Unit,
-    onDeleteVideo: (Video) -> Unit
+    onDeleteVideo: (Video) -> Unit,
+    gridState: androidx.compose.foundation.lazy.grid.LazyGridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState(),
+    onSearch: () -> Unit = {},
+    onRefresh: (() -> Unit)? = null
 ) {
     var selectedVideoForMenu by remember { mutableStateOf<Video?>(null) }
     var propertiesVideo by remember { mutableStateOf<Video?>(null) }
@@ -45,17 +48,32 @@ fun FavoritesScreen(
     var deleteVideoTarget by remember { mutableStateOf<Video?>(null) }
     var playlistVideoTarget by remember { mutableStateOf<Video?>(null) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp)
+    val isScrolled by remember {
+        derivedStateOf {
+            gridState.firstVisibleItemIndex > 0 || gridState.firstVisibleItemScrollOffset > 10
+        }
+    }
+
+    Box(
+        modifier = Modifier.fillMaxSize()
     ) {
         if (videos.isEmpty()) {
-            // Empty — no placeholder
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp, vertical = 24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                EmptyState(
+                    icon = Icons.Default.FavoriteBorder,
+                    label = stringResource(R.string.empty_favorites)
+                )
+            }
         } else {
             LazyVerticalGrid(
+                state = gridState,
                 columns = GridCells.Adaptive(160.dp),
-                contentPadding = PaddingValues(top = 62.dp, bottom = 90.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 62.dp, bottom = 90.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize()
@@ -87,6 +105,13 @@ fun FavoritesScreen(
                 }
             }
         }
+
+        BrandHeader(
+            onSearch = onSearch,
+            onRefresh = onRefresh,
+            isScrolled = isScrolled,
+            modifier = Modifier.align(Alignment.TopCenter)
+        )
     }
 
     propertiesVideo?.let { video ->

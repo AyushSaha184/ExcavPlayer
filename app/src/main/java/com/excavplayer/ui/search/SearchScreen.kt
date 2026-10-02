@@ -12,6 +12,9 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -39,6 +42,13 @@ fun SearchScreen(
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
+        val searchListState = androidx.compose.foundation.lazy.rememberLazyListState()
+        val isScrolled by remember {
+            derivedStateOf {
+                searchListState.firstVisibleItemIndex > 0 || searchListState.firstVisibleItemScrollOffset > 10
+            }
+        }
+
         if (query.isNotBlank() && results.isEmpty()) {
             Box(
                 modifier = Modifier
@@ -53,6 +63,7 @@ fun SearchScreen(
             }
         } else {
             LazyColumn(
+                state = searchListState,
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 74.dp, bottom = 90.dp),
                 modifier = Modifier.fillMaxSize()
@@ -66,6 +77,7 @@ fun SearchScreen(
         // Floating Top Glass Search Bar
         ProgressiveHeaderContainer(
             modifier = Modifier.align(Alignment.TopCenter),
+            isScrolled = isScrolled,
             fadeHeight = 20.dp
         ) {
             Row(

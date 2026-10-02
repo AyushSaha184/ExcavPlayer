@@ -91,6 +91,10 @@ fun ExcavApp(
 
     val hazeState = rememberHazeState()
 
+    val homeGridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+    val foldersGridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+    val favoritesGridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+
     Scaffold(
         containerColor = ExcavPalette.Ink
     ) { padding ->
@@ -155,7 +159,10 @@ fun ExcavApp(
                                     onCreatePlaylist = vm::createPlaylist,
                                     onRenameVideo = vm::renameVideo,
                                     onDeleteVideo = vm::deleteVideo,
-                                    onRemoveFromContinueWatching = { vm.dismissFromContinueWatching(it.id) }
+                                    onRemoveFromContinueWatching = { vm.dismissFromContinueWatching(it.id) },
+                                    gridState = homeGridState,
+                                    onSearch = { searchOpen = true },
+                                    onRefresh = { vm.refreshLibrary() }
                                 )
                                 MainTab.FOLDERS -> FoldersScreen(
                                     folders = library.folders,
@@ -175,7 +182,10 @@ fun ExcavApp(
                                     onAddToPlaylist = vm::addVideoToPlaylist,
                                     onCreatePlaylist = vm::createPlaylist,
                                     onRenameVideo = vm::renameVideo,
-                                    onDeleteVideo = vm::deleteVideo
+                                    onDeleteVideo = vm::deleteVideo,
+                                    gridState = foldersGridState,
+                                    onSearch = { searchOpen = true },
+                                    onRefresh = { vm.refreshLibrary() }
                                 )
                                 MainTab.PLAYLISTS -> PlaylistsScreen(
                                     playlists = library.playlists,
@@ -192,7 +202,9 @@ fun ExcavApp(
                                     onRenameVideo = vm::renameVideo,
                                     onDeleteVideo = vm::deleteVideo,
                                     onRemoveFromPlaylist = vm::removeVideoFromPlaylist,
-                                    observePlaylistItems = vm::observePlaylistItems
+                                    observePlaylistItems = vm::observePlaylistItems,
+                                    onSearch = { searchOpen = true },
+                                    onRefresh = { vm.refreshLibrary() }
                                 )
                                 MainTab.FAVORITES -> FavoritesScreen(
                                     videos = library.favorites,
@@ -205,7 +217,10 @@ fun ExcavApp(
                                     onAddToPlaylist = vm::addVideoToPlaylist,
                                     onCreatePlaylist = vm::createPlaylist,
                                     onRenameVideo = vm::renameVideo,
-                                    onDeleteVideo = vm::deleteVideo
+                                    onDeleteVideo = vm::deleteVideo,
+                                    gridState = favoritesGridState,
+                                    onSearch = { searchOpen = true },
+                                    onRefresh = { vm.refreshLibrary() }
                                 )
                                 MainTab.SETTINGS -> SettingsScreen(
                                     vm = vm,
@@ -215,15 +230,6 @@ fun ExcavApp(
                         }
                     }
                 }
-            }
-
-            // Top Floating Glass Brand Header
-            if (!searchOpen && tab != MainTab.SETTINGS) {
-                BrandHeader(
-                    onSearch = { searchOpen = true },
-                    onRefresh = { vm.refreshLibrary() },
-                    modifier = Modifier.align(Alignment.TopCenter)
-                )
             }
 
             // Sleek Floating Mini Player when audio is playing in the background

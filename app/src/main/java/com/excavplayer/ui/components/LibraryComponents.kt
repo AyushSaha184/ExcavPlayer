@@ -77,6 +77,7 @@ import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 fun BrandHeader(
     onSearch: () -> Unit,
     onRefresh: (() -> Unit)? = null,
+    isScrolled: Boolean = true,
     modifier: Modifier = Modifier,
     hazeState: HazeState = LocalHazeState.current
 ) {
@@ -95,6 +96,7 @@ fun BrandHeader(
 
     ProgressiveHeaderContainer(
         modifier = modifier,
+        isScrolled = isScrolled,
         hazeState = hazeState,
         fadeHeight = 24.dp
     ) {
@@ -489,17 +491,26 @@ fun GroupThumbnail(videos: List<Video>, modifier: Modifier = Modifier) {
     val loader = rememberThumbnailLoader()
     var bitmap by remember(videos) { mutableStateOf<Bitmap?>(null) }
     LaunchedEffect(videos) {
-        for (v in videos) {
-            val b = loader.loadThumbnail(v.uri)
-            if (b != null) {
-                bitmap = b
-                break
+        if (videos.isNotEmpty()) {
+            for (v in videos.take(4)) {
+                val b = loader.loadThumbnail(v.uri)
+                if (b != null) {
+                    bitmap = b
+                    break
+                }
             }
         }
     }
     Box(
         modifier = modifier
-            .background(ExcavPalette.SurfaceCardHighlight),
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        Color(0xFF2B3242),
+                        Color(0xFF1B202B)
+                    )
+                )
+            ),
         contentAlignment = Alignment.Center
     ) {
         bitmap?.let {
@@ -512,7 +523,7 @@ fun GroupThumbnail(videos: List<Video>, modifier: Modifier = Modifier) {
         } ?: Icon(
             imageVector = Icons.Default.Folder,
             contentDescription = null,
-            tint = ExcavPalette.Yellow.copy(alpha = 0.6f),
+            tint = Color(0xFFFFC44D).copy(alpha = 0.5f),
             modifier = Modifier.size(36.dp)
         )
     }
@@ -529,15 +540,15 @@ fun GroupCard(
 ) {
     val totalSize = videos.sumOf { it.sizeBytes }
     val totalCount = videos.size
-    val cardShape = RoundedCornerShape(28.dp)
+    val cardShape = RoundedCornerShape(32.dp)
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
             .clip(cardShape)
-            .border(1.dp, Color(0xFF343B45), cardShape)
+            .border(1.dp, Color(0xFF282F3B), cardShape)
             .clickable(onClick = onClick),
-        color = Color(0xFF191D23)
+        color = Color(0xFF13171F)
     ) {
         Column(
             modifier = Modifier.fillMaxWidth()
@@ -547,32 +558,48 @@ fun GroupCard(
                     .fillMaxWidth()
                     .padding(bottom = 12.dp)
             ) {
-                GroupThumbnail(
-                    videos = videos,
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .aspectRatio(1.38f)
-                        .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 16.dp, bottomEnd = 16.dp))
-                )
+                        .aspectRatio(1.30f)
+                        .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp, bottomStart = 24.dp, bottomEnd = 24.dp))
+                ) {
+                    GroupThumbnail(
+                        videos = videos,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(
+                                        Color.Transparent,
+                                        Color.Transparent,
+                                        Color(0x8013171F)
+                                    )
+                                )
+                            )
+                    )
+                }
 
-                // Overlapping Folder Pill Badge (CircleShape / True Pill, Haze Blur, No Border)
+                // Overlapping Folder Pill Badge (Frosted glass pill circular on one side)
+                val badgeShape = RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp, topEnd = 20.dp, bottomEnd = 20.dp)
                 Row(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .padding(start = 12.dp)
                         .offset(y = 12.dp)
-                        .clip(CircleShape)
-                        .hazeEffect(
-                            state = hazeState,
-                            style = CupertinoMaterials.ultraThin(containerColor = Color(0x991E2430))
-                        )
-                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                        .clip(badgeShape)
+                        .background(Color(0xBF19202C))
+                        .border(0.6.dp, Color.White.copy(alpha = 0.15f), badgeShape)
+                        .padding(start = 8.dp, end = 12.dp, top = 5.dp, bottom = 5.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
                         imageVector = Icons.Default.Folder,
                         contentDescription = null,
-                        tint = Color(0xFFFFC44D),
+                        tint = Color(0xFFFFC246),
                         modifier = Modifier.size(13.dp)
                     )
                     Spacer(Modifier.width(5.dp))
@@ -591,7 +618,7 @@ fun GroupCard(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 10.dp),
+                    .padding(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 14.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
@@ -601,14 +628,14 @@ fun GroupCard(
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.titleMedium.copy(
-                        fontSize = 14.sp,
+                        fontSize = 14.5.sp,
                         fontWeight = FontWeight.Bold
                     )
                 )
-                Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.height(3.dp))
                 Text(
                     text = formatFileSize(totalSize),
-                    color = Color(0xFF9AA3B2),
+                    color = Color(0xFF8E97A6),
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.bodySmall.copy(
                         fontSize = 12.sp,
@@ -733,52 +760,130 @@ fun ContinueWatchingRowCard(
     }
 }
 
+@OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
-fun FolderCard(folder: Folder, onClick: () -> Unit) {
+fun FolderCard(
+    folder: Folder,
+    videos: List<Video> = emptyList(),
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    hazeState: HazeState = LocalHazeState.current
+) {
+    val totalSize = if (folder.totalSizeBytes > 0) folder.totalSizeBytes else videos.sumOf { it.sizeBytes }
+    val totalCount = if (folder.videoCount > 0) folder.videoCount else videos.size
+    val cardShape = RoundedCornerShape(32.dp)
+
     Surface(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .clip(ExcavShapes.Card)
-            .border(1.dp, ExcavPalette.Line, ExcavShapes.Card)
+            .clip(cardShape)
+            .border(1.dp, Color(0xFF282F3B), cardShape)
             .clickable(onClick = onClick),
-        color = ExcavPalette.SurfaceCard
+        color = Color(0xFF13171F)
     ) {
-        Column(Modifier.padding(14.dp)) {
+        Column(
+            modifier = Modifier.fillMaxWidth()
+        ) {
             Box(
                 modifier = Modifier
-                    .size(46.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(ExcavPalette.Yellow.copy(alpha = 0.14f))
-                    .border(1.dp, ExcavPalette.Yellow.copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Folder,
-                    contentDescription = stringResource(R.string.cd_folder),
-                    tint = ExcavPalette.Yellow,
-                    modifier = Modifier.size(26.dp)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1.30f)
+                        .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp, bottomStart = 24.dp, bottomEnd = 24.dp))
+                ) {
+                    GroupThumbnail(
+                        videos = videos,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(
+                                        Color.Transparent,
+                                        Color.Transparent,
+                                        Color(0x8013171F)
+                                    )
+                                )
+                            )
+                    )
+                }
+
+                // Overlapping Folder Pill Badge (Frosted glass pill circular on one side)
+                val badgeShape = RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp, topEnd = 20.dp, bottomEnd = 20.dp)
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(start = 12.dp)
+                        .offset(y = 12.dp)
+                        .clip(badgeShape)
+                        .background(Color(0xBF19202C))
+                        .border(0.6.dp, Color.White.copy(alpha = 0.15f), badgeShape)
+                        .padding(start = 8.dp, end = 12.dp, top = 5.dp, bottom = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Folder,
+                        contentDescription = null,
+                        tint = Color(0xFFFFC246),
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(Modifier.width(5.dp))
+                    Text(
+                        text = "$totalCount ${if (totalCount == 1) "Video" else "Videos"}",
+                        color = Color(0xFFF5F7FA),
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    )
+                }
+            }
+
+            // Centered Title and Size
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 14.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = folder.name,
+                    color = Color(0xFFF5F7FA),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontSize = 14.5.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                )
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    text = formatFileSize(totalSize),
+                    color = Color(0xFF8E97A6),
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Normal
+                    )
                 )
             }
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = folder.name,
-                color = ExcavPalette.Text,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-            )
-            Spacer(Modifier.height(3.dp))
-            Text(
-                text = "${folder.videoCount} ${if (folder.videoCount == 1) stringResource(R.string.video) else stringResource(R.string.videos)} • ${formatFileSize(folder.totalSizeBytes)}",
-                color = ExcavPalette.TextMuted,
-                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp)
-            )
         }
     }
 }
 
 @Composable
-fun FolderRow(folder: Folder, onClick: () -> Unit) {
+fun FolderRow(
+    folder: Folder,
+    videos: List<Video> = emptyList(),
+    onClick: () -> Unit
+) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -794,16 +899,12 @@ fun FolderRow(folder: Folder, onClick: () -> Unit) {
             Box(
                 modifier = Modifier
                     .size(52.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(ExcavPalette.Yellow.copy(alpha = 0.12f))
-                    .border(1.dp, ExcavPalette.Yellow.copy(alpha = 0.25f), RoundedCornerShape(12.dp)),
+                    .clip(RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Default.Folder,
-                    contentDescription = stringResource(R.string.cd_folder),
-                    tint = ExcavPalette.Yellow,
-                    modifier = Modifier.size(26.dp)
+                GroupThumbnail(
+                    videos = videos,
+                    modifier = Modifier.fillMaxSize()
                 )
             }
             Spacer(Modifier.width(14.dp))
@@ -816,10 +917,12 @@ fun FolderRow(folder: Folder, onClick: () -> Unit) {
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
                 )
                 Spacer(Modifier.height(3.dp))
+                val totalCount = if (folder.videoCount > 0) folder.videoCount else videos.size
+                val totalSize = if (folder.totalSizeBytes > 0) folder.totalSizeBytes else videos.sumOf { it.sizeBytes }
                 Text(
-                    text = "${folder.videoCount} ${if (folder.videoCount == 1) stringResource(R.string.video) else stringResource(R.string.videos)} • ${formatFileSize(folder.totalSizeBytes)}",
+                    text = "$totalCount ${if (totalCount == 1) stringResource(R.string.video) else stringResource(R.string.videos)} • ${formatFileSize(totalSize)}",
                     color = ExcavPalette.TextMuted,
-                    style = MaterialTheme.typography.bodyMedium
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp)
                 )
             }
         }
@@ -1269,6 +1372,7 @@ fun BreadcrumbBar(
     currentPath: String,
     onNavigateToPath: (String) -> Unit,
     onBack: () -> Unit,
+    isScrolled: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val normCurrent = remember(currentPath) {
@@ -1326,6 +1430,7 @@ fun BreadcrumbBar(
 
     ProgressiveHeaderContainer(
         modifier = modifier,
+        isScrolled = isScrolled,
         fadeHeight = 20.dp
     ) {
         Row(
@@ -1394,12 +1499,18 @@ fun VideoOptionsMenu(
     onDelete: () -> Unit,
     onRemoveFromContinueWatching: (() -> Unit)? = null
 ) {
+    val menuShape = RoundedCornerShape(14.dp)
     DropdownMenu(
         expanded = expanded,
         onDismissRequest = onDismiss,
         offset = DpOffset(x = 0.dp, y = 0.dp),
+        shape = menuShape,
+        containerColor = Color.Transparent,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        border = null,
         modifier = Modifier.darkUltraThinBlur(
-            shape = RoundedCornerShape(14.dp),
+            shape = menuShape,
             backgroundColor = Color(0xF2101216),
             strokeColor = Color.White.copy(alpha = 0.16f)
         )
@@ -1473,6 +1584,7 @@ fun VideoOptionsMenu(
 
 @Composable
 fun VideoPropertiesDialog(video: Video, onDismiss: () -> Unit) {
+    val hazeState = LocalHazeState.current
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -1483,7 +1595,7 @@ fun VideoPropertiesDialog(video: Video, onDismiss: () -> Unit) {
                 .wrapContentHeight()
                 .darkUltraThinBlur(
                     shape = RoundedCornerShape(22.dp),
-                    backgroundColor = Color(0xE6101216),
+                    backgroundColor = Color(0xF210131B),
                     strokeColor = Color.White.copy(alpha = 0.18f)
                 )
                 .padding(22.dp)
@@ -1560,6 +1672,7 @@ fun RenameVideoDialog(
     onRename: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val hazeState = LocalHazeState.current
     var name by remember(video.displayName) { mutableStateOf(video.displayName) }
 
     Dialog(
@@ -1572,7 +1685,7 @@ fun RenameVideoDialog(
                 .wrapContentHeight()
                 .darkUltraThinBlur(
                     shape = RoundedCornerShape(22.dp),
-                    backgroundColor = Color(0xE6101216),
+                    backgroundColor = Color(0xF210131B),
                     strokeColor = Color.White.copy(alpha = 0.18f)
                 )
                 .padding(22.dp)
@@ -1639,6 +1752,7 @@ fun DeleteConfirmDialog(
     onDelete: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val hazeState = LocalHazeState.current
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -1649,7 +1763,7 @@ fun DeleteConfirmDialog(
                 .wrapContentHeight()
                 .darkUltraThinBlur(
                     shape = RoundedCornerShape(22.dp),
-                    backgroundColor = Color(0xE6101216),
+                    backgroundColor = Color(0xF210131B),
                     strokeColor = Color.White.copy(alpha = 0.18f)
                 )
                 .padding(22.dp)
@@ -1725,6 +1839,7 @@ fun AddToPlaylistDialog(
     onCreatePlaylist: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val hazeState = LocalHazeState.current
     var isCreatingNew by remember { mutableStateOf(false) }
     var newPlaylistName by remember { mutableStateOf("") }
 
@@ -1738,7 +1853,7 @@ fun AddToPlaylistDialog(
                 .wrapContentHeight()
                 .darkUltraThinBlur(
                     shape = RoundedCornerShape(22.dp),
-                    backgroundColor = Color(0xE6101216),
+                    backgroundColor = Color(0xF210131B),
                     strokeColor = Color.White.copy(alpha = 0.18f)
                 )
                 .padding(22.dp)

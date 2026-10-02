@@ -43,6 +43,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import kotlinx.coroutines.delay
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -63,7 +64,10 @@ import com.excavplayer.ui.ExcavViewModel
 import com.excavplayer.ui.components.*
 import com.excavplayer.ui.theme.ExcavPalette
 import com.excavplayer.ui.theme.ExcavShapes
-import kotlinx.coroutines.delay
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
 
 private enum class PlayerSheet { SUBTITLES, AUDIO, SPEED, CHAPTERS }
 
@@ -229,7 +233,7 @@ fun PlayerScreen(
         state.chapters.find { currentPosition >= it.startTimeMs && currentPosition < it.endTimeMs }
     }
 
-    val isPip = activity?.isInPictureInPictureMode == true || state.isInPictureInPicture
+    val isPip = (activity?.isInPictureInPictureMode == true) || state.isInPictureInPicture
 
     if (isPip) {
         // Pure Video Surface in Picture-in-Picture mode with default android controls
@@ -747,15 +751,23 @@ fun PlayerScreen(
             }
         }
 
-        // Active Bottom Sheet
-        activeSheet?.let { sheetType ->
-            SheetContainer(
-                sheet = sheetType,
-                state = state,
-                vm = vm,
-                onDismiss = { activeSheet = null },
-                onPickSubtitle = onPickSubtitle
-            )
+        // Active Bottom Sheet with smooth entering and exiting animation
+        AnimatedVisibility(
+            visible = activeSheet != null,
+            enter = fadeIn(animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)) +
+                    scaleIn(initialScale = 0.92f, animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)),
+            exit = fadeOut(animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing)) +
+                   scaleOut(targetScale = 0.92f, animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing))
+        ) {
+            activeSheet?.let { sheetType ->
+                SheetContainer(
+                    sheet = sheetType,
+                    state = state,
+                    vm = vm,
+                    onDismiss = { activeSheet = null },
+                    onPickSubtitle = onPickSubtitle
+                )
+            }
         }
     }
 }
@@ -1149,8 +1161,8 @@ private fun SheetContainer(
                 )
                 .darkUltraThinBlur(
                     shape = RoundedCornerShape(22.dp),
-                    backgroundColor = Color(0xE80E121B),
-                    strokeColor = Color.White.copy(alpha = 0.18f)
+                    backgroundColor = Color(0xF20E121B),
+                    strokeColor = Color.White.copy(alpha = 0.20f)
                 )
         ) {
             Column(

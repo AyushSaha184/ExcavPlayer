@@ -34,6 +34,8 @@ fun UpdateDialog(
     onInstall: (File) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val hazeState = LocalHazeState.current
+
     when (updateState) {
         is UpdateState.UpdateAvailable -> {
             Dialog(
@@ -46,7 +48,7 @@ fun UpdateDialog(
                         .wrapContentHeight()
                         .darkUltraThinBlur(
                             shape = RoundedCornerShape(24.dp),
-                            backgroundColor = Color(0xE6101216),
+                            backgroundColor = Color(0xF210131B),
                             strokeColor = Color.White.copy(alpha = 0.18f)
                         )
                         .padding(22.dp)
@@ -192,7 +194,7 @@ fun UpdateDialog(
                         .wrapContentHeight()
                         .darkUltraThinBlur(
                             shape = RoundedCornerShape(24.dp),
-                            backgroundColor = Color(0xE6101216),
+                            backgroundColor = Color(0xF210131B),
                             strokeColor = Color.White.copy(alpha = 0.18f)
                         )
                         .padding(22.dp)

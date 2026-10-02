@@ -10,11 +10,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
@@ -72,7 +74,10 @@ fun HomeScreen(
     onCreatePlaylist: (String) -> Unit,
     onRenameVideo: (Video, String) -> Unit,
     onDeleteVideo: (Video) -> Unit,
-    onRemoveFromContinueWatching: (Video) -> Unit = {}
+    onRemoveFromContinueWatching: (Video) -> Unit = {},
+    gridState: LazyGridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState(),
+    onSearch: () -> Unit = {},
+    onRefresh: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     var hasStoragePermission by remember {
@@ -92,6 +97,9 @@ fun HomeScreen(
     }
 
     var selectedGroup by remember { mutableStateOf<VideoGroup?>(null) }
+    androidx.activity.compose.BackHandler(enabled = selectedGroup != null) {
+        selectedGroup = null
+    }
     var selectedVideoForMenu by remember { mutableStateOf<Video?>(null) }
     var propertiesVideo by remember { mutableStateOf<Video?>(null) }
     var renameVideoTarget by remember { mutableStateOf<Video?>(null) }
@@ -134,6 +142,12 @@ fun HomeScreen(
         val groupVideos = remember(group, videos) {
             videos.filter { it.folderPath == group.path || it.folderName == group.name }.ifEmpty { group.videos }
         }
+        val groupListState = androidx.compose.foundation.lazy.rememberLazyListState()
+        val isGroupScrolled by remember {
+            derivedStateOf {
+                groupListState.firstVisibleItemIndex > 0 || groupListState.firstVisibleItemScrollOffset > 10
+            }
+        }
 
         Box(modifier = Modifier.fillMaxSize()) {
             if (groupVideos.isEmpty()) {
@@ -150,6 +164,7 @@ fun HomeScreen(
                 }
             } else {
                 LazyColumn(
+                    state = groupListState,
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 64.dp, bottom = 90.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.fillMaxSize()
@@ -187,6 +202,7 @@ fun HomeScreen(
             // Floating Group Header with Glass Back Button
             ProgressiveHeaderContainer(
                 modifier = Modifier.align(Alignment.TopCenter),
+                isScrolled = isGroupScrolled,
                 fadeHeight = 20.dp
             ) {
                 Row(
@@ -225,13 +241,21 @@ fun HomeScreen(
         }
     } else {
         // Main Home View
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(160.dp),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 62.dp, bottom = 90.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.fillMaxSize()
-        ) {
+        val isHomeScrolled by remember {
+            derivedStateOf {
+                gridState.firstVisibleItemIndex > 0 || gridState.firstVisibleItemScrollOffset > 10
+            }
+        }
+
+        Box(modifier = Modifier.fillMaxSize()) {
+            LazyVerticalGrid(
+                state = gridState,
+                columns = GridCells.Adaptive(160.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 62.dp, bottom = 90.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
             // Storage Permission Warning Banner if permission is not granted
             if (!hasStoragePermission) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
@@ -413,7 +437,15 @@ fun HomeScreen(
                 Spacer(Modifier.height(80.dp))
             }
         }
+
+        BrandHeader(
+            onSearch = onSearch,
+            onRefresh = onRefresh,
+            isScrolled = isHomeScrolled,
+            modifier = Modifier.align(Alignment.TopCenter)
+        )
     }
+}
 
     // Modals & Dialogs
     propertiesVideo?.let { video ->

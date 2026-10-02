@@ -52,6 +52,13 @@ fun SettingsScreen(
     val settings by vm.userSettings.collectAsState()
     var activeDialog by rememberSaveable { mutableStateOf(SettingDialog.NONE) }
 
+    val scrollState = rememberScrollState()
+    val isScrolled by remember {
+        derivedStateOf {
+            scrollState.value > 10
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -60,7 +67,7 @@ fun SettingsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(horizontal = 16.dp)
                 .padding(top = 70.dp, bottom = 90.dp)
         ) {
@@ -273,6 +280,7 @@ fun SettingsScreen(
         // Top Floating Glass Header
         ProgressiveHeaderContainer(
             modifier = Modifier.align(Alignment.TopCenter),
+            isScrolled = isScrolled,
             fadeHeight = 20.dp
         ) {
             Row(
