@@ -63,6 +63,8 @@ fun SettingsScreen(
         }
     }
 
+    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -74,7 +76,7 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .verticalScroll(scrollState)
                 .padding(horizontal = 16.dp)
-                .padding(top = 70.dp, bottom = 90.dp)
+                .padding(top = statusBarTop + 64.dp, bottom = 90.dp)
         ) {
             // Section 1: Playback
             SettingsSectionHeader(title = "Playback")

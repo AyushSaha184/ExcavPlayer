@@ -165,23 +165,25 @@ fun FoldersScreen(
         navigateUp()
     }
 
-    AnimatedContent(
-        targetState = selectedFolder,
-        transitionSpec = {
-            fadeIn(animationSpec = tween(200, easing = FastOutSlowInEasing))
-                .togetherWith(fadeOut(animationSpec = tween(160, easing = FastOutSlowInEasing)))
-        },
-        label = "folderNavigationTransition",
-        modifier = Modifier.fillMaxSize()
-    ) { currentFolder ->
-        Box(modifier = Modifier.fillMaxSize()) {
+    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        AnimatedContent(
+            targetState = selectedFolder,
+            transitionSpec = {
+                fadeIn(animationSpec = tween(200, easing = FastOutSlowInEasing))
+                    .togetherWith(fadeOut(animationSpec = tween(160, easing = FastOutSlowInEasing)))
+            },
+            label = "folderNavigationTransition",
+            modifier = Modifier.fillMaxSize()
+        ) { currentFolder ->
             if (currentFolder == null) {
                 // Root View: Display all Library Folders with thumbnail and pill badges
                 val hazeState = LocalHazeState.current
                 LazyVerticalGrid(
                     state = gridState,
                     columns = GridCells.Adaptive(160.dp),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 62.dp, bottom = 90.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = statusBarTop + 64.dp, bottom = 90.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier
@@ -207,20 +209,13 @@ fun FoldersScreen(
                         Spacer(Modifier.height(40.dp))
                     }
                 }
-
-                BrandHeader(
-                    onSearch = onSearch,
-                    onRefresh = onRefresh,
-                    isScrolled = isScrolled,
-                    modifier = Modifier.align(Alignment.TopCenter)
-                )
             } else {
                 // Subfolder / Selected Folder View
                 val hazeState = LocalHazeState.current
                 LazyVerticalGrid(
                     state = gridState,
                     columns = GridCells.Adaptive(160.dp),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 62.dp, bottom = 90.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = statusBarTop + 64.dp, bottom = 90.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier
@@ -272,19 +267,19 @@ fun FoldersScreen(
                         Spacer(Modifier.height(40.dp))
                     }
                 }
-
-                // Top Floating Breadcrumb Bar
-                BreadcrumbBar(
-                    currentPath = normCurrent,
-                    onNavigateToPath = selectPath,
-                    onBack = navigateUp,
-                    isScrolled = isScrolled,
-                    onSearch = onSearch,
-                    onRefresh = onRefresh,
-                    modifier = Modifier.align(Alignment.TopCenter)
-                )
             }
         }
+
+        // Top Floating Location / Breadcrumb Bar
+        BreadcrumbBar(
+            currentPath = normCurrent,
+            onNavigateToPath = selectPath,
+            onBack = navigateUp,
+            isScrolled = isScrolled,
+            onSearch = onSearch,
+            onRefresh = onRefresh,
+            modifier = Modifier.align(Alignment.TopCenter)
+        )
     }
 
     // Modals & Dialogs

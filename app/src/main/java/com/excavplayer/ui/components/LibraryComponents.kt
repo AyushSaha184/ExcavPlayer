@@ -1460,11 +1460,27 @@ fun BreadcrumbBar(
                 .padding(horizontal = 16.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            GlassmorphicBackButton(
-                onClick = onBack,
-                enabled = canGoBack,
-                size = 36.dp
-            )
+            if (canGoBack) {
+                GlassmorphicBackButton(
+                    onClick = onBack,
+                    enabled = true,
+                    size = 36.dp
+                )
+            } else {
+                GlassmorphicItem(
+                    modifier = Modifier.size(36.dp),
+                    cornerRadius = 18
+                ) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Folder,
+                            contentDescription = stringResource(R.string.folders),
+                            tint = ExcavPalette.Blue,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
 
             Spacer(Modifier.width(10.dp))
 

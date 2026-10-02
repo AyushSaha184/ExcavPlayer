@@ -55,6 +55,8 @@ fun FavoritesScreen(
         }
     }
 
+    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
@@ -62,7 +64,7 @@ fun FavoritesScreen(
         LazyVerticalGrid(
             state = gridState,
             columns = GridCells.Adaptive(160.dp),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 62.dp, bottom = 90.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = statusBarTop + 64.dp, bottom = 90.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier

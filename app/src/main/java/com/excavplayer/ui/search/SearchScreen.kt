@@ -59,7 +59,7 @@ fun SearchScreen(
             contentPadding = PaddingValues(
                 start = 16.dp,
                 end = 16.dp,
-                top = statusBarTop + 84.dp,
+                top = statusBarTop + 64.dp,
                 bottom = 100.dp
             ),
             modifier = Modifier

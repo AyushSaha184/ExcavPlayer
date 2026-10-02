@@ -212,10 +212,11 @@ fun ProgressiveHeaderContainer(
             )
         }
 
-        // Header content with bottom padding for the gradient fade-out
+        // Header content with status bar insets and bottom padding for the gradient fade-out
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .statusBarsPadding()
                 .padding(bottom = fadeHeight)
         ) {
             content()
