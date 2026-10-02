@@ -69,6 +69,7 @@ class AppUpdateManager @Inject constructor(
         private const val TAG = "AppUpdateManager"
         private const val GITHUB_RELEASES_API = "https://api.github.com/repos/AyushSaha184/ExcavPlayer/releases/latest"
         const val GITHUB_REPO_URL = "https://github.com/AyushSaha184/ExcavPlayer"
+        private const val AUTO_CHECK_COOLDOWN_MS = 4 * 60 * 60 * 1000L // 4 hours
     }
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
@@ -76,7 +77,16 @@ class AppUpdateManager @Inject constructor(
     private val _updateState = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val updateState: StateFlow<UpdateState> = _updateState.asStateFlow()
 
+    private var lastCheckTimestamp = 0L
+    private var cachedRelease: GitHubRelease? = null
+
     suspend fun checkForUpdates(isManualCheck: Boolean = false): UpdateState = withContext(dispatchers.io) {
+        val now = System.currentTimeMillis()
+        if (!isManualCheck && (now - lastCheckTimestamp < AUTO_CHECK_COOLDOWN_MS) && _updateState.value != UpdateState.Idle) {
+            logger.d(TAG, "Skipping auto-update check (cached result is fresh)")
+            return@withContext _updateState.value
+        }
+
         logger.i(TAG, "Checking for updates at $GITHUB_RELEASES_API")
         _updateState.value = UpdateState.Checking
 
@@ -93,6 +103,8 @@ class AppUpdateManager @Inject constructor(
             if (connection.responseCode == HttpURLConnection.HTTP_OK) {
                 val responseBody = connection.inputStream.bufferedReader().use { it.readText() }
                 val release = json.decodeFromString<GitHubRelease>(responseBody)
+                lastCheckTimestamp = now
+                cachedRelease = release
 
                 val currentVersion = BuildConfig.VERSION_NAME.removePrefix("v").removePrefix("V").trim()
                 val remoteVersion = release.tagName.removePrefix("v").removePrefix("V").trim()

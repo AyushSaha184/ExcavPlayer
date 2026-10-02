@@ -149,6 +149,11 @@ class ExcavViewModel @Inject constructor(
         folder?.let { library.observeVideosInFolder(it.path) } ?: flowOf(emptyList())
     }
 
+    private var cachedVideosRef: List<Video>? = null
+    private var cachedFoldersRef: List<Folder>? = null
+    private var cachedGroups: List<VideoGroup> = emptyList()
+    private var cachedFolderMap: Map<String, List<Video>> = emptyMap()
+
     @Suppress("UNCHECKED_CAST")
     val libraryState: StateFlow<LibraryUiState> = combine(
         library.observeVideos(),
@@ -171,8 +176,20 @@ class ExcavViewModel @Inject constructor(
         val currentFolder = values[7] as Folder?
         val currentFolderVideos = values[8] as List<Video>
 
-        val groups = computeVideoGroups(videos, folders)
-        val folderMap = computeFolderVideosMap(videos)
+        val groups: List<VideoGroup>
+        val folderMap: Map<String, List<Video>>
+
+        if (videos === cachedVideosRef && folders === cachedFoldersRef) {
+            groups = cachedGroups
+            folderMap = cachedFolderMap
+        } else {
+            groups = computeVideoGroups(videos, folders)
+            folderMap = computeFolderVideosMap(videos)
+            cachedVideosRef = videos
+            cachedFoldersRef = folders
+            cachedGroups = groups
+            cachedFolderMap = folderMap
+        }
 
         LibraryUiState(
             videos = videos,
