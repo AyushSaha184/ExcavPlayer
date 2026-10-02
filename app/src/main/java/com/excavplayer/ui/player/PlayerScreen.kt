@@ -23,6 +23,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -31,6 +32,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -52,6 +54,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -153,6 +156,13 @@ fun PlayerScreen(
 
     var lastDoubleTapSeekTime by remember { mutableLongStateOf(0L) }
     var activeSurfaceView by remember { mutableStateOf<android.view.SurfaceView?>(null) }
+
+    // Subtle background blur when an option sheet is opened
+    val sheetBlurRadius by animateDpAsState(
+        targetValue = if (activeSheet != null) 6.dp else 0.dp,
+        animationSpec = tween(200, easing = FastOutSlowInEasing),
+        label = "sheetBlurRadius"
+    )
 
     // When returning to video player, reset background audio toggle state so button is OFF
     LaunchedEffect(Unit) {
@@ -702,51 +712,57 @@ fun PlayerScreen(
                 enter = fadeIn(),
                 exit = fadeOut()
             ) {
-                PlayerControlsOverlay(
-                    state = state,
-                    player = vm.player,
-                    onClose = {
-                        if (!keepAudioOnBackground && !state.isBackgroundAudio) {
-                            vm.player.stop()
-                        }
-                        onClose()
-                    },
-                    onOpenSheet = { activeSheet = it },
-                    onLock = { isLocked = true; vm.player.dispatch(PlayerCommand.SetScreenLocked(true)) },
-                    onPip = {
-                        activity?.let {
-                            pipHelper.enterPictureInPicture(it, state.currentVideo, state.playback.isPlaying)
-                        }
-                    },
-                    onCycleOrientation = cycleOrientation,
-                    orientationIndex = orientationIndex,
-                    onToggleBackgroundAudio = {
-                        if (state.isBackgroundAudio || keepAudioOnBackground) {
-                            keepAudioOnBackground = false
-                            vm.player.stopBackgroundPlay()
-                            vm.showMessage("Background audio disabled")
-                        } else {
-                            keepAudioOnBackground = true
-                            vm.player.startBackgroundPlay()
-                            vm.showMessage("Playing audio in background")
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .blur(sheetBlurRadius)
+                ) {
+                    PlayerControlsOverlay(
+                        state = state,
+                        player = vm.player,
+                        onClose = {
+                            if (!keepAudioOnBackground && !state.isBackgroundAudio) {
+                                vm.player.stop()
+                            }
                             onClose()
-                        }
-                    },
-                    isBackgroundAudioActive = state.isBackgroundAudio || keepAudioOnBackground,
-                    onToggleDialogueBoost = {
-                        val next = !settings.dialogueBoostEnabled
-                        vm.setDialogueBoost(next)
-                        gestureHudProgress = 0f
-                        gestureHudText = if (next) "Dialogue Boost: On" else "Dialogue Boost: Off"
-                        gestureHudIcon = Icons.Default.RecordVoiceOver
-                    },
-                    isDialogueBoostActive = settings.dialogueBoostEnabled,
-                    onCycleResizeMode = cycleResizeMode,
-                    hasPrevious = queue.currentIndex > 0,
-                    onPlayPrevious = { vm.playQueueItem(queue.currentIndex - 1) },
-                    hasNext = queue.currentIndex in 0 until (queue.items.size - 1),
-                    onPlayNext = { vm.playQueueItem(queue.currentIndex + 1) }
-                )
+                        },
+                        onOpenSheet = { activeSheet = it },
+                        onLock = { isLocked = true; vm.player.dispatch(PlayerCommand.SetScreenLocked(true)) },
+                        onPip = {
+                            activity?.let {
+                                pipHelper.enterPictureInPicture(it, state.currentVideo, state.playback.isPlaying)
+                            }
+                        },
+                        onCycleOrientation = cycleOrientation,
+                        orientationIndex = orientationIndex,
+                        onToggleBackgroundAudio = {
+                            if (state.isBackgroundAudio || keepAudioOnBackground) {
+                                keepAudioOnBackground = false
+                                vm.player.stopBackgroundPlay()
+                                vm.showMessage("Background audio disabled")
+                            } else {
+                                keepAudioOnBackground = true
+                                vm.player.startBackgroundPlay()
+                                vm.showMessage("Playing audio in background")
+                                onClose()
+                            }
+                        },
+                        isBackgroundAudioActive = state.isBackgroundAudio || keepAudioOnBackground,
+                        onToggleDialogueBoost = {
+                            val next = !settings.dialogueBoostEnabled
+                            vm.setDialogueBoost(next)
+                            gestureHudProgress = 0f
+                            gestureHudText = if (next) "Dialogue Boost: On" else "Dialogue Boost: Off"
+                            gestureHudIcon = Icons.Default.RecordVoiceOver
+                        },
+                        isDialogueBoostActive = settings.dialogueBoostEnabled,
+                        onCycleResizeMode = cycleResizeMode,
+                        hasPrevious = queue.currentIndex > 0,
+                        onPlayPrevious = { vm.playQueueItem(queue.currentIndex - 1) },
+                        hasNext = queue.currentIndex in 0 until (queue.items.size - 1),
+                        onPlayNext = { vm.playQueueItem(queue.currentIndex + 1) }
+                    )
+                }
             }
         }
 
@@ -795,7 +811,7 @@ private fun PlayerControlsOverlay(
     hasNext: Boolean,
     onPlayNext: () -> Unit
 ) {
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .windowInsetsPadding(WindowInsets.safeDrawing)
@@ -805,7 +821,8 @@ private fun PlayerControlsOverlay(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 4.dp),
+                .padding(top = 4.dp)
+                .align(Alignment.TopCenter),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(
@@ -890,20 +907,28 @@ private fun PlayerControlsOverlay(
             }
         }
 
-        Spacer(Modifier.weight(1f))
+        // Center Transport Controls Pill - Vertically and Horizontally Centered in Screen
+        val playPauseScale by animateFloatAsState(
+            targetValue = if (state.playback.isPlaying) 1f else 0.92f,
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioMediumBouncy,
+                stiffness = Spring.StiffnessMediumLow
+            ),
+            label = "playPauseScale"
+        )
 
-        // Center Transport Controls - Frosted Glass Previous, Play/Pause, Next Buttons
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
+            modifier = Modifier
+                .align(Alignment.Center)
+                .playerGlass(RoundedCornerShape(36.dp))
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(
                 enabled = hasPrevious,
                 onClick = onPlayPrevious,
-                modifier = Modifier
-                    .size(50.dp)
-                    .playerGlass(CircleShape)
+                modifier = Modifier.size(48.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.SkipPrevious,
@@ -913,28 +938,16 @@ private fun PlayerControlsOverlay(
                 )
             }
 
-            Spacer(Modifier.width(28.dp))
-
-            val playPauseScale by animateFloatAsState(
-                targetValue = if (state.playback.isPlaying) 1f else 0.92f,
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioMediumBouncy,
-                    stiffness = Spring.StiffnessMediumLow
-                ),
-                label = "playPauseScale"
-            )
-
             IconButton(
                 onClick = {
                     if (state.playback.isPlaying) player.pause() else player.resume()
                 },
                 modifier = Modifier
-                    .size(64.dp)
+                    .size(56.dp)
                     .graphicsLayer {
                         scaleX = playPauseScale
                         scaleY = playPauseScale
                     }
-                    .playerGlass(CircleShape)
             ) {
                 Icon(
                     imageVector = if (state.playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
@@ -944,14 +957,10 @@ private fun PlayerControlsOverlay(
                 )
             }
 
-            Spacer(Modifier.width(28.dp))
-
             IconButton(
                 enabled = hasNext,
                 onClick = onPlayNext,
-                modifier = Modifier
-                    .size(50.dp)
-                    .playerGlass(CircleShape)
+                modifier = Modifier.size(48.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.SkipNext,
@@ -962,16 +971,20 @@ private fun PlayerControlsOverlay(
             }
         }
 
-        Spacer(Modifier.weight(1f))
+        // Bottom Section: Progress Bar / Timeline and Bottom Floating Glass Pills
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.BottomCenter)
+        ) {
+            // Bottom Progress Bar and Clean Action Buttons (isolated timeline scrubber)
+            PlayerTimelineSection(
+                positionMs = state.playback.currentPositionMs,
+                durationMs = state.playback.durationMs,
+                onSeek = { player.seekTo(it) }
+            )
 
-        // Bottom Progress Bar and Clean Action Buttons (isolated timeline scrubber)
-        PlayerTimelineSection(
-            positionMs = state.playback.currentPositionMs,
-            durationMs = state.playback.durationMs,
-            onSeek = { player.seekTo(it) }
-        )
-
-        Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(14.dp))
 
             // Bottom Floating Glass Pills:
             // Left: Screen Lock, Picture-in-Picture, Screen Orientation, Chapters
@@ -1037,6 +1050,7 @@ private fun PlayerControlsOverlay(
                                 1 -> Icons.Default.StayCurrentLandscape
                                 2 -> Icons.Default.StayCurrentPortrait
                                 3 -> Icons.Default.StayCurrentLandscape
+                                4 -> Icons.Default.ScreenRotation
                                 else -> Icons.Default.ScreenRotation
                             }
                             val desc = when (targetIndex) {
@@ -1125,6 +1139,7 @@ private fun PlayerControlsOverlay(
             }
         }
     }
+}
 
 // -----------------------------------------------------------------------------------------
 // Bottom Sheet Containers
@@ -1158,15 +1173,22 @@ private fun SheetContainer(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.60f))
-            .clickable(onClick = onDismiss)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onDismiss
+            )
             .windowInsetsPadding(WindowInsets.safeDrawing)
             .padding(containerPadding),
         contentAlignment = alignment
     ) {
         Box(
             modifier = Modifier
-                .clickable(enabled = false) {}
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    enabled = false
+                ) {}
                 .widthIn(
                     min = 280.dp,
                     max = when (sheet) {

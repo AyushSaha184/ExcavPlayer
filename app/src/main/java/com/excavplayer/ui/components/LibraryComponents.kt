@@ -330,7 +330,7 @@ enum class MainTab(val label: String, val icon: ImageVector) {
     HOME("Home", Icons.Default.Home),
     FOLDERS("Folders", Icons.Default.Folder),
     PLAYLISTS("Playlists", Icons.AutoMirrored.Filled.QueueMusic),
-    FAVORITES("Favorites", Icons.Default.Favorite),
+    FAVORITES("Favs", Icons.Default.Favorite),
     SETTINGS("Settings", Icons.Default.Settings)
 }
 
@@ -1392,7 +1392,9 @@ fun BreadcrumbBar(
     onNavigateToPath: (String) -> Unit,
     onBack: () -> Unit,
     isScrolled: Boolean = true,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onSearch: (() -> Unit)? = null,
+    onRefresh: (() -> Unit)? = null
 ) {
     val normCurrent = remember(currentPath) {
         val trimmed = currentPath.trim().trimEnd('/')
@@ -1500,6 +1502,14 @@ fun BreadcrumbBar(
                         )
                     }
                 }
+            }
+
+            if (onSearch != null) {
+                Spacer(Modifier.width(8.dp))
+                GlassmorphicHeaderActions(
+                    onSearch = onSearch,
+                    onRefresh = onRefresh
+                )
             }
         }
     }

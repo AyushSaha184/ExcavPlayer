@@ -279,6 +279,8 @@ fun FoldersScreen(
                     onNavigateToPath = selectPath,
                     onBack = navigateUp,
                     isScrolled = isScrolled,
+                    onSearch = onSearch,
+                    onRefresh = onRefresh,
                     modifier = Modifier.align(Alignment.TopCenter)
                 )
             }
