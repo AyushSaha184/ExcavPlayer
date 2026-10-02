@@ -7,6 +7,9 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -186,10 +189,21 @@ fun PlayerScreen(
         activity?.requestedOrientation = initialOrientation
     }
 
-    // Reset orientation & surface frame rate on disposal
-    DisposableEffect(Unit) {
+    // Hide system status & navigation bars for immersive video playback, restore on disposal
+    DisposableEffect(activity) {
+        val window = activity?.window
+        val insetsController = if (window != null) {
+            WindowCompat.getInsetsController(window, window.decorView)
+        } else null
+
+        insetsController?.apply {
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            hide(WindowInsetsCompat.Type.systemBars())
+        }
+
         onDispose {
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            insetsController?.show(WindowInsetsCompat.Type.systemBars())
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 try {
                     val surf = activeSurfaceView?.holder?.surface
@@ -707,10 +721,16 @@ fun PlayerScreen(
                     onCycleOrientation = cycleOrientation,
                     orientationIndex = orientationIndex,
                     onToggleBackgroundAudio = {
-                        keepAudioOnBackground = true
-                        vm.player.startBackgroundPlay()
-                        vm.showMessage("Playing audio in background")
-                        onClose()
+                        if (state.isBackgroundAudio || keepAudioOnBackground) {
+                            keepAudioOnBackground = false
+                            vm.player.stopBackgroundPlay()
+                            vm.showMessage("Background audio disabled")
+                        } else {
+                            keepAudioOnBackground = true
+                            vm.player.startBackgroundPlay()
+                            vm.showMessage("Playing audio in background")
+                            onClose()
+                        }
                     },
                     isBackgroundAudioActive = state.isBackgroundAudio || keepAudioOnBackground,
                     onToggleDialogueBoost = {

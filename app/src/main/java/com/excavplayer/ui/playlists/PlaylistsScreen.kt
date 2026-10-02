@@ -1,6 +1,12 @@
 package com.excavplayer.ui.playlists
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -82,34 +88,43 @@ fun PlaylistsScreen(
         selectedPlaylist = null
     }
 
-    if (selectedPlaylist != null) {
-        val playlist = selectedPlaylist!!
-        val playlistItems by observePlaylistItems(playlist.id).collectAsStateWithLifecycle(initialValue = emptyList())
-        val videos = remember(playlistItems) { playlistItems.mapNotNull { it.video } }
+    AnimatedContent(
+        targetState = selectedPlaylist,
+        transitionSpec = {
+            fadeIn(animationSpec = tween(200, easing = FastOutSlowInEasing))
+                .togetherWith(fadeOut(animationSpec = tween(160, easing = FastOutSlowInEasing)))
+        },
+        label = "playlistNavigationTransition",
+        modifier = Modifier.fillMaxSize()
+    ) { currentPlaylist ->
+        if (currentPlaylist != null) {
+            val playlist = currentPlaylist
+            val playlistItems by observePlaylistItems(playlist.id).collectAsStateWithLifecycle(initialValue = emptyList())
+            val videos = remember(playlistItems) { playlistItems.mapNotNull { it.video } }
 
-        val detailListState = androidx.compose.foundation.lazy.rememberLazyListState()
-        val isDetailScrolled by remember {
-            derivedStateOf {
-                detailListState.firstVisibleItemIndex > 0 || detailListState.firstVisibleItemScrollOffset > 10
+            val detailListState = androidx.compose.foundation.lazy.rememberLazyListState()
+            val isDetailScrolled by remember {
+                derivedStateOf {
+                    detailListState.firstVisibleItemIndex > 0 || detailListState.firstVisibleItemScrollOffset > 10
+                }
             }
-        }
 
-        Box(modifier = Modifier.fillMaxSize()) {
-            val hazeState = LocalHazeState.current
-            LazyColumn(
-                state = detailListState,
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 64.dp, bottom = 90.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier
-                    .fillMaxSize()
-            ) {
-                items(videos, key = { it.id }, contentType = { "video_row" }) { video ->
-                    ListVideoRow(
-                        video = video,
-                        onClick = { onPlay(video, videos) },
-                        modifier = Modifier.animateItem(),
-                        onMoreClick = { selectedVideoForMenu = video },
-                        dropdownMenu = {
+            Box(modifier = Modifier.fillMaxSize()) {
+                val hazeState = LocalHazeState.current
+                LazyColumn(
+                    state = detailListState,
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 64.dp, bottom = 90.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier
+                        .fillMaxSize()
+                ) {
+                    items(videos, key = { it.id }, contentType = { "video_row" }) { video ->
+                        ListVideoRow(
+                            video = video,
+                            onClick = { onPlay(video, videos) },
+                            modifier = Modifier.animateItem(),
+                            onMoreClick = { selectedVideoForMenu = video },
+                            dropdownMenu = {
                                 val menuShape = RoundedCornerShape(14.dp)
                                 DropdownMenu(
                                     expanded = selectedVideoForMenu?.id == video.id,
@@ -177,169 +192,172 @@ fun PlaylistsScreen(
                     }
                 }
 
-            // Floating Header with Back Button and Title
-            ProgressiveHeaderContainer(
-                modifier = Modifier.align(Alignment.TopCenter),
-                isScrolled = isDetailScrolled,
-                fadeHeight = 20.dp
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                // Floating Header with Back Button and Title
+                ProgressiveHeaderContainer(
+                    modifier = Modifier.align(Alignment.TopCenter),
+                    isScrolled = isDetailScrolled,
+                    fadeHeight = 20.dp
                 ) {
-                    GlassmorphicBackButton(
-                        onClick = { selectedPlaylist = null },
-                        size = 38.dp
-                    )
-
-                    Spacer(Modifier.width(12.dp))
-
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            text = playlist.title,
-                            color = ExcavPalette.Text,
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        GlassmorphicBackButton(
+                            onClick = { selectedPlaylist = null },
+                            size = 38.dp
                         )
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            text = "${videos.size} ${if (videos.size == 1) "video" else "videos"}",
-                            color = ExcavPalette.TextMuted,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
 
-                    if (videos.isNotEmpty()) {
-                        Button(
-                            onClick = { onPlay(videos.first(), videos) },
-                            colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
-                            shape = ExcavShapes.Pill,
-                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.PlayArrow,
-                                contentDescription = null,
-                                tint = ExcavPalette.Ink,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text("Play", color = ExcavPalette.Ink, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-        }
-    } else {
-        val rootGridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
-        val isRootScrolled by remember {
-            derivedStateOf {
-                rootGridState.firstVisibleItemIndex > 0 || rootGridState.firstVisibleItemScrollOffset > 10
-            }
-        }
+                        Spacer(Modifier.width(12.dp))
 
-        Box(modifier = Modifier.fillMaxSize()) {
-            val hazeState = LocalHazeState.current
-            LazyVerticalGrid(
-                state = rootGridState,
-                columns = GridCells.Adaptive(160.dp),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 62.dp, bottom = 90.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier
-                    .fillMaxSize()
-            ) {
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    SectionTitle(stringResource(R.string.playlists)) {
-                        Button(
-                            onClick = { isCreateDialogOpen = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
-                            shape = ExcavShapes.Pill,
-                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = stringResource(R.string.cd_add_playlist),
-                                tint = ExcavPalette.Ink,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(Modifier.width(6.dp))
+                        Column(Modifier.weight(1f)) {
                             Text(
-                                text = "New",
-                                color = ExcavPalette.Ink,
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                                text = playlist.title,
+                                color = ExcavPalette.Text,
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = "${videos.size} ${if (videos.size == 1) "video" else "videos"}",
+                                color = ExcavPalette.TextMuted,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+
+                        if (videos.isNotEmpty()) {
+                            Button(
+                                onClick = { onPlay(videos.first(), videos) },
+                                colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
+                                shape = ExcavShapes.Pill,
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = null,
+                                    tint = ExcavPalette.Ink,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text("Play", color = ExcavPalette.Ink, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            val rootGridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+            val isRootScrolled by remember {
+                derivedStateOf {
+                    rootGridState.firstVisibleItemIndex > 0 || rootGridState.firstVisibleItemScrollOffset > 10
+                }
+            }
+
+            Box(modifier = Modifier.fillMaxSize()) {
+                val hazeState = LocalHazeState.current
+                LazyVerticalGrid(
+                    state = rootGridState,
+                    columns = GridCells.Adaptive(160.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 62.dp, bottom = 90.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier
+                        .fillMaxSize()
+                ) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        SectionTitle(stringResource(R.string.playlists)) {
+                            Button(
+                                onClick = { isCreateDialogOpen = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
+                                shape = ExcavShapes.Pill,
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = stringResource(R.string.cd_add_playlist),
+                                    tint = ExcavPalette.Ink,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = "New",
+                                    color = ExcavPalette.Ink,
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                                )
+                            }
+                        }
+                    }
+
+                    if (playlists.isNotEmpty()) {
+                        gridItems(playlists, key = { "playlist_${it.id}" }, contentType = { "playlist_card" }) { playlist ->
+                            val items by observePlaylistItems(playlist.id).collectAsStateWithLifecycle(initialValue = emptyList())
+                            val playlistVideos = remember(items) { items.mapNotNull { it.video } }
+                            PlaylistGridCard(
+                                playlist = playlist,
+                                videos = playlistVideos,
+                                onOverflow = { menuForPlaylistId = playlist.id },
+                                onClick = { selectedPlaylist = playlist },
+                                modifier = Modifier.animateItem(),
+                                dropdownMenu = {
+                                    val menuShape = RoundedCornerShape(14.dp)
+                                    DropdownMenu(
+                                        expanded = menuForPlaylistId == playlist.id,
+                                        onDismissRequest = { menuForPlaylistId = null },
+                                        shape = menuShape,
+                                        containerColor = Color.Transparent,
+                                        tonalElevation = 0.dp,
+                                        shadowElevation = 0.dp,
+                                        border = null,
+                                        modifier = Modifier.darkUltraThinBlur(
+                                            shape = menuShape,
+                                            backgroundColor = Color(0xF2101216),
+                                            strokeColor = Color.White.copy(alpha = 0.16f)
+                                        )
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(
+                                                    text = stringResource(R.string.rename),
+                                                    color = ExcavPalette.Text,
+                                                    textAlign = TextAlign.Center,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+                                            },
+                                            onClick = {
+                                                renamePlaylist = playlist
+                                                menuForPlaylistId = null
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(
+                                                    text = stringResource(R.string.delete),
+                                                    color = ExcavPalette.Error,
+                                                    textAlign = TextAlign.Center,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+                                            },
+                                            onClick = {
+                                                onDelete(playlist.id)
+                                                menuForPlaylistId = null
+                                            }
+                                        )
+                                    }
+                                }
                             )
                         }
                     }
                 }
 
-                if (playlists.isNotEmpty()) {
-                    gridItems(playlists, key = { "playlist_${it.id}" }, contentType = { "playlist_card" }) { playlist ->
-                        PlaylistGridCard(
-                            playlist = playlist,
-                            videos = emptyList(),
-                            onOverflow = { menuForPlaylistId = playlist.id },
-                            onClick = { selectedPlaylist = playlist },
-                            modifier = Modifier.animateItem(),
-                            dropdownMenu = {
-                                val menuShape = RoundedCornerShape(14.dp)
-                                DropdownMenu(
-                                    expanded = menuForPlaylistId == playlist.id,
-                                    onDismissRequest = { menuForPlaylistId = null },
-                                    shape = menuShape,
-                                    containerColor = Color.Transparent,
-                                    tonalElevation = 0.dp,
-                                    shadowElevation = 0.dp,
-                                    border = null,
-                                    modifier = Modifier.darkUltraThinBlur(
-                                        shape = menuShape,
-                                        backgroundColor = Color(0xF2101216),
-                                        strokeColor = Color.White.copy(alpha = 0.16f)
-                                    )
-                                ) {
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                text = stringResource(R.string.rename),
-                                                color = ExcavPalette.Text,
-                                                textAlign = TextAlign.Center,
-                                                modifier = Modifier.fillMaxWidth()
-                                            )
-                                        },
-                                        onClick = {
-                                            renamePlaylist = playlist
-                                            menuForPlaylistId = null
-                                        }
-                                    )
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                text = stringResource(R.string.delete),
-                                                color = ExcavPalette.Error,
-                                                textAlign = TextAlign.Center,
-                                                modifier = Modifier.fillMaxWidth()
-                                            )
-                                        },
-                                        onClick = {
-                                            onDelete(playlist.id)
-                                            menuForPlaylistId = null
-                                        }
-                                    )
-                                }
-                            }
-                        )
-                    }
-                }
+                BrandHeader(
+                    onSearch = onSearch,
+                    onRefresh = onRefresh,
+                    isScrolled = isRootScrolled,
+                    modifier = Modifier.align(Alignment.TopCenter)
+                )
             }
-
-            BrandHeader(
-                onSearch = onSearch,
-                onRefresh = onRefresh,
-                isScrolled = isRootScrolled,
-                modifier = Modifier.align(Alignment.TopCenter)
-            )
         }
     }
 

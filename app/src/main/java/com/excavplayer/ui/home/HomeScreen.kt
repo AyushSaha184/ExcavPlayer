@@ -113,13 +113,8 @@ fun HomeScreen(
     AnimatedContent(
         targetState = selectedGroup,
         transitionSpec = {
-            if (targetState != null) {
-                (slideInHorizontally(initialOffsetX = { (it * 0.18f).toInt() }, animationSpec = tween(220, easing = FastOutSlowInEasing)) + fadeIn(tween(180)))
-                    .togetherWith(slideOutHorizontally(targetOffsetX = { -(it * 0.15f).toInt() }, animationSpec = tween(180, easing = FastOutSlowInEasing)) + fadeOut(tween(140)))
-            } else {
-                (slideInHorizontally(initialOffsetX = { -(it * 0.15f).toInt() }, animationSpec = tween(200, easing = FastOutSlowInEasing)) + fadeIn(tween(160)))
-                    .togetherWith(slideOutHorizontally(targetOffsetX = { (it * 0.18f).toInt() }, animationSpec = tween(180, easing = FastOutSlowInEasing)) + fadeOut(tween(140)))
-            }
+            fadeIn(animationSpec = tween(200, easing = FastOutSlowInEasing))
+                .togetherWith(fadeOut(animationSpec = tween(160, easing = FastOutSlowInEasing)))
         },
         label = "homeGroupNavigationTransition",
         modifier = Modifier.fillMaxSize()

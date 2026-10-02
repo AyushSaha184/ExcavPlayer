@@ -492,7 +492,7 @@ class PlayerManager @Inject constructor(
         _state.update { it.copy(isBackgroundAudio = true) }
         try {
             val intent = Intent(context, PlaybackService::class.java)
-            androidx.core.content.ContextCompat.startForegroundService(context, intent)
+            context.startService(intent)
         } catch (e: Exception) {
             logger.w(TAG, "Failed to start PlaybackService: ${e.message}")
         }
@@ -513,10 +513,17 @@ class PlayerManager @Inject constructor(
         persistenceManager.stopPeriodicSave()
         releaseLoudnessEnhancer()
         releaseEqualizer()
+        val currentPlayState = _state.value.playback
+        val currentVid = _state.value.currentVideo
         playerScope.launch {
-            persistenceManager.saveImmediate(_state.value.playback, _state.value.currentVideo)
+            persistenceManager.saveImmediate(currentPlayState, currentVid)
         }
-        exoPlayer.stop()
+        try {
+            exoPlayer.stop()
+            exoPlayer.clearMediaItems()
+        } catch (e: Exception) {
+            logger.w(TAG, "Error stopping exoPlayer: ${e.message}")
+        }
         _state.update { it.copy(currentVideo = null, isBackgroundAudio = false) }
     }
 

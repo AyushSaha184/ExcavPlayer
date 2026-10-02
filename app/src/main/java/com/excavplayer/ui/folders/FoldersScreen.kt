@@ -26,6 +26,8 @@ import com.excavplayer.domain.model.Folder
 import com.excavplayer.domain.model.Playlist
 import com.excavplayer.domain.model.Video
 import com.excavplayer.ui.components.*
+import androidx.compose.ui.res.stringResource
+import com.excavplayer.R
 import dev.chrisbanes.haze.hazeSource
 
 @Composable
@@ -166,13 +168,8 @@ fun FoldersScreen(
     AnimatedContent(
         targetState = selectedFolder,
         transitionSpec = {
-            if (targetState != null) {
-                (slideInHorizontally(initialOffsetX = { (it * 0.18f).toInt() }, animationSpec = tween(220, easing = FastOutSlowInEasing)) + fadeIn(tween(180)))
-                    .togetherWith(slideOutHorizontally(targetOffsetX = { -(it * 0.15f).toInt() }, animationSpec = tween(180, easing = FastOutSlowInEasing)) + fadeOut(tween(140)))
-            } else {
-                (slideInHorizontally(initialOffsetX = { -(it * 0.15f).toInt() }, animationSpec = tween(200, easing = FastOutSlowInEasing)) + fadeIn(tween(160)))
-                    .togetherWith(slideOutHorizontally(targetOffsetX = { (it * 0.18f).toInt() }, animationSpec = tween(180, easing = FastOutSlowInEasing)) + fadeOut(tween(140)))
-            }
+            fadeIn(animationSpec = tween(200, easing = FastOutSlowInEasing))
+                .togetherWith(fadeOut(animationSpec = tween(160, easing = FastOutSlowInEasing)))
         },
         label = "folderNavigationTransition",
         modifier = Modifier.fillMaxSize()
@@ -189,7 +186,12 @@ fun FoldersScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier
                         .fillMaxSize()
+                        .hazeSource(state = hazeState)
                 ) {
+                    item(span = { GridItemSpan(maxLineSpan) }, contentType = "section_header") {
+                        SectionTitle(stringResource(R.string.folders))
+                    }
+
                     gridItems(folders, key = { "root_folder_${it.path}" }, contentType = { "folder_card" }) { folder ->
                         val normP = remember(folder.path) { normalizePath(folder.path) }
                         val folderVids = folderVideosMap[normP] ?: folderVideosMap[folder.name.lowercase()].orEmpty()
@@ -223,6 +225,7 @@ fun FoldersScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier
                         .fillMaxSize()
+                        .hazeSource(state = hazeState)
                 ) {
                     // Section 1: Child Subfolders (grid cards)
                     if (subfolders.isNotEmpty()) {

@@ -52,19 +52,42 @@ fun SearchScreen(
         }
 
         val hazeState = LocalHazeState.current
+        val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
         LazyColumn(
             state = searchListState,
             verticalArrangement = Arrangement.spacedBy(10.dp),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 74.dp, bottom = 90.dp),
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                end = 16.dp,
+                top = statusBarTop + 84.dp,
+                bottom = 100.dp
+            ),
             modifier = Modifier
                 .fillMaxSize()
+                .hazeSource(state = hazeState)
         ) {
-            items(results, key = { it.id }) { video ->
-                ListVideoRow(
-                    video = video,
-                    onClick = { onPlay(video) },
-                    modifier = Modifier.animateItem()
-                )
+            if (results.isEmpty() && query.isNotBlank()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 48.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        EmptyState(
+                            icon = Icons.Default.SearchOff,
+                            label = "No videos matching \"$query\""
+                        )
+                    }
+                }
+            } else {
+                items(results, key = { it.id }) { video ->
+                    ListVideoRow(
+                        video = video,
+                        onClick = { onPlay(video) },
+                        modifier = Modifier.animateItem()
+                    )
+                }
             }
         }
 
