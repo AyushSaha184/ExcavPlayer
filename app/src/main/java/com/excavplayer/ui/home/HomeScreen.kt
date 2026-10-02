@@ -57,17 +57,11 @@ import com.excavplayer.R
 import com.excavplayer.domain.model.Folder
 import com.excavplayer.domain.model.Playlist
 import com.excavplayer.domain.model.Video
+import com.excavplayer.ui.VideoGroup
 import com.excavplayer.ui.components.*
 import com.excavplayer.ui.theme.ExcavPalette
 import com.excavplayer.ui.theme.ExcavShapes
 import dev.chrisbanes.haze.hazeSource
-
-data class VideoGroup(
-    val id: String,
-    val name: String,
-    val path: String,
-    val videos: List<Video>
-)
 
 @Composable
 fun HomeScreen(
@@ -76,6 +70,7 @@ fun HomeScreen(
     videos: List<Video> = emptyList(),
     playlists: List<Playlist>,
     favorites: List<Video>,
+    groups: List<VideoGroup> = emptyList(),
     onPlay: (Video) -> Unit,
     onOpenFolder: (Folder) -> Unit,
     onToggleFavorite: (Video) -> Unit,
@@ -114,36 +109,6 @@ fun HomeScreen(
     var renameVideoTarget by remember { mutableStateOf<Video?>(null) }
     var deleteVideoTarget by remember { mutableStateOf<Video?>(null) }
     var playlistVideoTarget by remember { mutableStateOf<Video?>(null) }
-
-    // Accurate Grouping: pre-index videos for fast O(1) group lookup
-    val groups = remember(videos, folders) {
-        val videosByFolderPath = videos.groupBy { it.folderPath }
-        val videosByFolderName = videos.groupBy { it.folderName }
-        if (folders.isNotEmpty()) {
-            folders.mapNotNull { folder ->
-                val direct = videosByFolderPath[folder.path].orEmpty()
-                val byName = if (folder.name.isNotEmpty()) videosByFolderName[folder.name].orEmpty() else emptyList()
-                val combined = if (direct.isEmpty()) byName else if (byName.isEmpty()) direct else (direct + byName).distinctBy { it.id }
-                if (combined.isNotEmpty()) {
-                    VideoGroup(
-                        id = folder.path,
-                        name = folder.name,
-                        path = folder.path,
-                        videos = combined
-                    )
-                } else null
-            }
-        } else {
-            videos.groupBy { it.folderName.ifEmpty { "Videos" } }.map { (name, vids) ->
-                VideoGroup(
-                    id = name,
-                    name = name,
-                    path = vids.firstOrNull()?.folderPath.orEmpty(),
-                    videos = vids
-                )
-            }
-        }
-    }
 
     AnimatedContent(
         targetState = selectedGroup,

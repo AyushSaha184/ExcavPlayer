@@ -2462,10 +2462,16 @@ fun ExcavSleekSlider(
     }
 }
 
+val LocalThumbnailLoader = staticCompositionLocalOf<ThumbnailLoader?> { null }
+
 @Composable
-private fun rememberThumbnailLoader(): ThumbnailLoader {
+fun rememberThumbnailLoader(): ThumbnailLoader {
+    val local = LocalThumbnailLoader.current
+    if (local != null) return local
     val context = LocalContext.current
-    return remember { EntryPointAccessors.fromApplication(context.applicationContext, ThumbnailEntryPoint::class.java).thumbnailLoader() }
+    return remember(context.applicationContext) {
+        EntryPointAccessors.fromApplication(context.applicationContext, ThumbnailEntryPoint::class.java).thumbnailLoader()
+    }
 }
 
 @dagger.hilt.EntryPoint

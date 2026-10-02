@@ -83,8 +83,10 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             ExcavTheme {
-                ExcavApp(viewModel) {
-                    subtitlePicker.launch(arrayOf("text/*", "application/x-subrip", "application/octet-stream"))
+                androidx.compose.runtime.CompositionLocalProvider(com.excavplayer.ui.components.LocalThumbnailLoader provides thumbnailLoader) {
+                    ExcavApp(viewModel) {
+                        subtitlePicker.launch(arrayOf("text/*", "application/x-subrip", "application/octet-stream"))
+                    }
                 }
             }
         }

@@ -248,14 +248,6 @@ fun PlayerScreen(
         gestureHudIcon = Icons.Default.AspectRatio
     }
 
-    // Active Chapter & Intro/Outro Skip Detection
-    val activeChapter by remember(state.chapters) {
-        derivedStateOf {
-            val curPos = state.playback.currentPositionMs
-            state.chapters.find { curPos >= it.startTimeMs && curPos < it.endTimeMs }
-        }
-    }
-
     val isPip = (activity?.isInPictureInPictureMode == true) || state.isInPictureInPicture
 
     if (isPip) {
@@ -570,111 +562,26 @@ fun PlayerScreen(
             }
         }
 
-        // Skip Intro / Outro / Recap Floating Pill
-        val isSkippableChapter = activeChapter?.let { it.type == ChapterType.INTRO || it.type == ChapterType.OUTRO || it.type == ChapterType.RECAP } == true
-        AnimatedVisibility(
-            visible = isSkippableChapter,
-            enter = slideInHorizontally(
-                initialOffsetX = { it },
-                animationSpec = spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMediumLow)
-            ) + fadeIn(tween(200)),
-            exit = slideOutHorizontally(
-                targetOffsetX = { it },
-                animationSpec = tween(180)
-            ) + fadeOut(tween(150)),
+        // Skip Intro / Outro / Recap Floating Pill (isolated state read)
+        FloatingSkipChapterPill(
+            state = state,
+            onSeekTo = { vm.player.seekTo(it) },
+            onHud = { text, icon ->
+                gestureHudText = text
+                gestureHudIcon = icon
+            },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(bottom = 90.dp, end = 24.dp)
-        ) {
-            activeChapter?.let { chapter ->
-                val skipLabel = when (chapter.type) {
-                    ChapterType.INTRO -> "Skip Intro"
-                    ChapterType.OUTRO -> "Skip Outro"
-                    ChapterType.RECAP -> "Skip Recap"
-                    else -> "Skip Segment"
-                }
+        )
 
-                Surface(
-                    modifier = Modifier
-                        .clip(ExcavShapes.Pill)
-                        .border(1.5.dp, ExcavPalette.BlueGlow, ExcavShapes.Pill)
-                        .clickable {
-                            vm.player.seekTo(chapter.endTimeMs)
-                            gestureHudText = skipLabel
-                            gestureHudIcon = Icons.Default.FastForward
-                        },
-                    color = ExcavPalette.Ink.copy(alpha = 0.95f),
-                    shadowElevation = 8.dp
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.FastForward,
-                            contentDescription = null,
-                            tint = ExcavPalette.Blue,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = skipLabel,
-                            color = ExcavPalette.Text,
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp
-                            )
-                        )
-                    }
-                }
-            }
-        }
-
-        // Floating Next Episode Pill
-        val hasNextInQueue = queue.currentIndex in 0 until (queue.items.size - 1)
-        val remainingMs = state.playback.durationMs - state.playback.currentPositionMs
-        val isNearEnd = state.playback.durationMs > 20_000 && remainingMs in 0L..45_000L
-        val isAtEnd = state.playback.playbackStatus == PlaybackStatus.ENDED
-        if (hasNextInQueue && (isNearEnd || isAtEnd || activeChapter?.type == ChapterType.OUTRO)) {
-            val nextVid = queue.items[queue.currentIndex + 1]
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(bottom = if (activeChapter?.type == ChapterType.OUTRO) 150.dp else 90.dp, end = 24.dp)
-            ) {
-                Surface(
-                    modifier = Modifier
-                        .clip(ExcavShapes.Pill)
-                        .border(1.5.dp, ExcavPalette.BlueGlow, ExcavShapes.Pill)
-                        .clickable {
-                            vm.playQueueItem(queue.currentIndex + 1)
-                        },
-                    color = ExcavPalette.Ink.copy(alpha = 0.95f),
-                    shadowElevation = 8.dp
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.SkipNext,
-                            contentDescription = null,
-                            tint = ExcavPalette.Blue,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = "Next: ${nextVid.displayName.take(18)}",
-                            color = ExcavPalette.Text,
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            )
-                        )
-                    }
-                }
-            }
-        }
+        // Floating Next Episode Pill (isolated state read)
+        FloatingNextEpisodePill(
+            state = state,
+            queue = queue,
+            onPlayNext = { index -> vm.playQueueItem(index) },
+            modifier = Modifier.align(Alignment.BottomEnd)
+        )
 
         // Error Overlay
         state.error?.let { error ->
@@ -1037,40 +944,14 @@ private fun PlayerControlsOverlay(
 
         Spacer(Modifier.weight(1f))
 
-        // Bottom Progress Bar and Clean Action Buttons
-        val duration = state.playback.durationMs.coerceAtLeast(0L)
-        val position = state.playback.currentPositionMs.coerceIn(0L, duration.coerceAtLeast(1L))
+        // Bottom Progress Bar and Clean Action Buttons (isolated timeline scrubber)
+        PlayerTimelineSection(
+            positionMs = state.playback.currentPositionMs,
+            durationMs = state.playback.durationMs,
+            onSeek = { player.seekTo(it) }
+        )
 
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = formatDuration(position),
-                    color = Color.White,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                )
-                Text(
-                    text = formatDuration(duration),
-                    color = Color.White.copy(alpha = 0.65f),
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium, fontSize = 14.sp)
-                )
-            }
-
-            Spacer(Modifier.height(4.dp))
-
-            ExcavSleekSlider(
-                value = position.toFloat(),
-                onValueChange = { player.seekTo(it.toLong()) },
-                valueRange = 0f..duration.toFloat().coerceAtLeast(1f),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(14.dp))
 
             // Bottom Floating Glass Pills:
             // Left: Screen Lock, Picture-in-Picture, Screen Orientation, Chapters
@@ -1224,7 +1105,6 @@ private fun PlayerControlsOverlay(
             }
         }
     }
-}
 
 // -----------------------------------------------------------------------------------------
 // Bottom Sheet Containers
@@ -1237,7 +1117,7 @@ private fun SheetContainer(
     onDismiss: () -> Unit,
     onPickSubtitle: () -> Unit
 ) {
-    val settings by vm.userSettings.collectAsState()
+    val settings by vm.userSettings.collectAsStateWithLifecycle()
 
     // Alignment and padding matching trigger button locations:
     // Subtitles & Audio -> Top bar on right (Alignment.TopEnd)
@@ -1660,6 +1540,177 @@ private fun SpeedSheet(
         }
 
         Spacer(Modifier.height(12.dp))
+    }
+}
+
+@Composable
+fun FloatingSkipChapterPill(
+    state: PlayerState,
+    onSeekTo: (Long) -> Unit,
+    onHud: (String, ImageVector) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val curPos = state.playback.currentPositionMs
+    val activeChapter = remember(state.chapters, curPos) {
+        state.chapters.find { curPos >= it.startTimeMs && curPos < it.endTimeMs }
+    }
+    val isSkippableChapter = activeChapter?.let { it.type == ChapterType.INTRO || it.type == ChapterType.OUTRO || it.type == ChapterType.RECAP } == true
+
+    AnimatedVisibility(
+        visible = isSkippableChapter,
+        enter = slideInHorizontally(
+            initialOffsetX = { it },
+            animationSpec = spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMediumLow)
+        ) + fadeIn(tween(200)),
+        exit = slideOutHorizontally(
+            targetOffsetX = { it },
+            animationSpec = tween(180)
+        ) + fadeOut(tween(150)),
+        modifier = modifier
+    ) {
+        activeChapter?.let { chapter ->
+            val skipLabel = when (chapter.type) {
+                ChapterType.INTRO -> "Skip Intro"
+                ChapterType.OUTRO -> "Skip Outro"
+                ChapterType.RECAP -> "Skip Recap"
+                else -> "Skip Segment"
+            }
+
+            Surface(
+                modifier = Modifier
+                    .clip(ExcavShapes.Pill)
+                    .border(1.5.dp, ExcavPalette.BlueGlow, ExcavShapes.Pill)
+                    .clickable {
+                        onSeekTo(chapter.endTimeMs)
+                        onHud(skipLabel, Icons.Default.FastForward)
+                    },
+                color = ExcavPalette.Ink.copy(alpha = 0.95f),
+                shadowElevation = 8.dp
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.FastForward,
+                        contentDescription = null,
+                        tint = ExcavPalette.Blue,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = skipLabel,
+                        color = ExcavPalette.Text,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun FloatingNextEpisodePill(
+    state: PlayerState,
+    queue: com.excavplayer.player.queue.QueueState,
+    onPlayNext: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val hasNextInQueue = queue.currentIndex in 0 until (queue.items.size - 1)
+    if (!hasNextInQueue) return
+
+    val curPos = state.playback.currentPositionMs
+    val duration = state.playback.durationMs
+    val remainingMs = duration - curPos
+    val isNearEnd = duration > 20_000 && remainingMs in 0L..45_000L
+    val isAtEnd = state.playback.playbackStatus == PlaybackStatus.ENDED
+    val activeChapter = remember(state.chapters, curPos) {
+        state.chapters.find { curPos >= it.startTimeMs && curPos < it.endTimeMs }
+    }
+    val isOutro = activeChapter?.type == ChapterType.OUTRO
+
+    if (isNearEnd || isAtEnd || isOutro) {
+        val nextVid = queue.items[queue.currentIndex + 1]
+        Box(
+            modifier = modifier
+                .padding(bottom = if (isOutro) 150.dp else 90.dp, end = 24.dp)
+        ) {
+            Surface(
+                modifier = Modifier
+                    .clip(ExcavShapes.Pill)
+                    .border(1.5.dp, ExcavPalette.BlueGlow, ExcavShapes.Pill)
+                    .clickable {
+                        onPlayNext(queue.currentIndex + 1)
+                    },
+                color = ExcavPalette.Ink.copy(alpha = 0.95f),
+                shadowElevation = 8.dp
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.SkipNext,
+                        contentDescription = null,
+                        tint = ExcavPalette.Blue,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "Next: ${nextVid.displayName.take(18)}",
+                        color = ExcavPalette.Text,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PlayerTimelineSection(
+    positionMs: Long,
+    durationMs: Long,
+    onSeek: (Long) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val duration = durationMs.coerceAtLeast(0L)
+    val position = positionMs.coerceIn(0L, duration.coerceAtLeast(1L))
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = formatDuration(position),
+                color = Color.White,
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            )
+            Text(
+                text = formatDuration(duration),
+                color = Color.White.copy(alpha = 0.65f),
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium, fontSize = 14.sp)
+            )
+        }
+
+        Spacer(Modifier.height(4.dp))
+
+        ExcavSleekSlider(
+            value = position.toFloat(),
+            onValueChange = { onSeek(it.toLong()) },
+            valueRange = 0f..duration.toFloat().coerceAtLeast(1f),
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 

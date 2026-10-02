@@ -34,6 +34,7 @@ fun FoldersScreen(
     selectedFolder: Folder?,
     folderVideos: List<Video>,
     videos: List<Video> = emptyList(),
+    folderVideosMap: Map<String, List<Video>> = emptyMap(),
     playlists: List<Playlist>,
     favorites: List<Video>,
     onSelectFolder: (Folder?) -> Unit,
@@ -122,19 +123,6 @@ fun FoldersScreen(
         }
     }
 
-    val videosByFolder = remember(videos) {
-        val byPath = mutableMapOf<String, MutableList<Video>>()
-        val byName = mutableMapOf<String, MutableList<Video>>()
-        for (v in videos) {
-            val norm = normalizePath(v.folderPath)
-            byPath.getOrPut(norm) { mutableListOf() }.add(v)
-            if (v.folderName.isNotEmpty()) {
-                byName.getOrPut(v.folderName.lowercase()) { mutableListOf() }.add(v)
-            }
-        }
-        Pair(byPath, byName)
-    }
-
     val isScrolled by remember {
         derivedStateOf {
             gridState.firstVisibleItemIndex > 0 || gridState.firstVisibleItemScrollOffset > 10
@@ -203,12 +191,8 @@ fun FoldersScreen(
                         .fillMaxSize()
                 ) {
                     gridItems(folders, key = { "root_folder_${it.path}" }, contentType = { "folder_card" }) { folder ->
-                        val folderVids = remember(folder.path, folder.name, videosByFolder) {
-                            val normP = normalizePath(folder.path)
-                            val fromPath = videosByFolder.first[normP].orEmpty()
-                            val fromName = if (folder.name.isNotEmpty()) videosByFolder.second[folder.name.lowercase()].orEmpty() else emptyList()
-                            if (fromPath.isEmpty()) fromName else if (fromName.isEmpty()) fromPath else (fromPath + fromName).distinctBy { it.id }
-                        }
+                        val normP = remember(folder.path) { normalizePath(folder.path) }
+                        val folderVids = folderVideosMap[normP] ?: folderVideosMap[folder.name.lowercase()].orEmpty()
                         FolderCard(
                             folder = folder,
                             videos = folderVids,
@@ -243,12 +227,8 @@ fun FoldersScreen(
                     // Section 1: Child Subfolders (grid cards)
                     if (subfolders.isNotEmpty()) {
                         gridItems(subfolders, key = { "folder_${it.path}" }, contentType = { "folder_card" }) { folder ->
-                            val subfolderVids = remember(folder.path, folder.name, videosByFolder) {
-                                val normP = normalizePath(folder.path)
-                                val fromPath = videosByFolder.first[normP].orEmpty()
-                                val fromName = if (folder.name.isNotEmpty()) videosByFolder.second[folder.name.lowercase()].orEmpty() else emptyList()
-                                if (fromPath.isEmpty()) fromName else if (fromName.isEmpty()) fromPath else (fromPath + fromName).distinctBy { it.id }
-                            }
+                            val normP = remember(folder.path) { normalizePath(folder.path) }
+                            val subfolderVids = folderVideosMap[normP] ?: folderVideosMap[folder.name.lowercase()].orEmpty()
                             FolderCard(
                                 folder = folder,
                                 videos = subfolderVids,

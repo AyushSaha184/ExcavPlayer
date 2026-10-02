@@ -39,12 +39,21 @@ data class UserMessage(
     val actionLabel: String? = null
 )
 
+data class VideoGroup(
+    val id: String,
+    val name: String,
+    val path: String,
+    val videos: List<Video>
+)
+
 data class LibraryUiState(
     val videos: List<Video> = emptyList(),
     val continueWatching: List<Video> = emptyList(),
     val folders: List<Folder> = emptyList(),
     val favorites: List<Video> = emptyList(),
     val playlists: List<Playlist> = emptyList(),
+    val groups: List<VideoGroup> = emptyList(),
+    val folderVideosMap: Map<String, List<Video>> = emptyMap(),
     val searchQuery: String = "",
     val searchResults: List<Video> = emptyList(),
     val selectedFolder: Folder? = null,
@@ -52,6 +61,60 @@ data class LibraryUiState(
     val isSyncing: Boolean = false,
     val loading: Boolean = true
 )
+
+private fun normalizeFolderPath(raw: String?): String {
+    val trimmed = raw.orEmpty().trim().trimEnd('/')
+    return when {
+        trimmed.isEmpty() || trimmed == "/storage/emulated/0" || trimmed == "/storage/emulated" || trimmed.equals("Internal Storage", ignoreCase = true) -> "/storage/emulated/0"
+        trimmed.startsWith("/storage/emulated/0") -> trimmed
+        trimmed.startsWith("/storage/") -> trimmed
+        trimmed.startsWith("/") -> trimmed
+        else -> "/storage/emulated/0/$trimmed"
+    }
+}
+
+private fun computeVideoGroups(videos: List<Video>, folders: List<Folder>): List<VideoGroup> {
+    if (videos.isEmpty()) return emptyList()
+    val videosByFolderPath = videos.groupBy { it.folderPath }
+    val videosByFolderName = videos.groupBy { it.folderName }
+    return if (folders.isNotEmpty()) {
+        folders.mapNotNull { folder ->
+            val direct = videosByFolderPath[folder.path].orEmpty()
+            val byName = if (folder.name.isNotEmpty()) videosByFolderName[folder.name].orEmpty() else emptyList()
+            val combined = if (direct.isEmpty()) byName else if (byName.isEmpty()) direct else (direct + byName).distinctBy { it.id }
+            if (combined.isNotEmpty()) {
+                VideoGroup(
+                    id = folder.path,
+                    name = folder.name,
+                    path = folder.path,
+                    videos = combined
+                )
+            } else null
+        }
+    } else {
+        videos.groupBy { it.folderName.ifEmpty { "Videos" } }.map { (name, vids) ->
+            VideoGroup(
+                id = name,
+                name = name,
+                path = vids.firstOrNull()?.folderPath.orEmpty(),
+                videos = vids
+            )
+        }
+    }
+}
+
+private fun computeFolderVideosMap(videos: List<Video>): Map<String, List<Video>> {
+    if (videos.isEmpty()) return emptyMap()
+    val map = mutableMapOf<String, MutableList<Video>>()
+    for (v in videos) {
+        val norm = normalizeFolderPath(v.folderPath)
+        map.getOrPut(norm) { mutableListOf() }.add(v)
+        if (v.folderName.isNotEmpty()) {
+            map.getOrPut(v.folderName.lowercase()) { mutableListOf() }.add(v)
+        }
+    }
+    return map
+}
 
 @HiltViewModel
 class ExcavViewModel @Inject constructor(
@@ -98,16 +161,31 @@ class ExcavViewModel @Inject constructor(
         selectedFolder,
         folderVideos
     ) { values ->
+        val videos = values[0] as List<Video>
+        val continueWatching = values[1] as List<Video>
+        val folders = values[2] as List<Folder>
+        val favorites = values[3] as List<Video>
+        val playlists = values[4] as List<Playlist>
+        val searchQuery = values[5] as String
+        val searchResultsList = values[6] as List<Video>
+        val currentFolder = values[7] as Folder?
+        val currentFolderVideos = values[8] as List<Video>
+
+        val groups = computeVideoGroups(videos, folders)
+        val folderMap = computeFolderVideosMap(videos)
+
         LibraryUiState(
-            videos = values[0] as List<Video>,
-            continueWatching = values[1] as List<Video>,
-            folders = values[2] as List<Folder>,
-            favorites = values[3] as List<Video>,
-            playlists = values[4] as List<Playlist>,
-            searchQuery = values[5] as String,
-            searchResults = values[6] as List<Video>,
-            selectedFolder = values[7] as Folder?,
-            folderVideos = values[8] as List<Video>,
+            videos = videos,
+            continueWatching = continueWatching,
+            folders = folders,
+            favorites = favorites,
+            playlists = playlists,
+            groups = groups,
+            folderVideosMap = folderMap,
+            searchQuery = searchQuery,
+            searchResults = searchResultsList,
+            selectedFolder = currentFolder,
+            folderVideos = currentFolderVideos,
             loading = false
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryUiState())
