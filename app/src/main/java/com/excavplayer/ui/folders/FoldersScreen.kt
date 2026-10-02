@@ -72,59 +72,6 @@ fun FoldersScreen(
         normalizePath(selectedFolder?.path)
     }
 
-    // Subfolders inside current directory: scan full device directories asynchronously + database video stats
-    val subfolders by produceState(initialValue = emptyList<Folder>(), key1 = folders, key2 = normCurrent) {
-        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            val childDirs = mutableMapOf<String, Pair<Int, Long>>() // childPath -> (videoCount, totalBytes)
-
-            // 1. Scan filesystem for physical subfolders on IO dispatcher
-            try {
-                val dir = java.io.File(normCurrent)
-                if (dir.exists() && dir.isDirectory) {
-                    dir.listFiles { file -> file.isDirectory && !file.name.startsWith(".") }
-                        ?.forEach { f ->
-                            childDirs[f.absolutePath] = Pair(0, 0L)
-                        }
-                }
-            } catch (_: Exception) {}
-
-            // 2. Aggregate stats and discovered folders from MediaStore database
-            folders.forEach { folder ->
-                val fNorm = normalizePath(folder.path)
-                if (fNorm != normCurrent && fNorm.startsWith("$normCurrent/")) {
-                    val relative = fNorm.removePrefix("$normCurrent/").trimStart('/')
-                    val directChildName = relative.substringBefore('/')
-                    val directChildPath = "$normCurrent/$directChildName"
-                    val existing = childDirs[directChildPath] ?: Pair(0, 0L)
-                    childDirs[directChildPath] = Pair(
-                        existing.first + folder.videoCount,
-                        existing.second + folder.totalSizeBytes
-                    )
-                } else if (normCurrent == "/storage/emulated/0" && !fNorm.startsWith("/storage/emulated/0")) {
-                    val segments = fNorm.split('/').filter { it.isNotEmpty() }
-                    if (segments.size >= 2) {
-                        val rootSegment = "/" + segments.take(2).joinToString("/")
-                        val existing = childDirs[rootSegment] ?: Pair(0, 0L)
-                        childDirs[rootSegment] = Pair(
-                            existing.first + folder.videoCount,
-                            existing.second + folder.totalSizeBytes
-                        )
-                    }
-                }
-            }
-
-            childDirs.map { (path, stats) ->
-                val name = path.substringAfterLast('/')
-                Folder(
-                    name = name,
-                    path = path,
-                    videoCount = stats.first,
-                    totalSizeBytes = stats.second
-                )
-            }.sortedWith(compareByDescending<Folder> { it.videoCount > 0 }.thenBy { it.name.lowercase() })
-        }
-    }
-
     val isScrolled by remember {
         derivedStateOf {
             gridState.firstVisibleItemIndex > 0 || gridState.firstVisibleItemScrollOffset > 10
@@ -210,7 +157,7 @@ fun FoldersScreen(
                     }
                 }
             } else {
-                // Subfolder / Selected Folder View
+                // Selected Folder View: Display Videos directly in this directory without subfolder grouping
                 val hazeState = LocalHazeState.current
                 LazyVerticalGrid(
                     state = gridState,
@@ -222,22 +169,21 @@ fun FoldersScreen(
                         .fillMaxSize()
                         .hazeSource(state = hazeState)
                 ) {
-                    // Section 1: Child Subfolders (grid cards)
-                    if (subfolders.isNotEmpty()) {
-                        gridItems(subfolders, key = { "folder_${it.path}" }, contentType = { "folder_card" }) { folder ->
-                            val normP = remember(folder.path) { normalizePath(folder.path) }
-                            val subfolderVids = folderVideosMap[normP] ?: folderVideosMap[folder.name.lowercase()].orEmpty()
-                            FolderCard(
-                                folder = folder,
-                                videos = subfolderVids,
-                                onClick = { onSelectFolder(folder) },
-                                modifier = Modifier.animateItem()
-                            )
+                    if (folderVideos.isEmpty()) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 60.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                EmptyState(
+                                    icon = Icons.Default.FolderOff,
+                                    label = stringResource(R.string.empty_videos)
+                                )
+                            }
                         }
-                    }
-
-                    // Section 2: Videos directly in this directory (Spanning full line width as list rows)
-                    if (folderVideos.isNotEmpty()) {
+                    } else {
                         gridItems(folderVideos, key = { "video_${it.id}" }, span = { GridItemSpan(maxLineSpan) }, contentType = { "video_row" }) { video ->
                             ListVideoRow(
                                 video = video,
@@ -263,6 +209,7 @@ fun FoldersScreen(
                             )
                         }
                     }
+
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Spacer(Modifier.height(40.dp))
                     }

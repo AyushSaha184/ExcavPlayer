@@ -55,6 +55,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.Hyphens
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -666,9 +668,15 @@ fun VideoCard(
                     Text(
                         text = video.displayName,
                         color = ExcavPalette.Text,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            lineHeight = 18.sp,
+                            lineBreak = LineBreak.Paragraph,
+                            hyphens = Hyphens.None
+                        )
                     )
                     Spacer(Modifier.height(3.dp))
                     val watched = video.resumePositionMs ?: 0L
@@ -763,9 +771,15 @@ fun PosterCard(
                     Text(
                         text = video.displayName,
                         color = ExcavPalette.Text,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            lineHeight = 17.sp,
+                            lineBreak = LineBreak.Paragraph,
+                            hyphens = Hyphens.None
+                        )
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
@@ -936,12 +950,15 @@ fun GroupCard(
                 Text(
                     text = groupName,
                     color = Color(0xFFF5F7FA),
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontSize = 14.5.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        lineHeight = 18.5.sp,
+                        lineBreak = LineBreak.Paragraph,
+                        hyphens = Hyphens.None
                     )
                 )
                 Spacer(Modifier.height(2.dp))
@@ -1041,9 +1058,15 @@ fun ContinueWatchingRowCard(
                     Text(
                         text = video.displayName,
                         color = ExcavPalette.Text,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            lineHeight = 17.sp,
+                            lineBreak = LineBreak.Paragraph,
+                            hyphens = Hyphens.None
+                        )
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
@@ -1163,12 +1186,15 @@ fun FolderCard(
                 Text(
                     text = folder.name,
                     color = Color(0xFFF5F7FA),
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontSize = 14.5.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        lineHeight = 18.5.sp,
+                        lineBreak = LineBreak.Paragraph,
+                        hyphens = Hyphens.None
                     )
                 )
                 Spacer(Modifier.height(2.dp))
@@ -1221,9 +1247,14 @@ fun FolderRow(
                 Text(
                     text = folder.name,
                     color = ExcavPalette.Text,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        lineHeight = 20.sp,
+                        lineBreak = LineBreak.Paragraph,
+                        hyphens = Hyphens.None
+                    )
                 )
                 Spacer(Modifier.height(3.dp))
                 val totalCount = if (folder.videoCount > 0) folder.videoCount else videos.size
@@ -1278,9 +1309,14 @@ fun PlaylistRow(
                 Text(
                     text = playlist.title,
                     color = ExcavPalette.Text,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        lineHeight = 20.sp,
+                        lineBreak = LineBreak.Paragraph,
+                        hyphens = Hyphens.None
+                    )
                 )
                 Spacer(Modifier.height(3.dp))
                 Text(
@@ -1439,12 +1475,15 @@ fun PlaylistGridCard(
                 Text(
                     text = playlist.title,
                     color = Color(0xFFF5F7FA),
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontSize = 14.5.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        lineHeight = 18.5.sp,
+                        lineBreak = LineBreak.Paragraph,
+                        hyphens = Hyphens.None
                     )
                 )
                 Spacer(Modifier.height(2.dp))
@@ -1525,9 +1564,15 @@ fun ListVideoRow(
                 Text(
                     text = video.displayName,
                     color = ExcavPalette.Text,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                        lineHeight = 18.sp,
+                        lineBreak = LineBreak.Paragraph,
+                        hyphens = Hyphens.None
+                    )
                 )
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {

@@ -180,7 +180,7 @@ fun UpdateDialog(
                             // Secondary "Later" Glassmorphic Pill Button
                             Surface(
                                 modifier = Modifier
-                                    .height(42.dp)
+                                    .height(38.dp)
                                     .clip(ExcavShapes.Pill)
                                     .border(1.dp, Color.White.copy(alpha = 0.16f), ExcavShapes.Pill)
                                     .clickable(onClick = onDismiss),
@@ -188,7 +188,7 @@ fun UpdateDialog(
                                 shape = ExcavShapes.Pill
                             ) {
                                 Box(
-                                    modifier = Modifier.padding(horizontal = 18.dp),
+                                    modifier = Modifier.padding(horizontal = 16.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
@@ -196,7 +196,7 @@ fun UpdateDialog(
                                         color = ExcavPalette.TextSecondary,
                                         style = MaterialTheme.typography.bodyMedium.copy(
                                             fontWeight = FontWeight.SemiBold,
-                                            fontSize = 13.5.sp
+                                            fontSize = 13.sp
                                         )
                                     )
                                 }
@@ -205,7 +205,7 @@ fun UpdateDialog(
                             Spacer(Modifier.width(10.dp))
 
                             val context = androidx.compose.ui.platform.LocalContext.current
-                            // Primary "Update Now" Pill Button
+                            // Primary "Update" Pill Button
                             Button(
                                 onClick = {
                                     val asset = updateState.apkAsset
@@ -220,19 +220,19 @@ fun UpdateDialog(
                                         onDismiss()
                                     }
                                 },
-                                modifier = Modifier.height(42.dp),
+                                modifier = Modifier.height(38.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = ExcavPalette.Silver,
                                     contentColor = ExcavPalette.Ink
                                 ),
                                 shape = ExcavShapes.Pill,
-                                contentPadding = PaddingValues(horizontal = 18.dp)
+                                contentPadding = PaddingValues(horizontal = 16.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Download,
                                     contentDescription = null,
                                     tint = ExcavPalette.Ink,
-                                    modifier = Modifier.size(18.dp)
+                                    modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(Modifier.width(6.dp))
                                 Text(
@@ -240,7 +240,7 @@ fun UpdateDialog(
                                     color = ExcavPalette.Ink,
                                     style = MaterialTheme.typography.bodyMedium.copy(
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 13.5.sp
+                                        fontSize = 13.sp
                                     )
                                 )
                             }

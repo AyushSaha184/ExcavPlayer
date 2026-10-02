@@ -325,8 +325,15 @@ fun PlaylistsScreen(
                                                 Text(
                                                     text = stringResource(R.string.rename),
                                                     color = ExcavPalette.Text,
-                                                    textAlign = TextAlign.Center,
-                                                    modifier = Modifier.fillMaxWidth()
+                                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium)
+                                                )
+                                            },
+                                            leadingIcon = {
+                                                Icon(
+                                                    imageVector = Icons.Default.Edit,
+                                                    contentDescription = null,
+                                                    tint = ExcavPalette.TextMuted,
+                                                    modifier = Modifier.size(18.dp)
                                                 )
                                             },
                                             onClick = {
@@ -339,8 +346,15 @@ fun PlaylistsScreen(
                                                 Text(
                                                     text = stringResource(R.string.delete),
                                                     color = ExcavPalette.Error,
-                                                    textAlign = TextAlign.Center,
-                                                    modifier = Modifier.fillMaxWidth()
+                                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium)
+                                                )
+                                            },
+                                            leadingIcon = {
+                                                Icon(
+                                                    imageVector = Icons.Default.Delete,
+                                                    contentDescription = null,
+                                                    tint = ExcavPalette.Error,
+                                                    modifier = Modifier.size(18.dp)
                                                 )
                                             },
                                             onClick = {

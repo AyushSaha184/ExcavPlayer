@@ -1,3 +1,5 @@
+@file:kotlin.OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.excavplayer.ui.player
 
 import android.content.pm.ActivityInfo
@@ -6,7 +8,7 @@ import android.os.Build
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
-import androidx.annotation.OptIn
+import kotlin.OptIn
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -61,6 +63,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -100,7 +103,6 @@ private fun Modifier.playerGlass(
     strokeWidth = 0.5.dp
 )
 
-@OptIn(UnstableApi::class)
 @Composable
 fun PlayerScreen(
     vm: ExcavViewModel,
@@ -185,6 +187,18 @@ fun PlayerScreen(
         if (doubleTapSeekSide != null) {
             delay(650L)
             doubleTapSeekSide = null
+        }
+    }
+
+    // Auto-fade player controls after 4s of inactivity while playing (resets whenever screen is touched)
+    var isUserTouchingScreen by remember { mutableStateOf(false) }
+    var resetControlsTimerKey by remember { mutableIntStateOf(0) }
+    val onUserInteraction: () -> Unit = remember { { resetControlsTimerKey++ } }
+
+    LaunchedEffect(controlsVisible, state.playback.isPlaying, activeSheet, isUserTouchingScreen, resetControlsTimerKey) {
+        if (controlsVisible && state.playback.isPlaying && activeSheet == null && !isUserTouchingScreen) {
+            delay(4000L)
+            controlsVisible = false
         }
     }
 
@@ -308,6 +322,16 @@ fun PlayerScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val anyPressed = event.changes.any { it.pressed }
+                        isUserTouchingScreen = anyPressed
+                        resetControlsTimerKey++
+                    }
+                }
+            }
             .pointerInput(isLocked) {
                 if (!isLocked) {
                     detectTransformGestures { _, pan, zoom, _ ->
@@ -329,8 +353,14 @@ fun PlayerScreen(
             .pointerInput(isLocked, zoomScale) {
                 if (!isLocked) {
                     detectTapGestures(
-                        onTap = { controlsVisible = !controlsVisible },
+                        onTap = {
+                            controlsVisible = !controlsVisible
+                            if (controlsVisible) {
+                                onUserInteraction()
+                            }
+                        },
                         onDoubleTap = { offset ->
+                            onUserInteraction()
                             if (zoomScale > 1.05f) {
                                 zoomScale = 1f
                                 panOffset = Offset.Zero
@@ -372,21 +402,43 @@ fun PlayerScreen(
                         }
                     )
                 } else {
-                    detectTapGestures(onTap = { controlsVisible = !controlsVisible })
+                    detectTapGestures(onTap = {
+                        controlsVisible = !controlsVisible
+                        if (controlsVisible) {
+                            onUserInteraction()
+                        }
+                    })
                 }
             }
             .pointerInput(isLocked, settings, zoomScale) {
                 if (!isLocked && zoomScale <= 1.05f) {
+                    var isDragEligible = false
+                    var totalVerticalDrag = 0f
                     detectDragGestures(
+                        onDragStart = { startOffset ->
+                            // Ignore touches in top 20% (status bar pull-down zone) and bottom 18% (nav bar zone)
+                            val safeTop = size.height * 0.20f
+                            val safeBottom = size.height * 0.82f
+                            val safeLeft = size.width * 0.08f
+                            val safeRight = size.width * 0.92f
+                            isDragEligible = startOffset.y in safeTop..safeBottom && startOffset.x in safeLeft..safeRight
+                            totalVerticalDrag = 0f
+                        },
                         onDragEnd = {
+                            isDragEligible = false
                             gestureHudText = null
                             gestureHudIcon = null
                         },
                         onDragCancel = {
+                            isDragEligible = false
                             gestureHudText = null
                             gestureHudIcon = null
                         },
                         onDrag = { change, dragAmount ->
+                            if (!isDragEligible) return@detectDragGestures
+                            totalVerticalDrag += Math.abs(dragAmount.y)
+                            if (totalVerticalDrag < 12f) return@detectDragGestures
+
                             change.consume()
                             val isLeft = change.position.x < size.width / 2
                             if (isLeft && settings.brightnessGestureEnabled) {
@@ -479,58 +531,48 @@ fun PlayerScreen(
                 }
         )
 
-        // Double-Tap Quick Seek Visual Indicator Ripple
+        // Double-Tap Quick Seek Visual Indicator (text + chevrons only, no background pill)
         AnimatedVisibility(
             visible = doubleTapSeekSide != null,
             enter = fadeIn(tween(100)) + scaleIn(initialScale = 0.82f, animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMedium)),
             exit = fadeOut(tween(180)),
-            modifier = Modifier.align(if (doubleTapSeekSide == DoubleTapSide.LEFT) Alignment.CenterStart else Alignment.CenterEnd)
+            modifier = Modifier
+                .align(if (doubleTapSeekSide == DoubleTapSide.LEFT) Alignment.CenterStart else Alignment.CenterEnd)
+                .padding(horizontal = 44.dp)
         ) {
             doubleTapSeekSide?.let { side ->
                 val isLeft = side == DoubleTapSide.LEFT
-                Box(
-                    modifier = Modifier
-                        .width(140.dp)
-                        .fillMaxHeight(0.55f)
-                        .clip(
-                            if (isLeft) RoundedCornerShape(topEnd = 140.dp, bottomEnd = 140.dp)
-                            else RoundedCornerShape(topStart = 140.dp, bottomStart = 140.dp)
-                        )
-                        .background(Color.White.copy(alpha = 0.14f)),
-                    contentAlignment = Alignment.Center
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy((-6).dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy((-6).dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            val chevron = if (isLeft) Icons.AutoMirrored.Filled.ArrowBack else Icons.AutoMirrored.Filled.ArrowForward
-                            Icon(
-                                imageVector = chevron,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Icon(
-                                imageVector = chevron,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = "${if (isLeft) "-" else "+"}$doubleTapSeekAccumulatedSeconds sec",
-                            color = Color.White,
-                            style = MaterialTheme.typography.labelLarge.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            )
+                        val chevron = if (isLeft) Icons.AutoMirrored.Filled.ArrowBack else Icons.AutoMirrored.Filled.ArrowForward
+                        Icon(
+                            imageVector = chevron,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Icon(
+                            imageVector = chevron,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(28.dp)
                         )
                     }
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "${if (isLeft) "-" else "+"}$doubleTapSeekAccumulatedSeconds sec",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                    )
                 }
             }
         }
@@ -688,21 +730,26 @@ fun PlayerScreen(
                 enter = fadeIn(),
                 exit = fadeOut()
             ) {
-                IconButton(
-                    onClick = {
-                        isLocked = false
-                        vm.player.dispatch(PlayerCommand.SetScreenLocked(false))
-                    },
-                    modifier = Modifier
-                        .size(44.dp)
-                        .playerGlass(CircleShape)
+                CompositionLocalProvider(
+                    LocalRippleConfiguration provides null
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.LockOpen,
-                        contentDescription = stringResource(R.string.cd_unlock),
-                        tint = ExcavPalette.Blue,
-                        modifier = Modifier.size(22.dp)
-                    )
+                    IconButton(
+                        onClick = {
+                            onUserInteraction()
+                            isLocked = false
+                            vm.player.dispatch(PlayerCommand.SetScreenLocked(false))
+                        },
+                        modifier = Modifier
+                            .size(44.dp)
+                            .playerGlass(CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.LockOpen,
+                            contentDescription = stringResource(R.string.cd_unlock),
+                            tint = ExcavPalette.Blue,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
                 }
             }
         } else {
@@ -726,16 +773,28 @@ fun PlayerScreen(
                             }
                             onClose()
                         },
-                        onOpenSheet = { activeSheet = it },
-                        onLock = { isLocked = true; vm.player.dispatch(PlayerCommand.SetScreenLocked(true)) },
+                        onOpenSheet = {
+                            onUserInteraction()
+                            activeSheet = it
+                        },
+                        onLock = {
+                            onUserInteraction()
+                            isLocked = true
+                            vm.player.dispatch(PlayerCommand.SetScreenLocked(true))
+                        },
                         onPip = {
+                            onUserInteraction()
                             activity?.let {
                                 pipHelper.enterPictureInPicture(it, state.currentVideo, state.playback.isPlaying)
                             }
                         },
-                        onCycleOrientation = cycleOrientation,
+                        onCycleOrientation = {
+                            onUserInteraction()
+                            cycleOrientation()
+                        },
                         orientationIndex = orientationIndex,
                         onToggleBackgroundAudio = {
+                            onUserInteraction()
                             if (state.isBackgroundAudio || keepAudioOnBackground) {
                                 keepAudioOnBackground = false
                                 vm.player.stopBackgroundPlay()
@@ -749,6 +808,7 @@ fun PlayerScreen(
                         },
                         isBackgroundAudioActive = state.isBackgroundAudio || keepAudioOnBackground,
                         onToggleDialogueBoost = {
+                            onUserInteraction()
                             val next = !settings.dialogueBoostEnabled
                             vm.setDialogueBoost(next)
                             gestureHudProgress = 0f
@@ -756,11 +816,21 @@ fun PlayerScreen(
                             gestureHudIcon = Icons.Default.RecordVoiceOver
                         },
                         isDialogueBoostActive = settings.dialogueBoostEnabled,
-                        onCycleResizeMode = cycleResizeMode,
+                        onCycleResizeMode = {
+                            onUserInteraction()
+                            cycleResizeMode()
+                        },
                         hasPrevious = queue.currentIndex > 0,
-                        onPlayPrevious = { vm.playQueueItem(queue.currentIndex - 1) },
+                        onPlayPrevious = {
+                            onUserInteraction()
+                            vm.playQueueItem(queue.currentIndex - 1)
+                        },
                         hasNext = queue.currentIndex in 0 until (queue.items.size - 1),
-                        onPlayNext = { vm.playQueueItem(queue.currentIndex + 1) }
+                        onPlayNext = {
+                            onUserInteraction()
+                            vm.playQueueItem(queue.currentIndex + 1)
+                        },
+                        onInteraction = onUserInteraction
                     )
                 }
             }
@@ -783,7 +853,10 @@ fun PlayerScreen(
                     sheet = sheetType,
                     state = state,
                     vm = vm,
-                    onDismiss = { activeSheet = null },
+                    onDismiss = {
+                        onUserInteraction()
+                        activeSheet = null
+                    },
                     onPickSubtitle = onPickSubtitle
                 )
             }
@@ -791,6 +864,7 @@ fun PlayerScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PlayerControlsOverlay(
     state: PlayerState,
@@ -809,333 +883,378 @@ private fun PlayerControlsOverlay(
     hasPrevious: Boolean,
     onPlayPrevious: () -> Unit,
     hasNext: Boolean,
-    onPlayNext: () -> Unit
+    onPlayNext: () -> Unit,
+    onInteraction: () -> Unit = {}
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.safeDrawing)
-            .padding(horizontal = 16.dp, vertical = 10.dp)
+    CompositionLocalProvider(
+        LocalRippleConfiguration provides null
     ) {
-        // Top Bar: Back button, Marquee Title, Dialogue Booster, Subtitle (CC), Audio Track
-        Row(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 4.dp)
-                .align(Alignment.TopCenter),
-            verticalAlignment = Alignment.CenterVertically
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(horizontal = 16.dp, vertical = 10.dp)
         ) {
-            IconButton(
-                onClick = onClose,
-                modifier = Modifier
-                    .size(44.dp)
-                    .playerGlass(CircleShape)
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = stringResource(R.string.cd_back),
-                    tint = Color.White,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-
-            Spacer(Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = state.currentVideo?.displayName.orEmpty().ifEmpty { "Playing Media" },
-                    color = Color.White,
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
-                    ),
-                    maxLines = 1,
-                    modifier = Modifier.basicMarquee()
-                )
-            }
-
-            Spacer(Modifier.width(12.dp))
-
-            // Dialogue Booster Button
-            IconButton(
-                onClick = onToggleDialogueBoost,
-                modifier = Modifier
-                    .size(44.dp)
-                    .playerGlass(CircleShape)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.RecordVoiceOver,
-                    contentDescription = "Dialogue Booster",
-                    tint = if (isDialogueBoostActive) Color.White else Color.White.copy(alpha = 0.35f),
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-
-            Spacer(Modifier.width(10.dp))
-
-            // Subtitle Button (CC)
-            val hasSubtitles = state.playback.selectedSubtitleTrackId != null
-            IconButton(
-                onClick = { onOpenSheet(PlayerSheet.SUBTITLES) },
-                modifier = Modifier
-                    .size(44.dp)
-                    .playerGlass(CircleShape)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.ClosedCaption,
-                    contentDescription = stringResource(R.string.cd_subtitles),
-                    tint = if (hasSubtitles) Color.White else Color.White.copy(alpha = 0.35f),
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-
-            Spacer(Modifier.width(10.dp))
-
-            // Audio Track Button
-            IconButton(
-                onClick = { onOpenSheet(PlayerSheet.AUDIO) },
-                modifier = Modifier
-                    .size(44.dp)
-                    .playerGlass(CircleShape)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.MusicNote,
-                    contentDescription = stringResource(R.string.audio_tracks),
-                    tint = Color.White,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-        }
-
-        // Center Transport Controls - Vertically and Horizontally Centered in Screen (Separated Buttons)
-        val playPauseScale by animateFloatAsState(
-            targetValue = if (state.playback.isPlaying) 1f else 0.92f,
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioMediumBouncy,
-                stiffness = Spring.StiffnessMediumLow
-            ),
-            label = "playPauseScale"
-        )
-
-        Row(
-            modifier = Modifier.align(Alignment.Center),
-            horizontalArrangement = Arrangement.spacedBy(28.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(
-                enabled = hasPrevious,
-                onClick = onPlayPrevious,
-                modifier = Modifier
-                    .size(52.dp)
-                    .playerGlass(CircleShape)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.SkipPrevious,
-                    contentDescription = "Previous Video",
-                    tint = if (hasPrevious) Color.White else Color.White.copy(alpha = 0.35f),
-                    modifier = Modifier.size(28.dp)
-                )
-            }
-
-            IconButton(
-                onClick = {
-                    if (state.playback.isPlaying) player.pause() else player.resume()
-                },
-                modifier = Modifier
-                    .size(68.dp)
-                    .playerGlass(CircleShape)
-                    .graphicsLayer {
-                        scaleX = playPauseScale
-                        scaleY = playPauseScale
-                    }
-            ) {
-                Icon(
-                    imageVector = if (state.playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = stringResource(R.string.cd_play_pause),
-                    tint = Color.White,
-                    modifier = Modifier.size(38.dp)
-                )
-            }
-
-            IconButton(
-                enabled = hasNext,
-                onClick = onPlayNext,
-                modifier = Modifier
-                    .size(52.dp)
-                    .playerGlass(CircleShape)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.SkipNext,
-                    contentDescription = "Next Video",
-                    tint = if (hasNext) Color.White else Color.White.copy(alpha = 0.35f),
-                    modifier = Modifier.size(28.dp)
-                )
-            }
-        }
-
-        // Bottom Section: Progress Bar / Timeline and Bottom Floating Glass Pills
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .align(Alignment.BottomCenter)
-        ) {
-            // Bottom Progress Bar and Clean Action Buttons (isolated timeline scrubber)
-            PlayerTimelineSection(
-                positionMs = state.playback.currentPositionMs,
-                durationMs = state.playback.durationMs,
-                onSeek = { player.seekTo(it) }
-            )
-
-            Spacer(Modifier.height(14.dp))
-
-            // Bottom Floating Glass Pills:
-            // Left: Screen Lock, Picture-in-Picture, Screen Orientation, Chapters
-            // Right: Playback Speed, Background Play Audio, Fullscreen / Aspect Ratio
+            // Top Bar: Back button, Marquee Title, Dialogue Booster, Subtitle (CC), Audio Track
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp)
+                    .align(Alignment.TopCenter),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Left Pill
-                Row(
+                IconButton(
+                    onClick = onClose,
                     modifier = Modifier
-                        .playerGlass(RoundedCornerShape(32.dp))
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        .size(44.dp)
+                        .playerGlass(CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = stringResource(R.string.cd_back),
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+
+                Spacer(Modifier.width(16.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = state.currentVideo?.displayName.orEmpty().ifEmpty { "Playing Media" },
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        ),
+                        maxLines = 1,
+                        modifier = Modifier.basicMarquee()
+                    )
+                }
+
+                Spacer(Modifier.width(12.dp))
+
+                // Dialogue Booster Button
+                IconButton(
+                    onClick = {
+                        onInteraction()
+                        onToggleDialogueBoost()
+                    },
+                    modifier = Modifier
+                        .size(44.dp)
+                        .playerGlass(CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.RecordVoiceOver,
+                        contentDescription = "Dialogue Booster",
+                        tint = if (isDialogueBoostActive) Color.White else Color.White.copy(alpha = 0.35f),
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+
+                Spacer(Modifier.width(10.dp))
+
+                // Subtitle Button (CC)
+                val hasSubtitles = state.playback.selectedSubtitleTrackId != null
+                IconButton(
+                    onClick = {
+                        onInteraction()
+                        onOpenSheet(PlayerSheet.SUBTITLES)
+                    },
+                    modifier = Modifier
+                        .size(44.dp)
+                        .playerGlass(CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ClosedCaption,
+                        contentDescription = stringResource(R.string.cd_subtitles),
+                        tint = if (hasSubtitles) Color.White else Color.White.copy(alpha = 0.35f),
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+
+                Spacer(Modifier.width(10.dp))
+
+                // Audio Track Button
+                IconButton(
+                    onClick = {
+                        onInteraction()
+                        onOpenSheet(PlayerSheet.AUDIO)
+                    },
+                    modifier = Modifier
+                        .size(44.dp)
+                        .playerGlass(CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MusicNote,
+                        contentDescription = stringResource(R.string.audio_tracks),
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+
+            // Center Transport Controls - Vertically and Horizontally Centered in Screen (Separated Buttons)
+            val playPauseScale by animateFloatAsState(
+                targetValue = if (state.playback.isPlaying) 1f else 0.92f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMediumLow
+                ),
+                label = "playPauseScale"
+            )
+
+            Row(
+                modifier = Modifier.align(Alignment.Center),
+                horizontalArrangement = Arrangement.spacedBy(28.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    enabled = hasPrevious,
+                    onClick = {
+                        onInteraction()
+                        onPlayPrevious()
+                    },
+                    modifier = Modifier
+                        .size(52.dp)
+                        .playerGlass(CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.SkipPrevious,
+                        contentDescription = "Previous Video",
+                        tint = if (hasPrevious) Color.White else Color.White.copy(alpha = 0.35f),
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+
+                IconButton(
+                    onClick = {
+                        onInteraction()
+                        if (state.playback.isPlaying) player.pause() else player.resume()
+                    },
+                    modifier = Modifier
+                        .size(68.dp)
+                        .playerGlass(CircleShape)
+                        .graphicsLayer {
+                            scaleX = playPauseScale
+                            scaleY = playPauseScale
+                        }
+                ) {
+                    Icon(
+                        imageVector = if (state.playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = stringResource(R.string.cd_play_pause),
+                        tint = Color.White,
+                        modifier = Modifier.size(38.dp)
+                    )
+                }
+
+                IconButton(
+                    enabled = hasNext,
+                    onClick = {
+                        onInteraction()
+                        onPlayNext()
+                    },
+                    modifier = Modifier
+                        .size(52.dp)
+                        .playerGlass(CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.SkipNext,
+                        contentDescription = "Next Video",
+                        tint = if (hasNext) Color.White else Color.White.copy(alpha = 0.35f),
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+            }
+
+            // Bottom Section: Progress Bar / Timeline and Bottom Floating Glass Pills
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+            ) {
+                // Bottom Progress Bar and Clean Action Buttons (isolated timeline scrubber)
+                PlayerTimelineSection(
+                    positionMs = state.playback.currentPositionMs,
+                    durationMs = state.playback.durationMs,
+                    onSeek = {
+                        onInteraction()
+                        player.seekTo(it)
+                    }
+                )
+
+                Spacer(Modifier.height(14.dp))
+
+                // Bottom Floating Glass Pills:
+                // Left: Screen Lock, Picture-in-Picture, Screen Orientation, Chapters
+                // Right: Playback Speed, Background Play Audio, Fullscreen / Aspect Ratio
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Screen Lock
-                    IconButton(
-                        onClick = onLock,
-                        modifier = Modifier.size(40.dp)
+                    // Left Pill
+                    Row(
+                        modifier = Modifier
+                            .playerGlass(RoundedCornerShape(32.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Lock,
-                            contentDescription = stringResource(R.string.cd_lock),
-                            tint = Color.White,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-
-                    // Picture in Picture
-                    IconButton(
-                        onClick = onPip,
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PictureInPictureAlt,
-                            contentDescription = "Picture-in-Picture",
-                            tint = Color.White,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-
-                    // Screen Orientation Toggle with Animated Icon Transition
-                    IconButton(
-                        onClick = onCycleOrientation,
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        AnimatedContent(
-                            targetState = orientationIndex,
-                            transitionSpec = {
-                                (fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing)) +
-                                 scaleIn(initialScale = 0.65f, animationSpec = tween(220, easing = FastOutSlowInEasing)))
-                                .togetherWith(
-                                    fadeOut(animationSpec = tween(160, easing = FastOutSlowInEasing)) +
-                                    scaleOut(targetScale = 0.65f, animationSpec = tween(160, easing = FastOutSlowInEasing))
-                                )
+                        // Screen Lock
+                        IconButton(
+                            onClick = {
+                                onInteraction()
+                                onLock()
                             },
-                            label = "OrientationIconAnimation"
-                        ) { targetIndex ->
-                            val icon = when (targetIndex) {
-                                0 -> Icons.Default.ScreenRotation
-                                1 -> Icons.Default.StayCurrentLandscape
-                                2 -> Icons.Default.StayCurrentPortrait
-                                3 -> Icons.Default.StayCurrentLandscape
-                                4 -> Icons.Default.ScreenRotation
-                                else -> Icons.Default.ScreenRotation
-                            }
-                            val desc = when (targetIndex) {
-                                0 -> "Auto Rotate"
-                                1 -> "Landscape"
-                                2 -> "Portrait"
-                                3 -> "Reverse Landscape"
-                                else -> "Auto Rotate"
-                            }
+                            modifier = Modifier.size(40.dp)
+                        ) {
                             Icon(
-                                imageVector = icon,
-                                contentDescription = desc,
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = stringResource(R.string.cd_lock),
                                 tint = Color.White,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+
+                        // Picture in Picture
+                        IconButton(
+                            onClick = {
+                                onInteraction()
+                                onPip()
+                            },
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PictureInPictureAlt,
+                                contentDescription = "Picture-in-Picture",
+                                tint = Color.White,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+
+                        // Screen Orientation Toggle with Animated Icon Transition
+                        IconButton(
+                            onClick = {
+                                onInteraction()
+                                onCycleOrientation()
+                            },
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            AnimatedContent(
+                                targetState = orientationIndex,
+                                transitionSpec = {
+                                    (fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing)) +
+                                     scaleIn(initialScale = 0.65f, animationSpec = tween(220, easing = FastOutSlowInEasing)))
+                                    .togetherWith(
+                                        fadeOut(animationSpec = tween(160, easing = FastOutSlowInEasing)) +
+                                        scaleOut(targetScale = 0.65f, animationSpec = tween(160, easing = FastOutSlowInEasing))
+                                    )
+                                },
+                                label = "OrientationIconAnimation"
+                            ) { targetIndex ->
+                                val icon = when (targetIndex) {
+                                    0 -> Icons.Default.ScreenRotation
+                                    1 -> Icons.Default.StayCurrentLandscape
+                                    2 -> Icons.Default.StayCurrentPortrait
+                                    3 -> Icons.Default.StayCurrentLandscape
+                                    4 -> Icons.Default.ScreenRotation
+                                    else -> Icons.Default.ScreenRotation
+                                }
+                                val desc = when (targetIndex) {
+                                    0 -> "Auto Rotate"
+                                    1 -> "Landscape"
+                                    2 -> "Portrait"
+                                    3 -> "Reverse Landscape"
+                                    else -> "Auto Rotate"
+                                }
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = desc,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+
+                        // Chapters Button
+                        val hasChapters = state.chapters.isNotEmpty()
+                        IconButton(
+                            enabled = hasChapters,
+                            onClick = {
+                                onInteraction()
+                                onOpenSheet(PlayerSheet.CHAPTERS)
+                            },
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Bookmarks,
+                                contentDescription = "Chapters & Timeline",
+                                tint = if (hasChapters) Color.White else Color.White.copy(alpha = 0.35f),
                                 modifier = Modifier.size(22.dp)
                             )
                         }
                     }
 
-                    // Chapters Button
-                    val hasChapters = state.chapters.isNotEmpty()
-                    IconButton(
-                        enabled = hasChapters,
-                        onClick = { onOpenSheet(PlayerSheet.CHAPTERS) },
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Bookmarks,
-                            contentDescription = "Chapters & Timeline",
-                            tint = if (hasChapters) Color.White else Color.White.copy(alpha = 0.35f),
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-                }
-
-                // Right Pill: Playback Speed, Background Play Audio, Fullscreen
-                Row(
-                    modifier = Modifier
-                        .playerGlass(RoundedCornerShape(32.dp))
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Playback Speed Pill Button
-                    Box(
+                    // Right Pill: Playback Speed, Background Play Audio, Fullscreen
+                    Row(
                         modifier = Modifier
-                            .clickable { onOpenSheet(PlayerSheet.SPEED) }
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        contentAlignment = Alignment.Center
+                            .playerGlass(RoundedCornerShape(32.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "${state.playback.playbackSpeed}x",
-                            color = Color.White,
-                            style = MaterialTheme.typography.labelMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
+                        // Playback Speed Pill Button
+                        Box(
+                            modifier = Modifier
+                                .clickable {
+                                    onInteraction()
+                                    onOpenSheet(PlayerSheet.SPEED)
+                                }
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "${state.playback.playbackSpeed}x",
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
                             )
-                        )
-                    }
+                        }
 
-                    // Background Play Audio Toggle
-                    IconButton(
-                        onClick = onToggleBackgroundAudio,
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Headphones,
-                            contentDescription = "Background Play Audio",
-                            tint = if (isBackgroundAudioActive) Color.White else Color.White.copy(alpha = 0.35f),
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
+                        // Background Play Audio Toggle
+                        IconButton(
+                            onClick = {
+                                onInteraction()
+                                onToggleBackgroundAudio()
+                            },
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Headphones,
+                                contentDescription = "Background Play Audio",
+                                tint = if (isBackgroundAudioActive) Color.White else Color.White.copy(alpha = 0.35f),
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
 
-                    // Fullscreen / Aspect Ratio Cycle
-                    IconButton(
-                        onClick = onCycleResizeMode,
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.AspectRatio,
-                            contentDescription = "Fullscreen & Aspect Ratio",
-                            tint = Color.White,
-                            modifier = Modifier.size(22.dp)
-                        )
+                        // Fullscreen / Aspect Ratio Cycle
+                        IconButton(
+                            onClick = {
+                                onInteraction()
+                                onCycleResizeMode()
+                            },
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AspectRatio,
+                                contentDescription = "Fullscreen & Aspect Ratio",
+                                tint = Color.White,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
                     }
                 }
             }
