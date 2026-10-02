@@ -105,9 +105,7 @@ fun ExcavApp(
                     .padding(padding)
             ) {
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .hazeSource(state = hazeState)
+                    modifier = Modifier.fillMaxSize()
                 ) {
                     if (searchOpen) {
                         SearchScreen(
@@ -239,26 +237,30 @@ fun ExcavApp(
             if (isBackgroundAudioActive) {
                 val currentVideo = playerState.currentVideo
                 if (currentVideo != null) {
-                    Surface(
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
-                            .padding(bottom = if (searchOpen) 16.dp else 78.dp)
+                            .navigationBarsPadding()
+                            .padding(horizontal = 20.dp)
+                            .padding(bottom = if (searchOpen) 16.dp else 84.dp)
                             .align(Alignment.BottomCenter)
-                            .clip(ExcavShapes.Pill)
-                            .border(1.dp, ExcavPalette.Line.copy(alpha = 0.6f), ExcavShapes.Pill)
-                            .clickable {
-                                playerOpen = true
-                            },
-                        color = Color(0xFF181B22),
-                        shadowElevation = 14.dp
                     ) {
-                        Row(
+                        GlassmorphicItem(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                .clickable {
+                                    playerOpen = true
+                                },
+                            cornerRadius = 32,
+                            blurRadius = 15,
+                            containerColor = Color(0x66141822)
                         ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                             Box(
                                 modifier = Modifier
                                     .size(34.dp)
@@ -333,6 +335,7 @@ fun ExcavApp(
                     }
                 }
             }
+        }
 
             // Pure Floating Glass Bottom Navbar
             if (!searchOpen) {

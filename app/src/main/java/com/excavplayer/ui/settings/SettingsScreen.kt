@@ -36,9 +36,11 @@ import com.excavplayer.ui.components.SleekRadioButton
 import com.excavplayer.ui.components.darkUltraThinBlur
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.excavplayer.ui.components.LocalHazeState
 import com.excavplayer.ui.components.SleekSwitch
 import com.excavplayer.ui.theme.ExcavPalette
 import com.excavplayer.ui.theme.ExcavShapes
+import dev.chrisbanes.haze.hazeSource
 
 private enum class SettingDialog {
     NONE, HARDWARE_ACCELERATION, SPEED, REPEAT, THRESHOLD, ORIENTATION, MEDIA_FIT, SUB_LANG, AUDIO_LANG
@@ -64,9 +66,11 @@ fun SettingsScreen(
             .fillMaxSize()
             .background(ExcavPalette.Ink)
     ) {
+        val hazeState = LocalHazeState.current
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .hazeSource(state = hazeState)
                 .verticalScroll(scrollState)
                 .padding(horizontal = 16.dp)
                 .padding(top = 70.dp, bottom = 90.dp)

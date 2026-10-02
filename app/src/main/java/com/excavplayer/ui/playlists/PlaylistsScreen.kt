@@ -35,6 +35,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -45,6 +46,7 @@ import com.excavplayer.domain.model.Video
 import com.excavplayer.ui.components.*
 import com.excavplayer.ui.theme.ExcavPalette
 import com.excavplayer.ui.theme.ExcavShapes
+import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.flow.Flow
 
 @Composable
@@ -105,11 +107,14 @@ fun PlaylistsScreen(
                     )
                 }
             } else {
+                val hazeState = LocalHazeState.current
                 LazyColumn(
                     state = detailListState,
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 64.dp, bottom = 90.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .hazeSource(state = hazeState)
                 ) {
                     items(videos, key = { it.id }) { video ->
                         ListVideoRow(
@@ -250,13 +255,16 @@ fun PlaylistsScreen(
         }
 
         Box(modifier = Modifier.fillMaxSize()) {
+            val hazeState = LocalHazeState.current
             LazyVerticalGrid(
                 state = rootGridState,
                 columns = GridCells.Adaptive(160.dp),
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 62.dp, bottom = 90.dp),
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxSize()
+                    .hazeSource(state = hazeState)
             ) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     SectionTitle(stringResource(R.string.playlists)) {
@@ -309,14 +317,28 @@ fun PlaylistsScreen(
                                     )
                                 ) {
                                     DropdownMenuItem(
-                                        text = { Text(stringResource(R.string.rename), color = ExcavPalette.Text) },
+                                        text = {
+                                            Text(
+                                                text = stringResource(R.string.rename),
+                                                color = ExcavPalette.Text,
+                                                textAlign = TextAlign.Center,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        },
                                         onClick = {
                                             renamePlaylist = playlist
                                             menuForPlaylistId = null
                                         }
                                     )
                                     DropdownMenuItem(
-                                        text = { Text(stringResource(R.string.delete), color = ExcavPalette.Error) },
+                                        text = {
+                                            Text(
+                                                text = stringResource(R.string.delete),
+                                                color = ExcavPalette.Error,
+                                                textAlign = TextAlign.Center,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        },
                                         onClick = {
                                             onDelete(playlist.id)
                                             menuForPlaylistId = null

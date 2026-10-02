@@ -28,8 +28,10 @@ import com.excavplayer.ui.theme.ExcavPalette
 import androidx.compose.ui.graphics.Color
 import com.excavplayer.ui.components.GlassmorphicBackButton
 import com.excavplayer.ui.components.GlassmorphicItem
+import com.excavplayer.ui.components.LocalHazeState
 import com.excavplayer.ui.components.ProgressiveHeaderBlur
 import com.excavplayer.ui.components.ProgressiveHeaderContainer
+import dev.chrisbanes.haze.hazeSource
 
 @Composable
 fun SearchScreen(
@@ -62,11 +64,14 @@ fun SearchScreen(
                 )
             }
         } else {
+            val hazeState = LocalHazeState.current
             LazyColumn(
                 state = searchListState,
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 74.dp, bottom = 90.dp),
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxSize()
+                    .hazeSource(state = hazeState)
             ) {
                 items(results, key = { it.id }) { video ->
                     ListVideoRow(video = video, onClick = { onPlay(video) })

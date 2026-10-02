@@ -52,6 +52,7 @@ import com.excavplayer.domain.model.Video
 import com.excavplayer.ui.components.*
 import com.excavplayer.ui.theme.ExcavPalette
 import com.excavplayer.ui.theme.ExcavShapes
+import dev.chrisbanes.haze.hazeSource
 
 data class VideoGroup(
     val id: String,
@@ -163,11 +164,14 @@ fun HomeScreen(
                     )
                 }
             } else {
+                val hazeState = LocalHazeState.current
                 LazyColumn(
                     state = groupListState,
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 64.dp, bottom = 90.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .hazeSource(state = hazeState)
                 ) {
                     items(groupVideos, key = { it.id }) { video ->
                         ListVideoRow(
@@ -248,13 +252,16 @@ fun HomeScreen(
         }
 
         Box(modifier = Modifier.fillMaxSize()) {
+            val hazeState = LocalHazeState.current
             LazyVerticalGrid(
                 state = gridState,
                 columns = GridCells.Adaptive(160.dp),
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 62.dp, bottom = 90.dp),
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxSize()
+                    .hazeSource(state = hazeState)
             ) {
             // Storage Permission Warning Banner if permission is not granted
             if (!hasStoragePermission) {

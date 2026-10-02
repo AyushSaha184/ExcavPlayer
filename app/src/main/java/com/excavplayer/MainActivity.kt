@@ -136,4 +136,18 @@ class MainActivity : ComponentActivity() {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         playerManager.dispatch(PlayerCommand.SetInPictureInPicture(isInPictureInPictureMode))
     }
+
+    override fun onStop() {
+        super.onStop()
+        val state = playerManager.state.value
+        val isPip = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            isInPictureInPictureMode || state.isInPictureInPicture
+        } else {
+            state.isInPictureInPicture
+        }
+
+        if (!isPip && !state.isBackgroundAudio) {
+            playerManager.pause()
+        }
+    }
 }

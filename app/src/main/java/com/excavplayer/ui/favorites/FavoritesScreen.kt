@@ -27,6 +27,7 @@ import com.excavplayer.domain.model.Playlist
 import com.excavplayer.domain.model.Video
 import com.excavplayer.ui.components.*
 import com.excavplayer.ui.theme.ExcavPalette
+import dev.chrisbanes.haze.hazeSource
 
 @Composable
 fun FavoritesScreen(
@@ -70,13 +71,16 @@ fun FavoritesScreen(
                 )
             }
         } else {
+            val hazeState = LocalHazeState.current
             LazyVerticalGrid(
                 state = gridState,
                 columns = GridCells.Adaptive(160.dp),
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 62.dp, bottom = 90.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxSize()
+                    .hazeSource(state = hazeState)
             ) {
                 item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
                     SectionTitle(stringResource(R.string.favorites))

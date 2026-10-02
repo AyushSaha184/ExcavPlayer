@@ -540,7 +540,8 @@ fun GroupCard(
 ) {
     val totalSize = videos.sumOf { it.sizeBytes }
     val totalCount = videos.size
-    val cardShape = RoundedCornerShape(32.dp)
+    val cardShape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp, bottomStart = 46.dp, bottomEnd = 46.dp)
+    val thumbnailShape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp, bottomStart = 16.dp, bottomEnd = 16.dp)
 
     Surface(
         modifier = modifier
@@ -561,8 +562,8 @@ fun GroupCard(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .aspectRatio(1.30f)
-                        .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp, bottomStart = 24.dp, bottomEnd = 24.dp))
+                        .aspectRatio(1.36f)
+                        .clip(thumbnailShape)
                 ) {
                     GroupThumbnail(
                         videos = videos,
@@ -583,31 +584,25 @@ fun GroupCard(
                     )
                 }
 
-                // Overlapping Folder Pill Badge (Frosted glass pill circular on one side)
-                val badgeShape = RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp, topEnd = 20.dp, bottomEnd = 20.dp)
+                // Translucent Pill placed on top of the lower line of the thumbnail, left side (bisected at middle)
+                val pillShape = CircleShape
                 Row(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .padding(start = 12.dp)
                         .offset(y = 12.dp)
-                        .clip(badgeShape)
-                        .background(Color(0xBF19202C))
-                        .border(0.6.dp, Color.White.copy(alpha = 0.15f), badgeShape)
-                        .padding(start = 8.dp, end = 12.dp, top = 5.dp, bottom = 5.dp),
+                        .height(24.dp)
+                        .clip(pillShape)
+                        .background(Color(0xCC1A202C))
+                        .border(0.75.dp, Color.White.copy(alpha = 0.22f), pillShape)
+                        .padding(horizontal = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Folder,
-                        contentDescription = null,
-                        tint = Color(0xFFFFC246),
-                        modifier = Modifier.size(13.dp)
-                    )
-                    Spacer(Modifier.width(5.dp))
                     Text(
                         text = "$totalCount ${if (totalCount == 1) "Video" else "Videos"}",
                         color = Color(0xFFF5F7FA),
                         style = MaterialTheme.typography.labelSmall.copy(
-                            fontSize = 11.sp,
+                            fontSize = 11.5.sp,
                             fontWeight = FontWeight.SemiBold
                         )
                     )
@@ -634,7 +629,7 @@ fun GroupCard(
                 )
                 Spacer(Modifier.height(3.dp))
                 Text(
-                    text = formatFileSize(totalSize),
+                    text = if (totalSize > 0) formatFileSize(totalSize) else "$totalCount ${if (totalCount == 1) "video" else "videos"}",
                     color = Color(0xFF8E97A6),
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.bodySmall.copy(
@@ -771,7 +766,8 @@ fun FolderCard(
 ) {
     val totalSize = if (folder.totalSizeBytes > 0) folder.totalSizeBytes else videos.sumOf { it.sizeBytes }
     val totalCount = if (folder.videoCount > 0) folder.videoCount else videos.size
-    val cardShape = RoundedCornerShape(32.dp)
+    val cardShape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp, bottomStart = 46.dp, bottomEnd = 46.dp)
+    val thumbnailShape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp, bottomStart = 16.dp, bottomEnd = 16.dp)
 
     Surface(
         modifier = modifier
@@ -792,8 +788,8 @@ fun FolderCard(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .aspectRatio(1.30f)
-                        .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp, bottomStart = 24.dp, bottomEnd = 24.dp))
+                        .aspectRatio(1.36f)
+                        .clip(thumbnailShape)
                 ) {
                     GroupThumbnail(
                         videos = videos,
@@ -814,31 +810,25 @@ fun FolderCard(
                     )
                 }
 
-                // Overlapping Folder Pill Badge (Frosted glass pill circular on one side)
-                val badgeShape = RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp, topEnd = 20.dp, bottomEnd = 20.dp)
+                // Translucent Pill placed on top of the lower line of the thumbnail, left side (bisected at middle)
+                val pillShape = CircleShape
                 Row(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .padding(start = 12.dp)
                         .offset(y = 12.dp)
-                        .clip(badgeShape)
-                        .background(Color(0xBF19202C))
-                        .border(0.6.dp, Color.White.copy(alpha = 0.15f), badgeShape)
-                        .padding(start = 8.dp, end = 12.dp, top = 5.dp, bottom = 5.dp),
+                        .height(24.dp)
+                        .clip(pillShape)
+                        .background(Color(0xCC1A202C))
+                        .border(0.75.dp, Color.White.copy(alpha = 0.22f), pillShape)
+                        .padding(horizontal = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Folder,
-                        contentDescription = null,
-                        tint = Color(0xFFFFC246),
-                        modifier = Modifier.size(13.dp)
-                    )
-                    Spacer(Modifier.width(5.dp))
                     Text(
                         text = "$totalCount ${if (totalCount == 1) "Video" else "Videos"}",
                         color = Color(0xFFF5F7FA),
                         style = MaterialTheme.typography.labelSmall.copy(
-                            fontSize = 11.sp,
+                            fontSize = 11.5.sp,
                             fontWeight = FontWeight.SemiBold
                         )
                     )
@@ -865,7 +855,7 @@ fun FolderCard(
                 )
                 Spacer(Modifier.height(3.dp))
                 Text(
-                    text = formatFileSize(totalSize),
+                    text = if (totalSize > 0) formatFileSize(totalSize) else "$totalCount ${if (totalCount == 1) "video" else "videos"}",
                     color = Color(0xFF8E97A6),
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.bodySmall.copy(
@@ -1003,15 +993,16 @@ fun FolderGridCard(
 ) {
     val totalSize = if (folder.totalSizeBytes > 0) folder.totalSizeBytes else videos.sumOf { it.sizeBytes }
     val totalCount = if (folder.videoCount > 0) folder.videoCount else videos.size
-    val cardShape = RoundedCornerShape(28.dp)
+    val cardShape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp, bottomStart = 46.dp, bottomEnd = 46.dp)
+    val thumbnailShape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp, bottomStart = 16.dp, bottomEnd = 16.dp)
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
             .clip(cardShape)
-            .border(1.dp, Color(0xFF343B45), cardShape)
+            .border(1.dp, Color(0xFF282F3B), cardShape)
             .clickable(onClick = onClick),
-        color = Color(0xFF191D23)
+        color = Color(0xFF13171F)
     ) {
         Column(
             modifier = Modifier.fillMaxWidth()
@@ -1021,40 +1012,50 @@ fun FolderGridCard(
                     .fillMaxWidth()
                     .padding(bottom = 12.dp)
             ) {
-                GroupThumbnail(
-                    videos = videos,
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .aspectRatio(1.38f)
-                        .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 16.dp, bottomEnd = 16.dp))
-                )
+                        .aspectRatio(1.36f)
+                        .clip(thumbnailShape)
+                ) {
+                    GroupThumbnail(
+                        videos = videos,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(
+                                        Color.Transparent,
+                                        Color.Transparent,
+                                        Color(0x8013171F)
+                                    )
+                                )
+                            )
+                    )
+                }
 
-                // Overlapping Folder Pill Badge (CircleShape / True Pill, Haze Blur, No Border)
+                // Translucent Pill placed on top of the lower line of the thumbnail, left side (bisected at middle)
+                val pillShape = CircleShape
                 Row(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .padding(start = 12.dp)
                         .offset(y = 12.dp)
-                        .clip(CircleShape)
-                        .hazeEffect(
-                            state = hazeState,
-                            style = CupertinoMaterials.ultraThin(containerColor = Color(0x991E2430))
-                        )
-                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                        .height(24.dp)
+                        .clip(pillShape)
+                        .background(Color(0xCC1A202C))
+                        .border(0.75.dp, Color.White.copy(alpha = 0.22f), pillShape)
+                        .padding(horizontal = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Folder,
-                        contentDescription = null,
-                        tint = Color(0xFFFFC44D),
-                        modifier = Modifier.size(13.dp)
-                    )
-                    Spacer(Modifier.width(5.dp))
                     Text(
                         text = "$totalCount ${if (totalCount == 1) "Video" else "Videos"}",
                         color = Color(0xFFF5F7FA),
                         style = MaterialTheme.typography.labelSmall.copy(
-                            fontSize = 11.sp,
+                            fontSize = 11.5.sp,
                             fontWeight = FontWeight.SemiBold
                         )
                     )
@@ -1065,7 +1066,7 @@ fun FolderGridCard(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 10.dp),
+                    .padding(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 14.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
@@ -1075,14 +1076,14 @@ fun FolderGridCard(
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.titleMedium.copy(
-                        fontSize = 14.sp,
+                        fontSize = 14.5.sp,
                         fontWeight = FontWeight.Bold
                     )
                 )
-                Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.height(3.dp))
                 Text(
                     text = if (totalSize > 0) formatFileSize(totalSize) else "$totalCount ${if (totalCount == 1) "video" else "videos"}",
-                    color = Color(0xFF9AA3B2),
+                    color = Color(0xFF8E97A6),
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.bodySmall.copy(
                         fontSize = 12.sp,
@@ -1106,15 +1107,17 @@ fun PlaylistGridCard(
     dropdownMenu: (@Composable () -> Unit)? = null
 ) {
     val totalCount = playlist.itemCount
-    val cardShape = RoundedCornerShape(28.dp)
+    val totalSize = videos.sumOf { it.sizeBytes }
+    val cardShape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp, bottomStart = 46.dp, bottomEnd = 46.dp)
+    val thumbnailShape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp, bottomStart = 16.dp, bottomEnd = 16.dp)
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
             .clip(cardShape)
-            .border(1.dp, Color(0xFF343B45), cardShape)
+            .border(1.dp, Color(0xFF282F3B), cardShape)
             .clickable(onClick = onClick),
-        color = Color(0xFF191D23)
+        color = Color(0xFF13171F)
     ) {
         Column(
             modifier = Modifier.fillMaxWidth()
@@ -1125,19 +1128,36 @@ fun PlaylistGridCard(
                     .padding(bottom = 12.dp)
             ) {
                 if (videos.isNotEmpty()) {
-                    GroupThumbnail(
-                        videos = videos,
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .aspectRatio(1.38f)
-                            .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 16.dp, bottomEnd = 16.dp))
-                    )
+                            .aspectRatio(1.36f)
+                            .clip(thumbnailShape)
+                    ) {
+                        GroupThumbnail(
+                            videos = videos,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.verticalGradient(
+                                        listOf(
+                                            Color.Transparent,
+                                            Color.Transparent,
+                                            Color(0x8013171F)
+                                        )
+                                    )
+                                )
+                        )
+                    }
                 } else {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .aspectRatio(1.38f)
-                            .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 16.dp, bottomEnd = 16.dp))
+                            .aspectRatio(1.36f)
+                            .clip(thumbnailShape)
                             .background(Color(0xFF232834)),
                         contentAlignment = Alignment.Center
                     ) {
@@ -1150,38 +1170,31 @@ fun PlaylistGridCard(
                     }
                 }
 
-                // Overlapping Playlist Pill Badge (CircleShape / True Pill, Haze Blur, No Border)
+                // Translucent Pill placed on top of the lower line of the thumbnail, left side (bisected at middle)
+                val pillShape = CircleShape
                 Row(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .padding(start = 12.dp)
                         .offset(y = 12.dp)
-                        .clip(CircleShape)
-                        .hazeEffect(
-                            state = hazeState,
-                            style = CupertinoMaterials.ultraThin(containerColor = Color(0x991E2430))
-                        )
-                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                        .height(24.dp)
+                        .clip(pillShape)
+                        .background(Color(0xCC1A202C))
+                        .border(0.75.dp, Color.White.copy(alpha = 0.22f), pillShape)
+                        .padding(horizontal = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Folder,
-                        contentDescription = null,
-                        tint = Color(0xFFFFC44D),
-                        modifier = Modifier.size(13.dp)
-                    )
-                    Spacer(Modifier.width(5.dp))
                     Text(
                         text = "$totalCount ${if (totalCount == 1) "Video" else "Videos"}",
                         color = Color(0xFFF5F7FA),
                         style = MaterialTheme.typography.labelSmall.copy(
-                            fontSize = 11.sp,
+                            fontSize = 11.5.sp,
                             fontWeight = FontWeight.SemiBold
                         )
                     )
                 }
 
-                // Three-dot Overflow Button on Bottom-Right (Overlapping Edge, CircleShape, Haze Blur, No Border)
+                // Three-dot Overflow Button on Bottom-Right (Overlapping Edge, CircleShape, Translucent Pill Style)
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
@@ -1190,20 +1203,18 @@ fun PlaylistGridCard(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(28.dp)
+                            .size(24.dp)
                             .clip(CircleShape)
-                            .hazeEffect(
-                                state = hazeState,
-                                style = CupertinoMaterials.ultraThin(containerColor = Color(0x991E2430))
-                            )
+                            .background(Color(0xCC1A202C))
+                            .border(0.75.dp, Color.White.copy(alpha = 0.22f), CircleShape)
                             .clickable(onClick = onOverflow),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.MoreVert,
                             contentDescription = stringResource(R.string.cd_more),
-                            tint = Color.White,
-                            modifier = Modifier.size(16.dp)
+                            tint = Color(0xFFF5F7FA),
+                            modifier = Modifier.size(15.dp)
                         )
                     }
                     dropdownMenu?.invoke()
@@ -1214,7 +1225,7 @@ fun PlaylistGridCard(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 10.dp),
+                    .padding(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 14.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
@@ -1224,14 +1235,14 @@ fun PlaylistGridCard(
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.titleMedium.copy(
-                        fontSize = 14.sp,
+                        fontSize = 14.5.sp,
                         fontWeight = FontWeight.Bold
                     )
                 )
-                Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.height(3.dp))
                 Text(
-                    text = "$totalCount ${if (totalCount == 1) "video" else "videos"}",
-                    color = Color(0xFF9AA3B2),
+                    text = if (totalSize > 0) formatFileSize(totalSize) else "$totalCount ${if (totalCount == 1) "video" else "videos"}",
+                    color = Color(0xFF8E97A6),
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.bodySmall.copy(
                         fontSize = 12.sp,
