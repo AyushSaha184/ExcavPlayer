@@ -86,20 +86,43 @@ fun UpdateDialog(
                                     )
                                 )
                                 Spacer(Modifier.height(4.dp))
-                                Surface(
-                                    shape = ExcavShapes.Pill,
-                                    color = Color.White.copy(alpha = 0.08f),
-                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.16f))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Text(
-                                        text = "v${updateState.currentVersion} → v${updateState.newVersion}",
-                                        color = ExcavPalette.TextSecondary,
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            fontWeight = FontWeight.SemiBold,
-                                            fontSize = 11.5.sp
-                                        ),
-                                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 2.5.dp)
-                                    )
+                                    Surface(
+                                        shape = ExcavShapes.Pill,
+                                        color = Color.White.copy(alpha = 0.08f),
+                                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.16f))
+                                    ) {
+                                        Text(
+                                            text = "v${updateState.currentVersion} → v${updateState.newVersion}",
+                                            color = ExcavPalette.TextSecondary,
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontWeight = FontWeight.SemiBold,
+                                                fontSize = 11.5.sp
+                                            ),
+                                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 2.5.dp)
+                                        )
+                                    }
+
+                                    updateState.apkAsset?.let { asset ->
+                                        Surface(
+                                            shape = ExcavShapes.Pill,
+                                            color = Color.White.copy(alpha = 0.05f),
+                                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f))
+                                        ) {
+                                            Text(
+                                                text = formatFileSize(asset.size),
+                                                color = ExcavPalette.TextMuted,
+                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    fontSize = 11.5.sp
+                                                ),
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.5.dp)
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -212,9 +235,8 @@ fun UpdateDialog(
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(Modifier.width(6.dp))
-                                val sizeLabel = updateState.apkAsset?.let { " (${formatFileSize(it.size)})" } ?: ""
                                 Text(
-                                    text = "Update Now$sizeLabel",
+                                    text = "Update",
                                     color = ExcavPalette.Ink,
                                     style = MaterialTheme.typography.bodyMedium.copy(
                                         fontWeight = FontWeight.Bold,
@@ -442,7 +464,7 @@ fun UpdateDialog(
                                 )
                                 Spacer(Modifier.width(6.dp))
                                 Text(
-                                    text = "Install Now",
+                                    text = "Install",
                                     color = ExcavPalette.Ink,
                                     style = MaterialTheme.typography.bodyMedium.copy(
                                         fontWeight = FontWeight.Bold,

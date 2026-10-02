@@ -183,7 +183,7 @@ fun FoldersScreen(
                 LazyVerticalGrid(
                     state = gridState,
                     columns = GridCells.Adaptive(160.dp),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = statusBarTop + 64.dp, bottom = 90.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = statusBarTop + 96.dp, bottom = 90.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier
@@ -215,7 +215,7 @@ fun FoldersScreen(
                 LazyVerticalGrid(
                     state = gridState,
                     columns = GridCells.Adaptive(160.dp),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = statusBarTop + 64.dp, bottom = 90.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = statusBarTop + 96.dp, bottom = 90.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier
@@ -270,8 +270,8 @@ fun FoldersScreen(
             }
         }
 
-        // Top Floating Location / Breadcrumb Bar
-        BreadcrumbBar(
+        // Top Floating Header with Brand Logo/Title and Location Bar below it
+        FoldersBrandHeader(
             currentPath = normCurrent,
             onNavigateToPath = selectPath,
             onBack = navigateUp,

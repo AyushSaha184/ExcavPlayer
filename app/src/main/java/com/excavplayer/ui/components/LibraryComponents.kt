@@ -208,6 +208,208 @@ fun BrandHeader(
 }
 
 @Composable
+fun FoldersBrandHeader(
+    currentPath: String,
+    onNavigateToPath: (String) -> Unit,
+    onBack: () -> Unit,
+    onSearch: () -> Unit,
+    onRefresh: (() -> Unit)? = null,
+    isScrolled: Boolean = true,
+    modifier: Modifier = Modifier,
+    hazeState: HazeState = LocalHazeState.current
+) {
+    val context = LocalContext.current
+    val iconBitmap = remember(context) {
+        try {
+            ContextCompat.getDrawable(context, R.mipmap.ic_launcher)?.toBitmap(
+                width = 96,
+                height = 96,
+                config = Bitmap.Config.ARGB_8888
+            )?.asImageBitmap()
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    val normCurrent = remember(currentPath) {
+        val trimmed = currentPath.trim().trimEnd('/')
+        when {
+            trimmed.isEmpty() || trimmed == "/storage/emulated/0" || trimmed == "/storage/emulated" || trimmed.equals("Internal Storage", ignoreCase = true) -> "/storage/emulated/0"
+            trimmed.startsWith("/storage/emulated/0") -> trimmed
+            trimmed.startsWith("/storage/") -> trimmed
+            trimmed.startsWith("/") -> trimmed
+            else -> "/storage/emulated/0/$trimmed"
+        }
+    }
+
+    val parts = remember(normCurrent) {
+        val list = mutableListOf<Pair<String, String>>()
+        list.add(Pair("Internal Storage", "/storage/emulated/0"))
+
+        if (normCurrent.startsWith("/storage/emulated/0")) {
+            val sub = normCurrent.removePrefix("/storage/emulated/0").trimStart('/')
+            if (sub.isNotEmpty()) {
+                val segments = sub.split('/').filter { it.isNotEmpty() }
+                var accumulated = "/storage/emulated/0"
+                for (seg in segments) {
+                    accumulated += "/$seg"
+                    list.add(Pair(seg, accumulated))
+                }
+            }
+        } else if (normCurrent.startsWith("/storage/")) {
+            list.clear()
+            val sub = normCurrent.removePrefix("/storage/").trimStart('/')
+            val segments = sub.split('/').filter { it.isNotEmpty() }
+            if (segments.isNotEmpty()) {
+                val cardId = segments[0]
+                list.add(Pair("SD Card", "/storage/$cardId"))
+                var accumulated = "/storage/$cardId"
+                for (i in 1 until segments.size) {
+                    accumulated += "/${segments[i]}"
+                    list.add(Pair(segments[i], accumulated))
+                }
+            } else {
+                list.add(Pair("Storage", normCurrent))
+            }
+        } else {
+            val segments = normCurrent.split('/').filter { it.isNotEmpty() }
+            var accumulated = ""
+            for (seg in segments) {
+                accumulated += "/$seg"
+                list.add(Pair(seg, accumulated))
+            }
+        }
+        list
+    }
+
+    val canGoBack = parts.size > 1
+
+    ProgressiveHeaderContainer(
+        modifier = modifier,
+        isScrolled = isScrolled,
+        hazeState = hazeState,
+        fadeHeight = 20.dp
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // Main Brand Header (Excav Player logo, title, and actions)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 18.dp, end = 18.dp, top = 6.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (iconBitmap != null) {
+                    Image(
+                        bitmap = iconBitmap,
+                        contentDescription = stringResource(R.string.cd_logo),
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                    )
+                } else {
+                    Image(
+                        painter = painterResource(id = R.mipmap.ic_launcher_foreground),
+                        contentDescription = stringResource(R.string.cd_logo),
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Excav",
+                        color = ExcavPalette.Text,
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                    )
+                    Text(
+                        text = "Player",
+                        color = ExcavPalette.TextMuted,
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                    )
+                }
+                Spacer(Modifier.weight(1f))
+                GlassmorphicHeaderActions(
+                    onSearch = onSearch,
+                    onRefresh = onRefresh,
+                    hazeState = hazeState
+                )
+            }
+
+            // Location Bar / Breadcrumb Trail directly below the brand header
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (canGoBack) {
+                    GlassmorphicBackButton(
+                        onClick = onBack,
+                        enabled = true,
+                        size = 32.dp,
+                        hazeState = hazeState
+                    )
+                    Spacer(Modifier.width(8.dp))
+                } else {
+                    GlassmorphicItem(
+                        modifier = Modifier.size(32.dp),
+                        cornerRadius = 16,
+                        hazeState = hazeState
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Folder,
+                                contentDescription = stringResource(R.string.folders),
+                                tint = ExcavPalette.Blue,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(8.dp))
+                }
+
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .horizontalScroll(rememberScrollState()),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    parts.forEachIndexed { idx, part ->
+                        val isLast = idx == parts.size - 1
+                        Surface(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable(enabled = !isLast) { onNavigateToPath(part.second) },
+                            color = if (isLast) ExcavPalette.Blue.copy(alpha = 0.18f) else Color.Transparent
+                        ) {
+                            Text(
+                                text = part.first,
+                                color = if (isLast) ExcavPalette.Blue else ExcavPalette.TextSecondary,
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = if (isLast) FontWeight.Bold else FontWeight.Medium,
+                                    fontSize = 13.sp
+                                ),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                        if (!isLast) {
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = null,
+                                tint = ExcavPalette.TextMuted,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun BottomNav(
     selected: MainTab,
     onSelect: (MainTab) -> Unit,
