@@ -2,8 +2,15 @@ package com.excavplayer.ui.navigation
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -31,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.excavplayer.R
 import com.excavplayer.ui.ExcavViewModel
 import com.excavplayer.ui.components.*
@@ -51,12 +59,11 @@ fun ExcavApp(
 ) {
     var tab by rememberSaveable { mutableStateOf(MainTab.HOME) }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
-    var playerOpen by rememberSaveable { mutableStateOf(false) }
+    val playerOpen by vm.isPlayerOpen.collectAsStateWithLifecycle()
 
-
-    val library by vm.libraryState.collectAsState()
-    val settings by vm.userSettings.collectAsState()
-    val userMessage by vm.userMessage.collectAsState()
+    val library by vm.libraryState.collectAsStateWithLifecycle()
+    val settings by vm.userSettings.collectAsStateWithLifecycle()
+    val userMessage by vm.userMessage.collectAsStateWithLifecycle()
 
     var restoredFolder by rememberSaveable { mutableStateOf(false) }
 
@@ -74,16 +81,7 @@ fun ExcavApp(
         }
     }
 
-    if (playerOpen) {
-        PlayerScreen(
-            vm = vm,
-            onClose = { playerOpen = false },
-            onPickSubtitle = onPickSubtitle
-        )
-        return
-    }
-
-    BackHandler(enabled = searchOpen || (tab != MainTab.FOLDERS && library.selectedFolder != null) || tab != MainTab.HOME) {
+    BackHandler(enabled = !playerOpen && (searchOpen || (tab != MainTab.FOLDERS && library.selectedFolder != null) || tab != MainTab.HOME)) {
         if (searchOpen) searchOpen = false
         else if (tab != MainTab.HOME) tab = MainTab.HOME
         else vm.closeFolder()
@@ -117,7 +115,6 @@ fun ExcavApp(
                             onBack = { searchOpen = false },
                             onPlay = {
                                 vm.play(it)
-                                playerOpen = true
                             }
                         )
                     } else {
@@ -148,7 +145,6 @@ fun ExcavApp(
                                     favorites = library.favorites,
                                     onPlay = {
                                         vm.play(it)
-                                        playerOpen = true
                                     },
                                     onOpenFolder = { folder ->
                                         vm.openFolder(folder)
@@ -176,7 +172,6 @@ fun ExcavApp(
                                     },
                                     onPlay = {
                                         vm.play(it, library.folderVideos)
-                                        playerOpen = true
                                     },
                                     onToggleFavorite = vm::toggleFavorite,
                                     onAddToPlaylist = vm::addVideoToPlaylist,
@@ -195,7 +190,6 @@ fun ExcavApp(
                                     onDelete = vm::deletePlaylist,
                                     onPlay = { vid, list ->
                                         vm.play(vid, list)
-                                        playerOpen = true
                                     },
                                     onToggleFavorite = vm::toggleFavorite,
                                     onAddToPlaylist = vm::addVideoToPlaylist,
@@ -211,7 +205,6 @@ fun ExcavApp(
                                     playlists = library.playlists,
                                     onPlay = {
                                         vm.play(it, library.favorites)
-                                        playerOpen = true
                                     },
                                     onToggleFavorite = vm::toggleFavorite,
                                     onAddToPlaylist = vm::addVideoToPlaylist,
@@ -233,10 +226,21 @@ fun ExcavApp(
             }
 
             // Sleek Floating Mini Player when audio is playing in the background
-            val playerState by vm.player.state.collectAsState()
+            val playerState by vm.player.state.collectAsStateWithLifecycle()
             val isBackgroundAudioActive = !playerOpen && playerState.currentVideo != null && (playerState.isBackgroundAudio || playerState.playback.isPlaying)
 
-            if (isBackgroundAudioActive) {
+            AnimatedVisibility(
+                visible = isBackgroundAudioActive && playerState.currentVideo != null,
+                enter = slideInVertically(
+                    initialOffsetY = { it * 2 },
+                    animationSpec = spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow)
+                ) + fadeIn(tween(200)),
+                exit = slideOutVertically(
+                    targetOffsetY = { it * 2 },
+                    animationSpec = tween(180, easing = FastOutSlowInEasing)
+                ) + fadeOut(tween(150)),
+                modifier = Modifier.align(Alignment.BottomCenter)
+            ) {
                 val currentVideo = playerState.currentVideo
                 if (currentVideo != null) {
                     Box(
@@ -245,13 +249,13 @@ fun ExcavApp(
                             .navigationBarsPadding()
                             .padding(horizontal = 20.dp)
                             .padding(bottom = if (searchOpen) 16.dp else 84.dp)
-                            .align(Alignment.BottomCenter)
                     ) {
                         GlassmorphicItem(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .height(64.dp)
                                 .clickable {
-                                    playerOpen = true
+                                    vm.setPlayerOpen(true)
                                 },
                             cornerRadius = 32,
                             blurRadius = 15,
@@ -259,85 +263,77 @@ fun ExcavApp(
                         ) {
                             Row(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                                    .fillMaxSize()
+                                    .padding(horizontal = 14.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(34.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFF232A3B)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Headphones,
-                                    contentDescription = "Background Audio",
-                                    tint = ExcavPalette.Text,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF232A3B)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Headphones,
+                                        contentDescription = "Background Audio",
+                                        tint = ExcavPalette.Text,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
 
-                            Spacer(Modifier.width(12.dp))
+                                Spacer(Modifier.width(12.dp))
 
-                            Column(
-                                modifier = Modifier.weight(1f)
-                            ) {
                                 Text(
                                     text = currentVideo.displayName,
                                     color = ExcavPalette.Text,
                                     style = MaterialTheme.typography.bodyMedium.copy(
                                         fontWeight = FontWeight.SemiBold,
-                                        fontSize = 13.sp
+                                        fontSize = 13.5.sp
                                     ),
                                     maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
                                 )
-                                Text(
-                                    text = if (playerState.playback.isPlaying) "Playing in background" else "Paused",
-                                    color = ExcavPalette.TextMuted,
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp)
-                                )
-                            }
 
-                            Spacer(Modifier.width(8.dp))
+                                Spacer(Modifier.width(8.dp))
 
-                            IconButton(
-                                onClick = {
-                                    if (playerState.playback.isPlaying) {
-                                        vm.player.pause()
-                                    } else {
-                                        vm.player.resume()
-                                    }
-                                },
-                                modifier = Modifier.size(34.dp)
-                            ) {
-                                Icon(
-                                    imageVector = if (playerState.playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                    contentDescription = if (playerState.playback.isPlaying) "Pause" else "Play",
-                                    tint = ExcavPalette.Text,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
+                                IconButton(
+                                    onClick = {
+                                        if (playerState.playback.isPlaying) {
+                                            vm.player.pause()
+                                        } else {
+                                            vm.player.resume()
+                                        }
+                                    },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (playerState.playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                        contentDescription = if (playerState.playback.isPlaying) "Pause" else "Play",
+                                        tint = ExcavPalette.Text,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
 
-                            IconButton(
-                                onClick = {
-                                    vm.player.stop()
-                                },
-                                modifier = Modifier.size(34.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Stop",
-                                    tint = ExcavPalette.TextMuted,
-                                    modifier = Modifier.size(18.dp)
-                                )
+                                IconButton(
+                                    onClick = {
+                                        vm.player.stop()
+                                    },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Stop",
+                                        tint = ExcavPalette.TextMuted,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
-        }
 
             // Pure Floating Glass Bottom Navbar
             if (!searchOpen) {
@@ -366,13 +362,33 @@ fun ExcavApp(
             }
 
             // In-App Update Dialog (Release Notes, Download Progress, and Installation)
-            val updateState by vm.updateState.collectAsState()
+            val updateState by vm.updateState.collectAsStateWithLifecycle()
             UpdateDialog(
                 updateState = updateState,
                 onDownload = { asset -> vm.downloadAndInstallUpdate(asset) },
                 onInstall = { file -> vm.installApk(file) },
                 onDismiss = { vm.dismissUpdate() }
             )
+
+            // Fullscreen Player with slide and fade animation
+            AnimatedVisibility(
+                visible = playerOpen,
+                enter = slideInVertically(
+                    initialOffsetY = { it / 3 },
+                    animationSpec = tween(260, easing = FastOutSlowInEasing)
+                ) + fadeIn(tween(220)),
+                exit = slideOutVertically(
+                    targetOffsetY = { it / 3 },
+                    animationSpec = tween(200, easing = FastOutSlowInEasing)
+                ) + fadeOut(tween(180)),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                PlayerScreen(
+                    vm = vm,
+                    onClose = { vm.setPlayerOpen(false) },
+                    onPickSubtitle = onPickSubtitle
+                )
+            }
         }
     }
 }

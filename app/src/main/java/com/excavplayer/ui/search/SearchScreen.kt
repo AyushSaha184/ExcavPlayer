@@ -60,7 +60,11 @@ fun SearchScreen(
                 .fillMaxSize()
         ) {
             items(results, key = { it.id }) { video ->
-                ListVideoRow(video = video, onClick = { onPlay(video) })
+                ListVideoRow(
+                    video = video,
+                    onClick = { onPlay(video) },
+                    modifier = Modifier.animateItem()
+                )
             }
         }
 

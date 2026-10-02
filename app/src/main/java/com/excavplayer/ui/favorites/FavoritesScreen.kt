@@ -68,13 +68,14 @@ fun FavoritesScreen(
             modifier = Modifier
                 .fillMaxSize()
         ) {
-            item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+            item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }, contentType = "section_header") {
                 SectionTitle(stringResource(R.string.favorites))
             }
-                items(videos, key = { it.id }) { video ->
+            items(videos, key = { it.id }, contentType = { "favorite_card" }) { video ->
                     CompactFavoriteCard(
                         video = video,
                         onClick = { onPlay(video) },
+                        modifier = Modifier.animateItem(),
                         onMoreClick = { selectedVideoForMenu = video },
                         dropdownMenu = {
                             if (selectedVideoForMenu?.id == video.id) {
@@ -141,6 +142,7 @@ fun FavoritesScreen(
 fun CompactFavoriteCard(
     video: Video,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
     onMoreClick: (() -> Unit)? = null,
     dropdownMenu: (@Composable () -> Unit)? = null
 ) {
@@ -166,11 +168,11 @@ fun CompactFavoriteCard(
     }
 
     Surface(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .border(1.dp, ExcavPalette.Line, RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick),
+            .tactilePress(onClick = onClick),
         color = ExcavPalette.SurfaceCard
     ) {
         Column {

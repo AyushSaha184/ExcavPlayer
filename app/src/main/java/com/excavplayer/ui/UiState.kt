@@ -154,8 +154,16 @@ class ExcavViewModel @Inject constructor(
         }
     }
 
+    private val _isPlayerOpen = MutableStateFlow(false)
+    val isPlayerOpen: StateFlow<Boolean> = _isPlayerOpen.asStateFlow()
+
+    fun setPlayerOpen(open: Boolean) {
+        _isPlayerOpen.value = open
+    }
+
     fun play(video: Video, contextList: List<Video>? = null) {
         logger.i(TAG, "play() invoked for video: ${video.displayName} [id=${video.id}]")
+        _isPlayerOpen.value = true
         val currentFolderVideos = libraryState.value.folderVideos
         val allVideos = libraryState.value.videos
         val activeList = when {

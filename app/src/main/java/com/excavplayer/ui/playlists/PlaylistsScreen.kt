@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -83,7 +84,7 @@ fun PlaylistsScreen(
 
     if (selectedPlaylist != null) {
         val playlist = selectedPlaylist!!
-        val playlistItems by observePlaylistItems(playlist.id).collectAsState(initial = emptyList())
+        val playlistItems by observePlaylistItems(playlist.id).collectAsStateWithLifecycle(initialValue = emptyList())
         val videos = remember(playlistItems) { playlistItems.mapNotNull { it.video } }
 
         val detailListState = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -102,10 +103,11 @@ fun PlaylistsScreen(
                 modifier = Modifier
                     .fillMaxSize()
             ) {
-                items(videos, key = { it.id }) { video ->
+                items(videos, key = { it.id }, contentType = { "video_row" }) { video ->
                     ListVideoRow(
                         video = video,
                         onClick = { onPlay(video, videos) },
+                        modifier = Modifier.animateItem(),
                         onMoreClick = { selectedVideoForMenu = video },
                         dropdownMenu = {
                                 val menuShape = RoundedCornerShape(14.dp)
@@ -135,10 +137,9 @@ fun PlaylistsScreen(
                                     DropdownMenuItem(
                                         text = { Text(if (isFav) "Remove from Favorites" else "Add to Favorites", color = ExcavPalette.Text) },
                                         leadingIcon = {
-                                            Icon(
-                                                imageVector = if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                                                contentDescription = null,
-                                                tint = ExcavPalette.Text
+                                            AnimatedFavoriteIcon(
+                                                isFavorite = isFav,
+                                                tint = if (isFav) Color(0xFFFF5277) else ExcavPalette.Text
                                             )
                                         },
                                         onClick = {
@@ -275,15 +276,13 @@ fun PlaylistsScreen(
                 }
 
                 if (playlists.isNotEmpty()) {
-                    gridItems(playlists, key = { "playlist_${it.id}" }) { playlist ->
-                        val playlistItems by observePlaylistItems(playlist.id).collectAsState(initial = emptyList())
-                        val videos = remember(playlistItems) { playlistItems.mapNotNull { item -> item.video } }
-
+                    gridItems(playlists, key = { "playlist_${it.id}" }, contentType = { "playlist_card" }) { playlist ->
                         PlaylistGridCard(
                             playlist = playlist,
-                            videos = videos,
+                            videos = emptyList(),
                             onOverflow = { menuForPlaylistId = playlist.id },
                             onClick = { selectedPlaylist = playlist },
+                            modifier = Modifier.animateItem(),
                             dropdownMenu = {
                                 val menuShape = RoundedCornerShape(14.dp)
                                 DropdownMenu(

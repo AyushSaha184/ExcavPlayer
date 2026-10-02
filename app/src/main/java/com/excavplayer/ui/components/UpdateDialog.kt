@@ -42,7 +42,7 @@ fun UpdateDialog(
                 onDismissRequest = onDismiss,
                 properties = DialogProperties(usePlatformDefaultWidth = false)
             ) {
-                Box(
+                AnimatedDialogContainer(
                     modifier = Modifier
                         .fillMaxWidth(0.90f)
                         .wrapContentHeight()
@@ -188,7 +188,7 @@ fun UpdateDialog(
                 onDismissRequest = {},
                 properties = DialogProperties(usePlatformDefaultWidth = false)
             ) {
-                Box(
+                AnimatedDialogContainer(
                     modifier = Modifier
                         .fillMaxWidth(0.88f)
                         .wrapContentHeight()

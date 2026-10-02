@@ -42,6 +42,8 @@ import com.excavplayer.ui.theme.ExcavPalette
 import com.excavplayer.ui.theme.ExcavShapes
 import dev.chrisbanes.haze.hazeSource
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+
 private enum class SettingDialog {
     NONE, HARDWARE_ACCELERATION, SPEED, REPEAT, THRESHOLD, ORIENTATION, MEDIA_FIT, SUB_LANG, AUDIO_LANG
 }
@@ -51,7 +53,7 @@ fun SettingsScreen(
     vm: ExcavViewModel,
     onBack: (() -> Unit)? = null
 ) {
-    val settings by vm.userSettings.collectAsState()
+    val settings by vm.userSettings.collectAsStateWithLifecycle()
     var activeDialog by rememberSaveable { mutableStateOf(SettingDialog.NONE) }
 
     val scrollState = rememberScrollState()

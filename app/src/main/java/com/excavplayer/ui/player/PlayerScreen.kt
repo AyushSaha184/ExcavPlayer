@@ -12,6 +12,17 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
@@ -29,9 +40,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -66,12 +79,9 @@ import com.excavplayer.ui.ExcavViewModel
 import com.excavplayer.ui.components.*
 import com.excavplayer.ui.theme.ExcavPalette
 import com.excavplayer.ui.theme.ExcavShapes
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.FastOutSlowInEasing
 
 private enum class PlayerSheet { SUBTITLES, AUDIO, SPEED, CHAPTERS }
+private enum class DoubleTapSide { LEFT, RIGHT }
 
 @Composable
 private fun Modifier.playerGlass(
@@ -91,9 +101,9 @@ fun PlayerScreen(
     onClose: () -> Unit,
     onPickSubtitle: () -> Unit
 ) {
-    val state by vm.playerState.collectAsState()
-    val queue by vm.queueState.collectAsState()
-    val settings by vm.userSettings.collectAsState()
+    val state by vm.playerState.collectAsStateWithLifecycle()
+    val queue by vm.queueState.collectAsStateWithLifecycle()
+    val settings by vm.userSettings.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val activity = context as? android.app.Activity
     val pipHelper = remember { PipHelper(context.applicationContext, com.excavplayer.core.logging.AndroidAppLogger()) }
@@ -135,6 +145,9 @@ fun PlayerScreen(
     var gestureHudProgress by remember { mutableFloatStateOf(0f) }
     var gestureHudIcon by remember { mutableStateOf<ImageVector?>(null) }
 
+    var doubleTapSeekSide by remember { mutableStateOf<DoubleTapSide?>(null) }
+    var doubleTapSeekAccumulatedSeconds by remember { mutableIntStateOf(10) }
+
     var lastDoubleTapSeekTime by remember { mutableLongStateOf(0L) }
     var activeSurfaceView by remember { mutableStateOf<android.view.SurfaceView?>(null) }
 
@@ -151,6 +164,14 @@ fun PlayerScreen(
             gestureHudText = null
             gestureHudIcon = null
             gestureHudProgress = 0f
+        }
+    }
+
+    // Auto-dismiss double tap seek ripple
+    LaunchedEffect(doubleTapSeekSide, doubleTapSeekAccumulatedSeconds) {
+        if (doubleTapSeekSide != null) {
+            delay(650L)
+            doubleTapSeekSide = null
         }
     }
 
@@ -228,9 +249,11 @@ fun PlayerScreen(
     }
 
     // Active Chapter & Intro/Outro Skip Detection
-    val currentPosition = state.playback.currentPositionMs
-    val activeChapter = remember(state.chapters, currentPosition) {
-        state.chapters.find { currentPosition >= it.startTimeMs && currentPosition < it.endTimeMs }
+    val activeChapter by remember(state.chapters) {
+        derivedStateOf {
+            val curPos = state.playback.currentPositionMs
+            state.chapters.find { curPos >= it.startTimeMs && curPos < it.endTimeMs }
+        }
     }
 
     val isPip = (activity?.isInPictureInPictureMode == true) || state.isInPictureInPicture
@@ -300,13 +323,26 @@ fun PlayerScreen(
                                 return@detectTapGestures
                             }
                             val width = size.width
+                            val now = android.os.SystemClock.uptimeMillis()
                             when {
                                 offset.x < width * 0.35f -> {
-                                    lastDoubleTapSeekTime = android.os.SystemClock.uptimeMillis()
+                                    if (doubleTapSeekSide == DoubleTapSide.LEFT && now - lastDoubleTapSeekTime < 750) {
+                                        doubleTapSeekAccumulatedSeconds += 10
+                                    } else {
+                                        doubleTapSeekAccumulatedSeconds = 10
+                                    }
+                                    lastDoubleTapSeekTime = now
+                                    doubleTapSeekSide = DoubleTapSide.LEFT
                                     vm.player.seekBackward(10_000)
                                 }
                                 offset.x > width * 0.65f -> {
-                                    lastDoubleTapSeekTime = android.os.SystemClock.uptimeMillis()
+                                    if (doubleTapSeekSide == DoubleTapSide.RIGHT && now - lastDoubleTapSeekTime < 750) {
+                                        doubleTapSeekAccumulatedSeconds += 10
+                                    } else {
+                                        doubleTapSeekAccumulatedSeconds = 10
+                                    }
+                                    lastDoubleTapSeekTime = now
+                                    doubleTapSeekSide = DoubleTapSide.RIGHT
                                     vm.player.seekForward(10_000)
                                 }
                                 else -> {
@@ -427,11 +463,76 @@ fun PlayerScreen(
                 }
         )
 
-        // Gesture HUD Overlay - frosted glass box for volume and brightness gestures
-        if (gestureHudText != null) {
+        // Double-Tap Quick Seek Visual Indicator Ripple
+        AnimatedVisibility(
+            visible = doubleTapSeekSide != null,
+            enter = fadeIn(tween(100)) + scaleIn(initialScale = 0.82f, animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMedium)),
+            exit = fadeOut(tween(180)),
+            modifier = Modifier.align(if (doubleTapSeekSide == DoubleTapSide.LEFT) Alignment.CenterStart else Alignment.CenterEnd)
+        ) {
+            doubleTapSeekSide?.let { side ->
+                val isLeft = side == DoubleTapSide.LEFT
+                Box(
+                    modifier = Modifier
+                        .width(140.dp)
+                        .fillMaxHeight(0.55f)
+                        .clip(
+                            if (isLeft) RoundedCornerShape(topEnd = 140.dp, bottomEnd = 140.dp)
+                            else RoundedCornerShape(topStart = 140.dp, bottomStart = 140.dp)
+                        )
+                        .background(Color.White.copy(alpha = 0.14f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy((-6).dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val chevron = if (isLeft) Icons.AutoMirrored.Filled.ArrowBack else Icons.AutoMirrored.Filled.ArrowForward
+                            Icon(
+                                imageVector = chevron,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Icon(
+                                imageVector = chevron,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "${if (isLeft) "-" else "+"}$doubleTapSeekAccumulatedSeconds sec",
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        // Gesture HUD Overlay - frosted glass box with spring animation for volume and brightness gestures
+        AnimatedVisibility(
+            visible = gestureHudText != null,
+            enter = scaleIn(initialScale = 0.88f, animationSpec = spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMedium)) + fadeIn(tween(120)),
+            exit = scaleOut(targetScale = 0.92f, animationSpec = tween(160)) + fadeOut(tween(160)),
+            modifier = Modifier.align(Alignment.Center)
+        ) {
+            val animatedHudProgress by animateFloatAsState(
+                targetValue = gestureHudProgress,
+                animationSpec = spring(stiffness = Spring.StiffnessMedium),
+                label = "hudProgress"
+            )
             Box(
                 modifier = Modifier
-                    .align(Alignment.Center)
                     .playerGlass(RoundedCornerShape(24.dp))
                     .padding(horizontal = 24.dp, vertical = 20.dp),
                 contentAlignment = Alignment.Center
@@ -456,7 +557,7 @@ fun PlayerScreen(
                     if (gestureHudProgress > 0f) {
                         Spacer(Modifier.height(10.dp))
                         LinearProgressIndicator(
-                            progress = { gestureHudProgress },
+                            progress = { animatedHudProgress },
                             modifier = Modifier
                                 .width(120.dp)
                                 .height(4.dp)
@@ -470,9 +571,22 @@ fun PlayerScreen(
         }
 
         // Skip Intro / Outro / Recap Floating Pill
-        activeChapter?.let { chapter ->
-            val isSkippable = chapter.type == ChapterType.INTRO || chapter.type == ChapterType.OUTRO || chapter.type == ChapterType.RECAP
-            if (isSkippable) {
+        val isSkippableChapter = activeChapter?.let { it.type == ChapterType.INTRO || it.type == ChapterType.OUTRO || it.type == ChapterType.RECAP } == true
+        AnimatedVisibility(
+            visible = isSkippableChapter,
+            enter = slideInHorizontally(
+                initialOffsetX = { it },
+                animationSpec = spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMediumLow)
+            ) + fadeIn(tween(200)),
+            exit = slideOutHorizontally(
+                targetOffsetX = { it },
+                animationSpec = tween(180)
+            ) + fadeOut(tween(150)),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(bottom = 90.dp, end = 24.dp)
+        ) {
+            activeChapter?.let { chapter ->
                 val skipLabel = when (chapter.type) {
                     ChapterType.INTRO -> "Skip Intro"
                     ChapterType.OUTRO -> "Skip Outro"
@@ -480,43 +594,37 @@ fun PlayerScreen(
                     else -> "Skip Segment"
                 }
 
-                Box(
+                Surface(
                     modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(bottom = 90.dp, end = 24.dp)
+                        .clip(ExcavShapes.Pill)
+                        .border(1.5.dp, ExcavPalette.BlueGlow, ExcavShapes.Pill)
+                        .clickable {
+                            vm.player.seekTo(chapter.endTimeMs)
+                            gestureHudText = skipLabel
+                            gestureHudIcon = Icons.Default.FastForward
+                        },
+                    color = ExcavPalette.Ink.copy(alpha = 0.95f),
+                    shadowElevation = 8.dp
                 ) {
-                    Surface(
-                        modifier = Modifier
-                            .clip(ExcavShapes.Pill)
-                            .border(1.5.dp, ExcavPalette.BlueGlow, ExcavShapes.Pill)
-                            .clickable {
-                                vm.player.seekTo(chapter.endTimeMs)
-                                gestureHudText = skipLabel
-                                gestureHudIcon = Icons.Default.FastForward
-                            },
-                        color = ExcavPalette.Ink.copy(alpha = 0.95f),
-                        shadowElevation = 8.dp
+                    Row(
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.FastForward,
-                                contentDescription = null,
-                                tint = ExcavPalette.Blue,
-                                modifier = Modifier.size(20.dp)
+                        Icon(
+                            imageVector = Icons.Default.FastForward,
+                            contentDescription = null,
+                            tint = ExcavPalette.Blue,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = skipLabel,
+                            color = ExcavPalette.Text,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
                             )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                text = skipLabel,
-                                color = ExcavPalette.Text,
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp
-                                )
-                            )
-                        }
+                        )
                     }
                 }
             }
@@ -718,10 +826,14 @@ fun PlayerScreen(
         // Active Bottom Sheet with smooth entering and exiting animation
         AnimatedVisibility(
             visible = activeSheet != null,
-            enter = fadeIn(animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)) +
-                    scaleIn(initialScale = 0.92f, animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)),
-            exit = fadeOut(animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing)) +
-                   scaleOut(targetScale = 0.92f, animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing))
+            enter = slideInVertically(
+                initialOffsetY = { (it * 0.40f).toInt() },
+                animationSpec = spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow)
+            ) + fadeIn(animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)),
+            exit = slideOutVertically(
+                targetOffsetY = { (it * 0.35f).toInt() },
+                animationSpec = tween(durationMillis = 160, easing = FastOutSlowInEasing)
+            ) + fadeOut(animationSpec = tween(durationMillis = 160, easing = FastOutSlowInEasing))
         ) {
             activeSheet?.let { sheetType ->
                 SheetContainer(
@@ -876,12 +988,25 @@ private fun PlayerControlsOverlay(
 
             Spacer(Modifier.width(28.dp))
 
+            val playPauseScale by animateFloatAsState(
+                targetValue = if (state.playback.isPlaying) 1f else 0.92f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMediumLow
+                ),
+                label = "playPauseScale"
+            )
+
             IconButton(
                 onClick = {
                     if (state.playback.isPlaying) player.pause() else player.resume()
                 },
                 modifier = Modifier
                     .size(64.dp)
+                    .graphicsLayer {
+                        scaleX = playPauseScale
+                        scaleY = playPauseScale
+                    }
                     .playerGlass(CircleShape)
             ) {
                 Icon(

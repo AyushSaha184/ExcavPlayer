@@ -22,6 +22,14 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -107,17 +115,21 @@ fun HomeScreen(
     var deleteVideoTarget by remember { mutableStateOf<Video?>(null) }
     var playlistVideoTarget by remember { mutableStateOf<Video?>(null) }
 
-    // Accurate Grouping: group videos by folder / series accurately
+    // Accurate Grouping: pre-index videos for fast O(1) group lookup
     val groups = remember(videos, folders) {
+        val videosByFolderPath = videos.groupBy { it.folderPath }
+        val videosByFolderName = videos.groupBy { it.folderName }
         if (folders.isNotEmpty()) {
             folders.mapNotNull { folder ->
-                val folderVids = videos.filter { it.folderPath == folder.path || (it.folderName.isNotEmpty() && it.folderName == folder.name) }
-                if (folderVids.isNotEmpty()) {
+                val direct = videosByFolderPath[folder.path].orEmpty()
+                val byName = if (folder.name.isNotEmpty()) videosByFolderName[folder.name].orEmpty() else emptyList()
+                val combined = if (direct.isEmpty()) byName else if (byName.isEmpty()) direct else (direct + byName).distinctBy { it.id }
+                if (combined.isNotEmpty()) {
                     VideoGroup(
                         id = folder.path,
                         name = folder.name,
                         path = folder.path,
-                        videos = folderVids
+                        videos = combined
                     )
                 } else null
             }
@@ -133,13 +145,22 @@ fun HomeScreen(
         }
     }
 
-    androidx.activity.compose.BackHandler(enabled = selectedGroup != null) {
-        selectedGroup = null
-    }
-
-    // If a group is selected, display the group's video list view
-    if (selectedGroup != null) {
-        val group = selectedGroup!!
+    AnimatedContent(
+        targetState = selectedGroup,
+        transitionSpec = {
+            if (targetState != null) {
+                (slideInHorizontally(initialOffsetX = { (it * 0.18f).toInt() }, animationSpec = tween(220, easing = FastOutSlowInEasing)) + fadeIn(tween(180)))
+                    .togetherWith(slideOutHorizontally(targetOffsetX = { -(it * 0.15f).toInt() }, animationSpec = tween(180, easing = FastOutSlowInEasing)) + fadeOut(tween(140)))
+            } else {
+                (slideInHorizontally(initialOffsetX = { -(it * 0.15f).toInt() }, animationSpec = tween(200, easing = FastOutSlowInEasing)) + fadeIn(tween(160)))
+                    .togetherWith(slideOutHorizontally(targetOffsetX = { (it * 0.18f).toInt() }, animationSpec = tween(180, easing = FastOutSlowInEasing)) + fadeOut(tween(140)))
+            }
+        },
+        label = "homeGroupNavigationTransition",
+        modifier = Modifier.fillMaxSize()
+    ) { currentGroup ->
+        if (currentGroup != null) {
+            val group = currentGroup
         val groupVideos = remember(group, videos) {
             videos.filter { it.folderPath == group.path || it.folderName == group.name }.ifEmpty { group.videos }
         }
@@ -159,10 +180,11 @@ fun HomeScreen(
                 modifier = Modifier
                     .fillMaxSize()
             ) {
-                items(groupVideos, key = { it.id }) { video ->
+                items(groupVideos, key = { it.id }, contentType = { "video_row" }) { video ->
                     ListVideoRow(
                         video = video,
                         onClick = { onPlay(video) },
+                        modifier = Modifier.animateItem(),
                         onMoreClick = { selectedVideoForMenu = video },
                         dropdownMenu = {
                             if (selectedVideoForMenu?.id == video.id) {
@@ -369,7 +391,7 @@ fun HomeScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            items(continueWatching, key = { "cw_${it.id}" }) { video ->
+                            items(continueWatching, key = { "cw_${it.id}" }, contentType = { "continue_watching_card" }) { video ->
                                 ContinueWatchingRowCard(
                                     video = video,
                                     onClick = { onPlay(video) },
@@ -397,22 +419,23 @@ fun HomeScreen(
                     }
                 }
 
-                item(span = { GridItemSpan(maxLineSpan) }) {
+                item(span = { GridItemSpan(maxLineSpan) }, contentType = "spacer") {
                     Spacer(Modifier.height(4.dp))
                 }
             }
 
             // Groups Section
             if (groups.isNotEmpty()) {
-                item(span = { GridItemSpan(maxLineSpan) }) {
+                item(span = { GridItemSpan(maxLineSpan) }, contentType = "section_header") {
                     SectionTitle("Groups")
                 }
 
-                items(groups, key = { "group_${it.id}" }) { group ->
+                items(groups, key = { "group_${it.id}" }, contentType = { "group_card" }) { group ->
                     GroupCard(
                         groupName = group.name,
                         videos = group.videos,
-                        onClick = { selectedGroup = group }
+                        onClick = { selectedGroup = group },
+                        modifier = Modifier.animateItem()
                     )
                 }
             }
@@ -429,6 +452,7 @@ fun HomeScreen(
             modifier = Modifier.align(Alignment.TopCenter)
         )
     }
+}
 }
 
     // Modals & Dialogs

@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode as AnimRepeatMode
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -18,6 +19,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -28,8 +30,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.material3.*
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,6 +45,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.graphics.asImageBitmap
@@ -72,6 +75,64 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.materials.CupertinoMaterials
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
+
+@Composable
+fun Modifier.tactilePress(
+    interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
+    pressScale: Float = 0.97f,
+    onClick: () -> Unit
+): Modifier {
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) pressScale else 1f,
+        animationSpec = spring(
+            dampingRatio = 0.75f,
+            stiffness = if (isPressed) Spring.StiffnessMedium else Spring.StiffnessLow
+        ),
+        label = "tactilePressScale"
+    )
+    return this
+        .graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        }
+        .clickable(
+            interactionSource = interactionSource,
+            indication = ripple(bounded = true, color = ExcavPalette.Blue.copy(alpha = 0.2f)),
+            onClick = onClick
+        )
+}
+
+@Composable
+fun AnimatedDialogContainer(
+    modifier: Modifier = Modifier,
+    content: @Composable BoxScope.() -> Unit
+) {
+    var isVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        isVisible = true
+    }
+    val scale by animateFloatAsState(
+        targetValue = if (isVisible) 1f else 0.90f,
+        animationSpec = spring(dampingRatio = 0.78f, stiffness = Spring.StiffnessMediumLow),
+        label = "dialogScale"
+    )
+    val alpha by animateFloatAsState(
+        targetValue = if (isVisible) 1f else 0f,
+        animationSpec = tween(180, easing = FastOutSlowInEasing),
+        label = "dialogAlpha"
+    )
+
+    Box(
+        modifier = modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                this.alpha = alpha
+            },
+        content = content
+    )
+}
 
 @Composable
 fun BrandHeader(
@@ -152,7 +213,8 @@ fun BottomNav(
     onSelect: (MainTab) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val glassShape = RoundedCornerShape(32.dp)
+    val entries = MainTab.entries
+    val selectedIndex = entries.indexOf(selected).coerceAtLeast(0)
 
     Box(
         modifier = modifier
@@ -161,59 +223,102 @@ fun BottomNav(
             .padding(horizontal = 20.dp, vertical = 10.dp)
     ) {
         GlassmorphicItem(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(64.dp),
             cornerRadius = 32,
             blurRadius = 15
         ) {
-            Row(
+            BoxWithConstraints(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 6.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.SpaceAround,
-                verticalAlignment = Alignment.CenterVertically
+                    .fillMaxSize()
+                    .padding(horizontal = 6.dp, vertical = 6.dp)
             ) {
-                MainTab.entries.forEach { tab ->
-                    val isSelected = selected == tab
-                    val pillShape = RoundedCornerShape(22.dp)
+                val tabWidth = maxWidth / entries.size
+                val pillOffset by animateDpAsState(
+                    targetValue = tabWidth * selectedIndex,
+                    animationSpec = spring(
+                        dampingRatio = 0.80f,
+                        stiffness = Spring.StiffnessMediumLow
+                    ),
+                    label = "bottomNavPillOffset"
+                )
 
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = 2.dp)
-                            .clip(pillShape)
-                            .background(
-                                if (isSelected) Color.White.copy(alpha = 0.18f) else Color.Transparent
-                            )
-                            .border(
-                                width = 0.5.dp,
-                                color = if (isSelected) Color.White.copy(alpha = 0.30f) else Color.Transparent,
-                                shape = pillShape
-                            )
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ) { onSelect(tab) }
-                            .padding(vertical = 7.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            imageVector = tab.icon,
-                            contentDescription = tab.label,
-                            tint = if (isSelected) Color.White else Color.White.copy(alpha = 0.65f),
-                            modifier = Modifier.size(22.dp)
+                // Sliding Glass Indicator Pill
+                val pillShape = RoundedCornerShape(26.dp)
+                Box(
+                    modifier = Modifier
+                        .offset(x = pillOffset)
+                        .width(tabWidth)
+                        .fillMaxHeight()
+                        .padding(horizontal = 2.dp)
+                        .clip(pillShape)
+                        .background(Color.White.copy(alpha = 0.18f))
+                        .border(
+                            width = 0.5.dp,
+                            color = Color.White.copy(alpha = 0.30f),
+                            shape = pillShape
                         )
-                        Spacer(Modifier.height(3.dp))
-                        Text(
-                            text = tab.label,
-                            color = if (isSelected) Color.White else Color.White.copy(alpha = 0.65f),
-                            style = MaterialTheme.typography.labelMedium.copy(
-                                fontSize = 10.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.SpaceAround,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    entries.forEach { tab ->
+                        val isSelected = selected == tab
+
+                        val iconScale by animateFloatAsState(
+                            targetValue = if (isSelected) 1.12f else 1.0f,
+                            animationSpec = spring(
+                                dampingRatio = 0.6f,
+                                stiffness = Spring.StiffnessMediumLow
                             ),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            label = "tabIconScale"
                         )
+                        val contentAlpha by animateFloatAsState(
+                            targetValue = if (isSelected) 1.0f else 0.65f,
+                            animationSpec = tween(150),
+                            label = "tabContentAlpha"
+                        )
+
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .padding(horizontal = 2.dp)
+                                .clip(pillShape)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { onSelect(tab) },
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = tab.icon,
+                                contentDescription = tab.label,
+                                tint = Color.White.copy(alpha = contentAlpha),
+                                modifier = Modifier
+                                    .size(22.dp)
+                                    .graphicsLayer {
+                                        scaleX = iconScale
+                                        scaleY = iconScale
+                                    }
+                            )
+                            Spacer(Modifier.height(3.dp))
+                            Text(
+                                text = tab.label,
+                                color = Color.White.copy(alpha = contentAlpha),
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontSize = 10.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                ),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
             }
@@ -288,17 +393,18 @@ fun EmptyState(icon: ImageVector, label: String, action: (@Composable () -> Unit
 fun VideoCard(
     video: Video,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
     onMoreClick: (() -> Unit)? = null,
     dropdownMenu: (@Composable () -> Unit)? = null
 ) {
     val resLabel = formatResolution(video.width, video.height)
 
     Surface(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(ExcavShapes.Card)
             .border(1.dp, ExcavPalette.Line, ExcavShapes.Card)
-            .clickable(onClick = onClick),
+            .tactilePress(onClick = onClick),
         color = ExcavPalette.SurfaceCard
     ) {
         Column {
@@ -398,17 +504,18 @@ fun VideoCard(
 fun PosterCard(
     video: Video,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
     onMoreClick: (() -> Unit)? = null,
     dropdownMenu: (@Composable () -> Unit)? = null
 ) {
     val resLabel = formatResolution(video.width, video.height)
 
     Surface(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(ExcavShapes.Card)
             .border(1.dp, ExcavPalette.Line, ExcavShapes.Card)
-            .clickable(onClick = onClick),
+            .tactilePress(onClick = onClick),
         color = ExcavPalette.SurfaceCard
     ) {
         Column {
@@ -489,9 +596,17 @@ fun PosterCard(
 @Composable
 fun GroupThumbnail(videos: List<Video>, modifier: Modifier = Modifier) {
     val loader = rememberThumbnailLoader()
-    var bitmap by remember(videos) { mutableStateOf<Bitmap?>(null) }
+    val initialBitmap = remember(videos) {
+        var found: Bitmap? = null
+        for (v in videos.take(4)) {
+            found = loader.getFromCache(v.uri)
+            if (found != null) break
+        }
+        found
+    }
+    var bitmap by remember(videos) { mutableStateOf(initialBitmap) }
     LaunchedEffect(videos) {
-        if (videos.isNotEmpty()) {
+        if (bitmap == null && videos.isNotEmpty()) {
             for (v in videos.take(4)) {
                 val b = loader.loadThumbnail(v.uri)
                 if (b != null) {
@@ -548,7 +663,7 @@ fun GroupCard(
             .fillMaxWidth()
             .clip(cardShape)
             .border(1.dp, Color(0xFF282F3B), cardShape)
-            .clickable(onClick = onClick),
+            .tactilePress(onClick = onClick),
         color = Color(0xFF13171F)
     ) {
         Column(
@@ -646,6 +761,7 @@ fun GroupCard(
 fun ContinueWatchingRowCard(
     video: Video,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
     onMoreClick: (() -> Unit)? = null,
     dropdownMenu: (@Composable () -> Unit)? = null
 ) {
@@ -654,11 +770,11 @@ fun ContinueWatchingRowCard(
     val remaining = (video.durationMs - watched).coerceAtLeast(0L)
 
     Surface(
-        modifier = Modifier
+        modifier = modifier
             .width(220.dp)
             .clip(ExcavShapes.Card)
             .border(1.dp, ExcavPalette.Line, ExcavShapes.Card)
-            .clickable(onClick = onClick),
+            .tactilePress(onClick = onClick),
         color = ExcavPalette.SurfaceCard
     ) {
         Column {
@@ -774,7 +890,7 @@ fun FolderCard(
             .fillMaxWidth()
             .clip(cardShape)
             .border(1.dp, Color(0xFF282F3B), cardShape)
-            .clickable(onClick = onClick),
+            .tactilePress(onClick = onClick),
         color = Color(0xFF13171F)
     ) {
         Column(
@@ -872,14 +988,15 @@ fun FolderCard(
 fun FolderRow(
     folder: Folder,
     videos: List<Video> = emptyList(),
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Surface(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(ExcavShapes.Row)
             .border(1.dp, ExcavPalette.Line, ExcavShapes.Row)
-            .clickable(onClick = onClick),
+            .tactilePress(onClick = onClick),
         color = ExcavPalette.SurfaceCard
     ) {
         Row(
@@ -924,14 +1041,15 @@ fun PlaylistRow(
     playlist: Playlist,
     onOverflow: () -> Unit,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
     dropdownMenu: (@Composable () -> Unit)? = null
 ) {
     Surface(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(ExcavShapes.Row)
             .border(1.dp, ExcavPalette.Line, ExcavShapes.Row)
-            .clickable(onClick = onClick),
+            .tactilePress(onClick = onClick),
         color = ExcavPalette.SurfaceCard
     ) {
         Row(
@@ -1001,7 +1119,7 @@ fun FolderGridCard(
             .fillMaxWidth()
             .clip(cardShape)
             .border(1.dp, Color(0xFF282F3B), cardShape)
-            .clickable(onClick = onClick),
+            .tactilePress(onClick = onClick),
         color = Color(0xFF13171F)
     ) {
         Column(
@@ -1116,7 +1234,7 @@ fun PlaylistGridCard(
             .fillMaxWidth()
             .clip(cardShape)
             .border(1.dp, Color(0xFF282F3B), cardShape)
-            .clickable(onClick = onClick),
+            .tactilePress(onClick = onClick),
         color = Color(0xFF13171F)
     ) {
         Column(
@@ -1257,6 +1375,7 @@ fun PlaylistGridCard(
 fun ListVideoRow(
     video: Video,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
     onMoreClick: (() -> Unit)? = null,
     dropdownMenu: (@Composable () -> Unit)? = null
 ) {
@@ -1266,11 +1385,11 @@ fun ListVideoRow(
     val resumePos = video.resumePositionMs ?: 0L
 
     Surface(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(ExcavShapes.Row)
             .border(1.dp, ExcavPalette.Line, ExcavShapes.Row)
-            .clickable(onClick = onClick),
+            .tactilePress(onClick = onClick),
         color = ExcavPalette.SurfaceCard
     ) {
         Row(
@@ -1498,6 +1617,37 @@ fun BreadcrumbBar(
 }
 
 @Composable
+fun AnimatedFavoriteIcon(
+    isFavorite: Boolean,
+    modifier: Modifier = Modifier,
+    tint: Color = if (isFavorite) Color(0xFFFF5277) else ExcavPalette.Text
+) {
+    val scale by animateFloatAsState(
+        targetValue = if (isFavorite) 1.20f else 1.0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "favoriteHeartScale"
+    )
+    val color by animateColorAsState(
+        targetValue = tint,
+        animationSpec = tween(180),
+        label = "favoriteHeartColor"
+    )
+
+    Icon(
+        imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+        contentDescription = if (isFavorite) "Favorite" else "Not Favorite",
+        tint = color,
+        modifier = modifier.graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        }
+    )
+}
+
+@Composable
 fun VideoOptionsMenu(
     expanded: Boolean,
     video: Video,
@@ -1546,10 +1696,9 @@ fun VideoOptionsMenu(
         DropdownMenuItem(
             text = { Text(if (isFavorite) "Remove from Favorites" else "Add to Favorites", color = ExcavPalette.Text) },
             leadingIcon = {
-                Icon(
-                    imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                    contentDescription = null,
-                    tint = ExcavPalette.Text
+                AnimatedFavoriteIcon(
+                    isFavorite = isFavorite,
+                    tint = if (isFavorite) Color(0xFFFF5277) else ExcavPalette.Text
                 )
             },
             onClick = {
@@ -1600,7 +1749,7 @@ fun VideoPropertiesDialog(video: Video, onDismiss: () -> Unit) {
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Box(
+        AnimatedDialogContainer(
             modifier = Modifier
                 .fillMaxWidth(0.90f)
                 .wrapContentHeight()
@@ -1690,7 +1839,7 @@ fun RenameVideoDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Box(
+        AnimatedDialogContainer(
             modifier = Modifier
                 .fillMaxWidth(0.90f)
                 .wrapContentHeight()
@@ -1768,7 +1917,7 @@ fun DeleteConfirmDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Box(
+        AnimatedDialogContainer(
             modifier = Modifier
                 .fillMaxWidth(0.90f)
                 .wrapContentHeight()
@@ -1858,7 +2007,7 @@ fun AddToPlaylistDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Box(
+        AnimatedDialogContainer(
             modifier = Modifier
                 .fillMaxWidth(0.90f)
                 .wrapContentHeight()
@@ -1925,7 +2074,7 @@ fun AddToPlaylistDialog(
                                                 backgroundColor = Color(0x6617191E),
                                                 strokeColor = Color.White.copy(alpha = 0.08f)
                                             )
-                                            .clickable {
+                                            .tactilePress {
                                                 onSelectPlaylist(playlist.id)
                                                 onDismiss()
                                             }
@@ -2004,9 +2153,11 @@ fun AddToPlaylistDialog(
 @Composable
 fun Thumbnail(video: Video, modifier: Modifier) {
     val loader = rememberThumbnailLoader()
-    var bitmap by remember(video.uri) { mutableStateOf<Bitmap?>(null) }
+    var bitmap by remember(video.uri) { mutableStateOf(loader.getFromCache(video.uri)) }
     LaunchedEffect(video.uri) {
-        bitmap = loader.loadThumbnail(video.uri)
+        if (bitmap == null) {
+            bitmap = loader.loadThumbnail(video.uri)
+        }
     }
     Box(
         modifier = modifier
@@ -2033,27 +2184,27 @@ fun Thumbnail(video: Video, modifier: Modifier) {
 fun AudioWaveEqualizer(modifier: Modifier = Modifier, color: Color = ExcavPalette.Blue) {
     val infiniteTransition = rememberInfiniteTransition(label = "wave")
     val h1 by infiniteTransition.animateFloat(
-        initialValue = 0.25f,
-        targetValue = 1.0f,
-        animationSpec = infiniteRepeatable(tween(450, easing = FastOutSlowInEasing), AnimRepeatMode.Reverse),
+        initialValue = 0.20f,
+        targetValue = 0.95f,
+        animationSpec = infiniteRepeatable(tween(420, easing = FastOutSlowInEasing), AnimRepeatMode.Reverse),
         label = "h1"
     )
     val h2 by infiniteTransition.animateFloat(
         initialValue = 0.85f,
-        targetValue = 0.2f,
-        animationSpec = infiniteRepeatable(tween(350, easing = FastOutSlowInEasing), AnimRepeatMode.Reverse),
+        targetValue = 0.15f,
+        animationSpec = infiniteRepeatable(tween(360, easing = FastOutSlowInEasing), AnimRepeatMode.Reverse),
         label = "h2"
     )
     val h3 by infiniteTransition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 0.95f,
-        animationSpec = infiniteRepeatable(tween(550, easing = FastOutSlowInEasing), AnimRepeatMode.Reverse),
+        initialValue = 0.35f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(tween(510, easing = FastOutSlowInEasing), AnimRepeatMode.Reverse),
         label = "h3"
     )
     val h4 by infiniteTransition.animateFloat(
-        initialValue = 0.9f,
-        targetValue = 0.35f,
-        animationSpec = infiniteRepeatable(tween(400, easing = FastOutSlowInEasing), AnimRepeatMode.Reverse),
+        initialValue = 0.90f,
+        targetValue = 0.30f,
+        animationSpec = infiniteRepeatable(tween(390, easing = FastOutSlowInEasing), AnimRepeatMode.Reverse),
         label = "h4"
     )
 
@@ -2075,22 +2226,38 @@ fun SleekRadioButton(
     onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    val dotScale by animateFloatAsState(
+        targetValue = if (selected) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMedium),
+        label = "radioDotScale"
+    )
+    val borderColor by animateColorAsState(
+        targetValue = if (selected) ExcavPalette.CyanGlow else ExcavPalette.Line,
+        animationSpec = tween(180),
+        label = "radioBorderColor"
+    )
+
     Box(
         modifier = modifier
             .size(24.dp)
             .clip(CircleShape)
             .border(
                 width = if (selected) 2.dp else 1.5.dp,
-                color = if (selected) ExcavPalette.CyanGlow else ExcavPalette.Line,
+                color = borderColor,
                 shape = CircleShape
             )
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         contentAlignment = Alignment.Center
     ) {
-        if (selected) {
+        if (dotScale > 0.01f) {
             Box(
                 modifier = Modifier
                     .size(10.dp)
+                    .graphicsLayer {
+                        scaleX = dotScale
+                        scaleY = dotScale
+                        alpha = dotScale
+                    }
                     .clip(CircleShape)
                     .background(
                         Brush.radialGradient(

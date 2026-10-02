@@ -492,7 +492,7 @@ class PlayerManager @Inject constructor(
         _state.update { it.copy(isBackgroundAudio = true) }
         try {
             val intent = Intent(context, PlaybackService::class.java)
-            context.startService(intent)
+            androidx.core.content.ContextCompat.startForegroundService(context, intent)
         } catch (e: Exception) {
             logger.w(TAG, "Failed to start PlaybackService: ${e.message}")
         }

@@ -32,15 +32,29 @@ class ThumbnailLoader @Inject constructor(
         }
     }
 
+    fun getFromCache(
+        uriString: String,
+        targetWidth: Int = 320,
+        targetHeight: Int = 180
+    ): Bitmap? {
+        val cacheKey = "${uriString}_${targetWidth}x${targetHeight}"
+        return memoryCache.get(cacheKey)
+    }
+
     suspend fun loadThumbnail(
         uriString: String,
         targetWidth: Int = 320,
         targetHeight: Int = 180
-    ): Bitmap? = withContext(dispatchers.io) {
-        val cacheKey = "${uriString}_${targetWidth}x${targetHeight}"
-        memoryCache.get(cacheKey)?.let {
-            return@withContext it
+    ): Bitmap? {
+        getFromCache(uriString, targetWidth, targetHeight)?.let {
+            return it
         }
+
+        return withContext(dispatchers.io) {
+            val cacheKey = "${uriString}_${targetWidth}x${targetHeight}"
+            memoryCache.get(cacheKey)?.let {
+                return@withContext it
+            }
 
         try {
             val uri = Uri.parse(uriString)
@@ -65,6 +79,7 @@ class ThumbnailLoader @Inject constructor(
             logger.w(TAG, "Failed to load thumbnail for $uriString: ${e.message}")
             null
         }
+    }
     }
 
     fun clearCache() {

@@ -8,6 +8,14 @@ import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FolderOff
 import androidx.compose.runtime.*
@@ -61,55 +69,70 @@ fun FoldersScreen(
         normalizePath(selectedFolder?.path)
     }
 
-    // Subfolders inside current directory: scan full device directories + database video stats
-    val subfolders = remember(folders, normCurrent) {
-        val childDirs = mutableMapOf<String, Pair<Int, Long>>() // childPath -> (videoCount, totalBytes)
+    // Subfolders inside current directory: scan full device directories asynchronously + database video stats
+    val subfolders by produceState(initialValue = emptyList<Folder>(), key1 = folders, key2 = normCurrent) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val childDirs = mutableMapOf<String, Pair<Int, Long>>() // childPath -> (videoCount, totalBytes)
 
-        // 1. Scan filesystem for physical subfolders
-        try {
-            val dir = java.io.File(normCurrent)
-            if (dir.exists() && dir.isDirectory) {
-                dir.listFiles { file -> file.isDirectory && !file.name.startsWith(".") }
-                    ?.forEach { f ->
-                        childDirs[f.absolutePath] = Pair(0, 0L)
-                    }
-            }
-        } catch (_: Exception) {}
+            // 1. Scan filesystem for physical subfolders on IO dispatcher
+            try {
+                val dir = java.io.File(normCurrent)
+                if (dir.exists() && dir.isDirectory) {
+                    dir.listFiles { file -> file.isDirectory && !file.name.startsWith(".") }
+                        ?.forEach { f ->
+                            childDirs[f.absolutePath] = Pair(0, 0L)
+                        }
+                }
+            } catch (_: Exception) {}
 
-        // 2. Aggregate stats and discovered folders from MediaStore database
-        folders.forEach { folder ->
-            val fNorm = normalizePath(folder.path)
-            if (fNorm != normCurrent && fNorm.startsWith("$normCurrent/")) {
-                val relative = fNorm.removePrefix("$normCurrent/").trimStart('/')
-                val directChildName = relative.substringBefore('/')
-                val directChildPath = "$normCurrent/$directChildName"
-                val existing = childDirs[directChildPath] ?: Pair(0, 0L)
-                childDirs[directChildPath] = Pair(
-                    existing.first + folder.videoCount,
-                    existing.second + folder.totalSizeBytes
-                )
-            } else if (normCurrent == "/storage/emulated/0" && !fNorm.startsWith("/storage/emulated/0")) {
-                val segments = fNorm.split('/').filter { it.isNotEmpty() }
-                if (segments.size >= 2) {
-                    val rootSegment = "/" + segments.take(2).joinToString("/")
-                    val existing = childDirs[rootSegment] ?: Pair(0, 0L)
-                    childDirs[rootSegment] = Pair(
+            // 2. Aggregate stats and discovered folders from MediaStore database
+            folders.forEach { folder ->
+                val fNorm = normalizePath(folder.path)
+                if (fNorm != normCurrent && fNorm.startsWith("$normCurrent/")) {
+                    val relative = fNorm.removePrefix("$normCurrent/").trimStart('/')
+                    val directChildName = relative.substringBefore('/')
+                    val directChildPath = "$normCurrent/$directChildName"
+                    val existing = childDirs[directChildPath] ?: Pair(0, 0L)
+                    childDirs[directChildPath] = Pair(
                         existing.first + folder.videoCount,
                         existing.second + folder.totalSizeBytes
                     )
+                } else if (normCurrent == "/storage/emulated/0" && !fNorm.startsWith("/storage/emulated/0")) {
+                    val segments = fNorm.split('/').filter { it.isNotEmpty() }
+                    if (segments.size >= 2) {
+                        val rootSegment = "/" + segments.take(2).joinToString("/")
+                        val existing = childDirs[rootSegment] ?: Pair(0, 0L)
+                        childDirs[rootSegment] = Pair(
+                            existing.first + folder.videoCount,
+                            existing.second + folder.totalSizeBytes
+                        )
+                    }
                 }
             }
-        }
 
-        childDirs.map { (path, stats) ->
-            val name = path.substringAfterLast('/')
-            Folder(
-                name = name,
-                path = path,
-                videoCount = stats.first,
-                totalSizeBytes = stats.second
-            )
-        }.sortedWith(compareByDescending<Folder> { it.videoCount > 0 }.thenBy { it.name.lowercase() })
+            childDirs.map { (path, stats) ->
+                val name = path.substringAfterLast('/')
+                Folder(
+                    name = name,
+                    path = path,
+                    videoCount = stats.first,
+                    totalSizeBytes = stats.second
+                )
+            }.sortedWith(compareByDescending<Folder> { it.videoCount > 0 }.thenBy { it.name.lowercase() })
+        }
+    }
+
+    val videosByFolder = remember(videos) {
+        val byPath = mutableMapOf<String, MutableList<Video>>()
+        val byName = mutableMapOf<String, MutableList<Video>>()
+        for (v in videos) {
+            val norm = normalizePath(v.folderPath)
+            byPath.getOrPut(norm) { mutableListOf() }.add(v)
+            if (v.folderName.isNotEmpty()) {
+                byName.getOrPut(v.folderName.lowercase()) { mutableListOf() }.add(v)
+            }
+        }
+        Pair(byPath, byName)
     }
 
     val isScrolled by remember {
@@ -152,85 +175,96 @@ fun FoldersScreen(
         navigateUp()
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        if (selectedFolder == null) {
-            // Root View: Display all Library Folders with thumbnail and pill badges
-            val hazeState = LocalHazeState.current
-            LazyVerticalGrid(
-                state = gridState,
-                columns = GridCells.Adaptive(160.dp),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 62.dp, bottom = 90.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier
-                    .fillMaxSize()
-            ) {
-                gridItems(folders, key = { "root_folder_${it.path}" }) { folder ->
-                    val folderVids = remember(folder.path, folder.name, videos) {
-                        val normP = normalizePath(folder.path)
-                        videos.filter { v ->
-                            val vNorm = normalizePath(v.folderPath)
-                            vNorm == normP ||
-                            vNorm.startsWith("$normP/") ||
-                            (v.folderName.isNotEmpty() && v.folderName.equals(folder.name, ignoreCase = true))
-                        }
-                    }
-                    FolderCard(
-                        folder = folder,
-                        videos = folderVids,
-                        onClick = { onSelectFolder(folder) }
-                    )
-                }
-
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    Spacer(Modifier.height(40.dp))
-                }
+    AnimatedContent(
+        targetState = selectedFolder,
+        transitionSpec = {
+            if (targetState != null) {
+                (slideInHorizontally(initialOffsetX = { (it * 0.18f).toInt() }, animationSpec = tween(220, easing = FastOutSlowInEasing)) + fadeIn(tween(180)))
+                    .togetherWith(slideOutHorizontally(targetOffsetX = { -(it * 0.15f).toInt() }, animationSpec = tween(180, easing = FastOutSlowInEasing)) + fadeOut(tween(140)))
+            } else {
+                (slideInHorizontally(initialOffsetX = { -(it * 0.15f).toInt() }, animationSpec = tween(200, easing = FastOutSlowInEasing)) + fadeIn(tween(160)))
+                    .togetherWith(slideOutHorizontally(targetOffsetX = { (it * 0.18f).toInt() }, animationSpec = tween(180, easing = FastOutSlowInEasing)) + fadeOut(tween(140)))
             }
-
-            BrandHeader(
-                onSearch = onSearch,
-                onRefresh = onRefresh,
-                isScrolled = isScrolled,
-                modifier = Modifier.align(Alignment.TopCenter)
-            )
-        } else {
-            // Subfolder / Selected Folder View
-            val hazeState = LocalHazeState.current
-            LazyVerticalGrid(
-                state = gridState,
-                columns = GridCells.Adaptive(160.dp),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 62.dp, bottom = 90.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier
-                    .fillMaxSize()
-            ) {
-                // Section 1: Child Subfolders (grid cards)
-                if (subfolders.isNotEmpty()) {
-                    gridItems(subfolders, key = { "folder_${it.path}" }) { folder ->
-                        val subfolderVids = remember(folder.path, folder.name, videos) {
+        },
+        label = "folderNavigationTransition",
+        modifier = Modifier.fillMaxSize()
+    ) { currentFolder ->
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (currentFolder == null) {
+                // Root View: Display all Library Folders with thumbnail and pill badges
+                val hazeState = LocalHazeState.current
+                LazyVerticalGrid(
+                    state = gridState,
+                    columns = GridCells.Adaptive(160.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 62.dp, bottom = 90.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier
+                        .fillMaxSize()
+                ) {
+                    gridItems(folders, key = { "root_folder_${it.path}" }, contentType = { "folder_card" }) { folder ->
+                        val folderVids = remember(folder.path, folder.name, videosByFolder) {
                             val normP = normalizePath(folder.path)
-                            videos.filter { v ->
-                                val vNorm = normalizePath(v.folderPath)
-                                vNorm == normP ||
-                                vNorm.startsWith("$normP/") ||
-                                (v.folderName.isNotEmpty() && v.folderName.equals(folder.name, ignoreCase = true))
-                            }
+                            val fromPath = videosByFolder.first[normP].orEmpty()
+                            val fromName = if (folder.name.isNotEmpty()) videosByFolder.second[folder.name.lowercase()].orEmpty() else emptyList()
+                            if (fromPath.isEmpty()) fromName else if (fromName.isEmpty()) fromPath else (fromPath + fromName).distinctBy { it.id }
                         }
                         FolderCard(
                             folder = folder,
-                            videos = subfolderVids,
-                            onClick = { onSelectFolder(folder) }
+                            videos = folderVids,
+                            onClick = { onSelectFolder(folder) },
+                            modifier = Modifier.animateItem()
                         )
+                    }
+
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Spacer(Modifier.height(40.dp))
                     }
                 }
 
+                BrandHeader(
+                    onSearch = onSearch,
+                    onRefresh = onRefresh,
+                    isScrolled = isScrolled,
+                    modifier = Modifier.align(Alignment.TopCenter)
+                )
+            } else {
+                // Subfolder / Selected Folder View
+                val hazeState = LocalHazeState.current
+                LazyVerticalGrid(
+                    state = gridState,
+                    columns = GridCells.Adaptive(160.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 62.dp, bottom = 90.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier
+                        .fillMaxSize()
+                ) {
+                    // Section 1: Child Subfolders (grid cards)
+                    if (subfolders.isNotEmpty()) {
+                        gridItems(subfolders, key = { "folder_${it.path}" }, contentType = { "folder_card" }) { folder ->
+                            val subfolderVids = remember(folder.path, folder.name, videosByFolder) {
+                                val normP = normalizePath(folder.path)
+                                val fromPath = videosByFolder.first[normP].orEmpty()
+                                val fromName = if (folder.name.isNotEmpty()) videosByFolder.second[folder.name.lowercase()].orEmpty() else emptyList()
+                                if (fromPath.isEmpty()) fromName else if (fromName.isEmpty()) fromPath else (fromPath + fromName).distinctBy { it.id }
+                            }
+                            FolderCard(
+                                folder = folder,
+                                videos = subfolderVids,
+                                onClick = { onSelectFolder(folder) },
+                                modifier = Modifier.animateItem()
+                            )
+                        }
+                    }
+
                     // Section 2: Videos directly in this directory (Spanning full line width as list rows)
                     if (folderVideos.isNotEmpty()) {
-                        gridItems(folderVideos, key = { "video_${it.id}" }, span = { GridItemSpan(maxLineSpan) }) { video ->
+                        gridItems(folderVideos, key = { "video_${it.id}" }, span = { GridItemSpan(maxLineSpan) }, contentType = { "video_row" }) { video ->
                             ListVideoRow(
                                 video = video,
                                 onClick = { onPlay(video) },
+                                modifier = Modifier.animateItem(),
                                 onMoreClick = { selectedVideoForMenu = video },
                                 dropdownMenu = {
                                     if (selectedVideoForMenu?.id == video.id) {
@@ -251,19 +285,20 @@ fun FoldersScreen(
                             )
                         }
                     }
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    Spacer(Modifier.height(40.dp))
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Spacer(Modifier.height(40.dp))
+                    }
                 }
-            }
 
-            // Top Floating Breadcrumb Bar
-            BreadcrumbBar(
-                currentPath = normCurrent,
-                onNavigateToPath = selectPath,
-                onBack = navigateUp,
-                isScrolled = isScrolled,
-                modifier = Modifier.align(Alignment.TopCenter)
-            )
+                // Top Floating Breadcrumb Bar
+                BreadcrumbBar(
+                    currentPath = normCurrent,
+                    onNavigateToPath = selectPath,
+                    onBack = navigateUp,
+                    isScrolled = isScrolled,
+                    modifier = Modifier.align(Alignment.TopCenter)
+                )
+            }
         }
     }
 

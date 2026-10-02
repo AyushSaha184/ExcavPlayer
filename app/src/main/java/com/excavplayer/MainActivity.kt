@@ -18,6 +18,7 @@ import com.excavplayer.ui.theme.ExcavTheme
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.excavplayer.core.logging.AppLogger
+import com.excavplayer.data.database.mapper.toDomain
 import com.excavplayer.domain.model.PlayerCommand
 import com.excavplayer.library.VideoLibrary
 import com.excavplayer.media.source.SafDataSource
@@ -74,11 +75,12 @@ class MainActivity : ComponentActivity() {
         )
     }
 
+    private val viewModel: ExcavViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        val viewModel: ExcavViewModel by viewModels()
         setContent {
             ExcavTheme {
                 ExcavApp(viewModel) {
@@ -104,10 +106,10 @@ class MainActivity : ComponentActivity() {
             lifecycleScope.launch {
                 val entity = safDataSource.registerDocumentUri(dataUri)
                 if (entity != null) {
-                    val video = videoLibrary.observeVideos().first().find { it.id == entity.id }
-                    if (video != null) {
-                        playerManager.play(video)
-                    }
+                    val allVideos = videoLibrary.observeVideos().first()
+                    val video = allVideos.find { it.id == entity.id } ?: entity.toDomain()
+                    viewModel.play(video)
+                    viewModel.setPlayerOpen(true)
                 }
             }
         }
