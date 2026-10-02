@@ -105,7 +105,9 @@ fun ExcavApp(
                     .padding(padding)
             ) {
                 Box(
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .hazeSource(state = hazeState)
                 ) {
                     if (searchOpen) {
                         SearchScreen(

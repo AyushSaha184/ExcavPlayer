@@ -540,8 +540,8 @@ fun GroupCard(
 ) {
     val totalSize = videos.sumOf { it.sizeBytes }
     val totalCount = videos.size
-    val cardShape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp, bottomStart = 46.dp, bottomEnd = 46.dp)
-    val thumbnailShape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp, bottomStart = 16.dp, bottomEnd = 16.dp)
+    val cardShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 38.dp, bottomEnd = 38.dp)
+    val thumbnailShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 14.dp, bottomEnd = 14.dp)
 
     Surface(
         modifier = modifier
@@ -557,12 +557,12 @@ fun GroupCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 12.dp)
+                    .padding(bottom = 10.dp)
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .aspectRatio(1.36f)
+                        .aspectRatio(1.60f)
                         .clip(thumbnailShape)
                 ) {
                     GroupThumbnail(
@@ -613,7 +613,7 @@ fun GroupCard(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 14.dp),
+                    .padding(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
@@ -627,7 +627,7 @@ fun GroupCard(
                         fontWeight = FontWeight.Bold
                     )
                 )
-                Spacer(Modifier.height(3.dp))
+                Spacer(Modifier.height(2.dp))
                 Text(
                     text = if (totalSize > 0) formatFileSize(totalSize) else "$totalCount ${if (totalCount == 1) "video" else "videos"}",
                     color = Color(0xFF8E97A6),
@@ -766,8 +766,8 @@ fun FolderCard(
 ) {
     val totalSize = if (folder.totalSizeBytes > 0) folder.totalSizeBytes else videos.sumOf { it.sizeBytes }
     val totalCount = if (folder.videoCount > 0) folder.videoCount else videos.size
-    val cardShape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp, bottomStart = 46.dp, bottomEnd = 46.dp)
-    val thumbnailShape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp, bottomStart = 16.dp, bottomEnd = 16.dp)
+    val cardShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 38.dp, bottomEnd = 38.dp)
+    val thumbnailShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 14.dp, bottomEnd = 14.dp)
 
     Surface(
         modifier = modifier
@@ -783,12 +783,12 @@ fun FolderCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 12.dp)
+                    .padding(bottom = 10.dp)
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .aspectRatio(1.36f)
+                        .aspectRatio(1.60f)
                         .clip(thumbnailShape)
                 ) {
                     GroupThumbnail(
@@ -839,7 +839,7 @@ fun FolderCard(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 14.dp),
+                    .padding(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
@@ -853,7 +853,7 @@ fun FolderCard(
                         fontWeight = FontWeight.Bold
                     )
                 )
-                Spacer(Modifier.height(3.dp))
+                Spacer(Modifier.height(2.dp))
                 Text(
                     text = if (totalSize > 0) formatFileSize(totalSize) else "$totalCount ${if (totalCount == 1) "video" else "videos"}",
                     color = Color(0xFF8E97A6),

@@ -70,7 +70,6 @@ fun SettingsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .hazeSource(state = hazeState)
                 .verticalScroll(scrollState)
                 .padding(horizontal = 16.dp)
                 .padding(top = 70.dp, bottom = 90.dp)

@@ -94,34 +94,20 @@ fun PlaylistsScreen(
         }
 
         Box(modifier = Modifier.fillMaxSize()) {
-            if (videos.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 16.dp, vertical = 24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    EmptyState(
-                        icon = Icons.Default.VideoLibrary,
-                        label = "No videos in \"${playlist.title}\""
-                    )
-                }
-            } else {
-                val hazeState = LocalHazeState.current
-                LazyColumn(
-                    state = detailListState,
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 64.dp, bottom = 90.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .hazeSource(state = hazeState)
-                ) {
-                    items(videos, key = { it.id }) { video ->
-                        ListVideoRow(
-                            video = video,
-                            onClick = { onPlay(video, videos) },
-                            onMoreClick = { selectedVideoForMenu = video },
-                            dropdownMenu = {
+            val hazeState = LocalHazeState.current
+            LazyColumn(
+                state = detailListState,
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 64.dp, bottom = 90.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier
+                    .fillMaxSize()
+            ) {
+                items(videos, key = { it.id }) { video ->
+                    ListVideoRow(
+                        video = video,
+                        onClick = { onPlay(video, videos) },
+                        onMoreClick = { selectedVideoForMenu = video },
+                        dropdownMenu = {
                                 val menuShape = RoundedCornerShape(14.dp)
                                 DropdownMenu(
                                     expanded = selectedVideoForMenu?.id == video.id,
@@ -189,7 +175,6 @@ fun PlaylistsScreen(
                         )
                     }
                 }
-            }
 
             // Floating Header with Back Button and Title
             ProgressiveHeaderContainer(
@@ -264,7 +249,6 @@ fun PlaylistsScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier
                     .fillMaxSize()
-                    .hazeSource(state = hazeState)
             ) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     SectionTitle(stringResource(R.string.playlists)) {

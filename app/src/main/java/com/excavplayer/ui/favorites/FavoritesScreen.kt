@@ -58,33 +58,19 @@ fun FavoritesScreen(
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
-        if (videos.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp, vertical = 24.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                EmptyState(
-                    icon = Icons.Default.FavoriteBorder,
-                    label = stringResource(R.string.empty_favorites)
-                )
+        val hazeState = LocalHazeState.current
+        LazyVerticalGrid(
+            state = gridState,
+            columns = GridCells.Adaptive(160.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 62.dp, bottom = 90.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier
+                .fillMaxSize()
+        ) {
+            item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                SectionTitle(stringResource(R.string.favorites))
             }
-        } else {
-            val hazeState = LocalHazeState.current
-            LazyVerticalGrid(
-                state = gridState,
-                columns = GridCells.Adaptive(160.dp),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 62.dp, bottom = 90.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier
-                    .fillMaxSize()
-                    .hazeSource(state = hazeState)
-            ) {
-                item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                    SectionTitle(stringResource(R.string.favorites))
-                }
                 items(videos, key = { it.id }) { video ->
                     CompactFavoriteCard(
                         video = video,
@@ -108,7 +94,6 @@ fun FavoritesScreen(
                     )
                 }
             }
-        }
 
         BrandHeader(
             onSearch = onSearch,

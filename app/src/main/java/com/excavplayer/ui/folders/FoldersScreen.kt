@@ -56,33 +56,6 @@ fun FoldersScreen(
         }
     }
 
-    val defaultDownloadPath = remember {
-        android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)?.absolutePath
-            ?: "/storage/emulated/0/Download"
-    }
-
-    // Auto-select the Downloads folder by default on first launch if no folder is chosen
-    var initialFolderChecked by remember { mutableStateOf(false) }
-    LaunchedEffect(folders) {
-        if (!initialFolderChecked && selectedFolder == null) {
-            val downloadFolder = folders.find {
-                it.name.equals("Download", ignoreCase = true) ||
-                it.name.equals("Downloads", ignoreCase = true) ||
-                it.path.endsWith("/Download", ignoreCase = true) ||
-                it.path.endsWith("/Downloads", ignoreCase = true)
-            }
-            val finalPath = if (downloadFolder != null) normalizePath(downloadFolder.path) else defaultDownloadPath
-            val finalFolder = Folder(
-                name = "Download",
-                path = finalPath,
-                videoCount = downloadFolder?.videoCount ?: 0,
-                totalSizeBytes = downloadFolder?.totalSizeBytes ?: 0L
-            )
-            onSelectFolder(finalFolder)
-            initialFolderChecked = true
-        }
-    }
-
     // Active directory path normalized
     val normCurrent = remember(selectedFolder) {
         normalizePath(selectedFolder?.path)
@@ -139,12 +112,18 @@ fun FoldersScreen(
         }.sortedWith(compareByDescending<Folder> { it.videoCount > 0 }.thenBy { it.name.lowercase() })
     }
 
-    val canGoBack = normCurrent != "/storage/emulated/0"
+    val isScrolled by remember {
+        derivedStateOf {
+            gridState.firstVisibleItemIndex > 0 || gridState.firstVisibleItemScrollOffset > 10
+        }
+    }
+
+    val canGoBack = selectedFolder != null
 
     val selectPath: (String) -> Unit = { rawTarget ->
         val targetPath = normalizePath(rawTarget)
-        if (targetPath == "/storage/emulated/0") {
-            onSelectFolder(Folder("Internal Storage", "/storage/emulated/0", 0, 0L))
+        if (targetPath == "/storage/emulated/0" || targetPath.isEmpty() || targetPath == "/storage/emulated") {
+            onSelectFolder(null)
         } else {
             val match = folders.find {
                 normalizePath(it.path) == targetPath || it.path == targetPath
@@ -161,7 +140,11 @@ fun FoldersScreen(
     val navigateUp: () -> Unit = {
         if (canGoBack) {
             val parentPath = normCurrent.substringBeforeLast('/', "")
-            selectPath(if (parentPath.isEmpty() || parentPath == "/storage/emulated") "/storage/emulated/0" else parentPath)
+            if (parentPath.isEmpty() || parentPath == "/storage/emulated" || parentPath == "/storage/emulated/0") {
+                onSelectFolder(null)
+            } else {
+                selectPath(parentPath)
+            }
         }
     }
 
@@ -170,21 +153,8 @@ fun FoldersScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        val isFolderEmpty = subfolders.isEmpty() && folderVideos.isEmpty()
-
-        if (isFolderEmpty) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp, vertical = 24.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                EmptyState(
-                    icon = Icons.Default.FolderOff,
-                    label = if (normCurrent == "/storage/emulated/0") "No media or folders in Internal Storage" else "No media or subfolders in ${selectedFolder?.name ?: "folder"}"
-                )
-            }
-        } else {
+        if (selectedFolder == null) {
+            // Root View: Display all Library Folders with thumbnail and pill badges
             val hazeState = LocalHazeState.current
             LazyVerticalGrid(
                 state = gridState,
@@ -194,7 +164,46 @@ fun FoldersScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier
                     .fillMaxSize()
-                    .hazeSource(state = hazeState)
+            ) {
+                gridItems(folders, key = { "root_folder_${it.path}" }) { folder ->
+                    val folderVids = remember(folder.path, folder.name, videos) {
+                        val normP = normalizePath(folder.path)
+                        videos.filter { v ->
+                            val vNorm = normalizePath(v.folderPath)
+                            vNorm == normP ||
+                            vNorm.startsWith("$normP/") ||
+                            (v.folderName.isNotEmpty() && v.folderName.equals(folder.name, ignoreCase = true))
+                        }
+                    }
+                    FolderCard(
+                        folder = folder,
+                        videos = folderVids,
+                        onClick = { onSelectFolder(folder) }
+                    )
+                }
+
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Spacer(Modifier.height(40.dp))
+                }
+            }
+
+            BrandHeader(
+                onSearch = onSearch,
+                onRefresh = onRefresh,
+                isScrolled = isScrolled,
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
+        } else {
+            // Subfolder / Selected Folder View
+            val hazeState = LocalHazeState.current
+            LazyVerticalGrid(
+                state = gridState,
+                columns = GridCells.Adaptive(160.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 62.dp, bottom = 90.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier
+                    .fillMaxSize()
             ) {
                 // Section 1: Child Subfolders (grid cards)
                 if (subfolders.isNotEmpty()) {
@@ -216,46 +225,46 @@ fun FoldersScreen(
                     }
                 }
 
-                // Section 2: Videos directly in this directory (Spanning full line width as list rows)
-                if (folderVideos.isNotEmpty()) {
-                    gridItems(folderVideos, key = { "video_${it.id}" }, span = { GridItemSpan(maxLineSpan) }) { video ->
-                        ListVideoRow(
-                            video = video,
-                            onClick = { onPlay(video) },
-                            onMoreClick = { selectedVideoForMenu = video },
-                            dropdownMenu = {
-                                if (selectedVideoForMenu?.id == video.id) {
-                                    val isFav = favorites.any { it.id == video.id }
-                                    VideoOptionsMenu(
-                                        expanded = true,
-                                        video = video,
-                                        isFavorite = isFav,
-                                        onDismiss = { selectedVideoForMenu = null },
-                                        onToggleFavorite = { onToggleFavorite(video) },
-                                        onAddToPlaylist = { playlistVideoTarget = video },
-                                        onRename = { renameVideoTarget = video },
-                                        onProperties = { propertiesVideo = video },
-                                        onDelete = { deleteVideoTarget = video }
-                                    )
+                    // Section 2: Videos directly in this directory (Spanning full line width as list rows)
+                    if (folderVideos.isNotEmpty()) {
+                        gridItems(folderVideos, key = { "video_${it.id}" }, span = { GridItemSpan(maxLineSpan) }) { video ->
+                            ListVideoRow(
+                                video = video,
+                                onClick = { onPlay(video) },
+                                onMoreClick = { selectedVideoForMenu = video },
+                                dropdownMenu = {
+                                    if (selectedVideoForMenu?.id == video.id) {
+                                        val isFav = favorites.any { it.id == video.id }
+                                        VideoOptionsMenu(
+                                            expanded = true,
+                                            video = video,
+                                            isFavorite = isFav,
+                                            onDismiss = { selectedVideoForMenu = null },
+                                            onToggleFavorite = { onToggleFavorite(video) },
+                                            onAddToPlaylist = { playlistVideoTarget = video },
+                                            onRename = { renameVideoTarget = video },
+                                            onProperties = { propertiesVideo = video },
+                                            onDelete = { deleteVideoTarget = video }
+                                        )
+                                    }
                                 }
-                            }
-                        )
+                            )
+                        }
                     }
-                }
-
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     Spacer(Modifier.height(40.dp))
                 }
             }
-        }
 
-        // Top Floating Breadcrumb Bar
-        BreadcrumbBar(
-            currentPath = normCurrent,
-            onNavigateToPath = selectPath,
-            onBack = navigateUp,
-            modifier = Modifier.align(Alignment.TopCenter)
-        )
+            // Top Floating Breadcrumb Bar
+            BreadcrumbBar(
+                currentPath = normCurrent,
+                onNavigateToPath = selectPath,
+                onBack = navigateUp,
+                isScrolled = isScrolled,
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
+        }
     }
 
     // Modals & Dialogs

@@ -41,6 +41,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.graphicsLayer
 
 /**
  * CompositionLocal providing HazeState for blur effects.
@@ -54,7 +55,7 @@ fun GlassmorphicItem(
     hazeState: HazeState = LocalHazeState.current,
     cornerRadius: Int = 20,
     blurRadius: Int = 10,
-    containerColor: Color = Color(0x33141720),
+    containerColor: Color = Color(0x66141720),
     hazeStyle: HazeStyle = CupertinoMaterials.ultraThin(containerColor = containerColor),
     content: @Composable BoxScope.() -> Unit
 ) {
@@ -163,6 +164,7 @@ fun GlassmorphicHeaderActions(
 /**
  * Progressive top header container that wraps header content in a seamless
  * linear blur gradient (full blur at the top, smoothly graduating to transparent below).
+ * Scrim and progressive blur fade in cleanly when content is scrolled underneath.
  */
 @OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
@@ -173,33 +175,42 @@ fun ProgressiveHeaderContainer(
     fadeHeight: Dp = 20.dp,
     content: @Composable () -> Unit
 ) {
+    val blurAlpha by animateFloatAsState(
+        targetValue = if (isScrolled) 1f else 0f,
+        animationSpec = tween(220, easing = FastOutSlowInEasing),
+        label = "header_blur_alpha"
+    )
+
     Box(
         modifier = modifier.fillMaxWidth()
     ) {
-        // Progressive Glass Backdrop spanning full header + fade area
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .hazeEffect(
-                    state = hazeState,
-                    style = CupertinoMaterials.ultraThin(containerColor = Color.Transparent)
-                ) {
-                    progressive = HazeProgressive.verticalGradient(
-                        startIntensity = 1f,
-                        endIntensity = 0f,
-                        easing = EaseInCubic
-                    )
-                }
-                .background(
-                    Brush.verticalGradient(
-                        listOf(
-                            ExcavPalette.Ink.copy(alpha = 0.65f),
-                            ExcavPalette.Ink.copy(alpha = 0.35f),
-                            Color.Transparent
+        // Progressive Glass Backdrop spanning full header + fade area (only visible when scrolled)
+        if (blurAlpha > 0.001f) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .graphicsLayer { alpha = blurAlpha }
+                    .hazeEffect(
+                        state = hazeState,
+                        style = CupertinoMaterials.ultraThin(containerColor = Color.Transparent)
+                    ) {
+                        progressive = HazeProgressive.verticalGradient(
+                            startIntensity = 1f,
+                            endIntensity = 0f,
+                            easing = EaseInCubic
+                        )
+                    }
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                ExcavPalette.Ink.copy(alpha = 0.88f),
+                                ExcavPalette.Ink.copy(alpha = 0.50f),
+                                Color.Transparent
+                            )
                         )
                     )
-                )
-        )
+            )
+        }
 
         // Header content with bottom padding for the gradient fade-out
         Column(
@@ -225,26 +236,35 @@ fun ProgressiveHeaderBlur(
     hazeState: HazeState = LocalHazeState.current,
     containerColor: Color = Color.Black.copy(alpha = 0.3f)
 ) {
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(height)
-            .hazeEffect(state = hazeState, style = CupertinoMaterials.ultraThin(containerColor = containerColor)) {
-                progressive = HazeProgressive.verticalGradient(
-                    startIntensity = 1f,
-                    endIntensity = 0f,
-                    easing = EaseInCubic
-                )
-            }
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        containerColor,
-                        Color.Transparent
+    val blurAlpha by animateFloatAsState(
+        targetValue = if (isScrolled) 1f else 0f,
+        animationSpec = tween(220, easing = FastOutSlowInEasing),
+        label = "scrim_blur_alpha"
+    )
+
+    if (blurAlpha > 0.001f) {
+        Box(
+            modifier = modifier
+                .fillMaxWidth()
+                .height(height)
+                .graphicsLayer { alpha = blurAlpha }
+                .hazeEffect(state = hazeState, style = CupertinoMaterials.ultraThin(containerColor = containerColor)) {
+                    progressive = HazeProgressive.verticalGradient(
+                        startIntensity = 1f,
+                        endIntensity = 0f,
+                        easing = EaseInCubic
+                    )
+                }
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            containerColor,
+                            Color.Transparent
+                        )
                     )
                 )
-            )
-    )
+        )
+    }
 }
 
 /**
@@ -297,7 +317,7 @@ fun Modifier.glassmorphicBlur(
  */
 fun Modifier.darkUltraThinBlur(
     shape: Shape = RoundedCornerShape(20.dp),
-    backgroundColor: Color = Color(0xF010131B),
+    backgroundColor: Color = Color(0xDE101216),
     strokeColor: Color = Color.White.copy(alpha = 0.16f),
     strokeWidth: Dp = 1.dp
 ): Modifier = this
@@ -307,15 +327,15 @@ fun Modifier.darkUltraThinBlur(
         val strokePx = strokeWidth.toPx()
         val fillBrush = Brush.verticalGradient(
             colors = listOf(
-                backgroundColor.copy(alpha = (backgroundColor.alpha * 1.12f).coerceAtMost(0.98f)),
+                backgroundColor.copy(alpha = (backgroundColor.alpha * 1.15f).coerceAtMost(0.96f)),
                 backgroundColor,
-                backgroundColor.copy(alpha = (backgroundColor.alpha * 0.88f))
+                backgroundColor.copy(alpha = (backgroundColor.alpha * 0.85f))
             )
         )
         val borderBrush = Brush.verticalGradient(
             colors = listOf(
                 strokeColor,
-                strokeColor.copy(alpha = (strokeColor.alpha * 0.35f))
+                strokeColor.copy(alpha = (strokeColor.alpha * 0.4f))
             )
         )
 

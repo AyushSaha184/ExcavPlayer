@@ -151,55 +151,40 @@ fun HomeScreen(
         }
 
         Box(modifier = Modifier.fillMaxSize()) {
-            if (groupVideos.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 16.dp, vertical = 24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    EmptyState(
-                        icon = Icons.Default.VideoLibrary,
-                        label = "No videos in ${group.name}"
+            val hazeState = LocalHazeState.current
+            LazyColumn(
+                state = groupListState,
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 64.dp, bottom = 90.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier
+                    .fillMaxSize()
+            ) {
+                items(groupVideos, key = { it.id }) { video ->
+                    ListVideoRow(
+                        video = video,
+                        onClick = { onPlay(video) },
+                        onMoreClick = { selectedVideoForMenu = video },
+                        dropdownMenu = {
+                            if (selectedVideoForMenu?.id == video.id) {
+                                val isFav = favorites.any { it.id == video.id }
+                                VideoOptionsMenu(
+                                    expanded = true,
+                                    video = video,
+                                    isFavorite = isFav,
+                                    onDismiss = { selectedVideoForMenu = null },
+                                    onToggleFavorite = { onToggleFavorite(video) },
+                                    onAddToPlaylist = { playlistVideoTarget = video },
+                                    onRename = { renameVideoTarget = video },
+                                    onProperties = { propertiesVideo = video },
+                                    onDelete = { deleteVideoTarget = video }
+                                )
+                            }
+                        }
                     )
                 }
-            } else {
-                val hazeState = LocalHazeState.current
-                LazyColumn(
-                    state = groupListState,
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 64.dp, bottom = 90.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .hazeSource(state = hazeState)
-                ) {
-                    items(groupVideos, key = { it.id }) { video ->
-                        ListVideoRow(
-                            video = video,
-                            onClick = { onPlay(video) },
-                            onMoreClick = { selectedVideoForMenu = video },
-                            dropdownMenu = {
-                                if (selectedVideoForMenu?.id == video.id) {
-                                    val isFav = favorites.any { it.id == video.id }
-                                    VideoOptionsMenu(
-                                        expanded = true,
-                                        video = video,
-                                        isFavorite = isFav,
-                                        onDismiss = { selectedVideoForMenu = null },
-                                        onToggleFavorite = { onToggleFavorite(video) },
-                                        onAddToPlaylist = { playlistVideoTarget = video },
-                                        onRename = { renameVideoTarget = video },
-                                        onProperties = { propertiesVideo = video },
-                                        onDelete = { deleteVideoTarget = video }
-                                    )
-                                }
-                            }
-                        )
-                    }
 
-                    item {
-                        Spacer(Modifier.height(80.dp))
-                    }
+                item {
+                    Spacer(Modifier.height(80.dp))
                 }
             }
 
@@ -261,7 +246,6 @@ fun HomeScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier
                     .fillMaxSize()
-                    .hazeSource(state = hazeState)
             ) {
             // Storage Permission Warning Banner if permission is not granted
             if (!hasStoragePermission) {
@@ -419,18 +403,11 @@ fun HomeScreen(
             }
 
             // Groups Section
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                SectionTitle("Groups")
-            }
-
-            if (groups.isEmpty() && continueWatching.isEmpty()) {
+            if (groups.isNotEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
-                    EmptyState(
-                        icon = Icons.Default.FolderOff,
-                        label = stringResource(R.string.empty_folders)
-                    )
+                    SectionTitle("Groups")
                 }
-            } else {
+
                 items(groups, key = { "group_${it.id}" }) { group ->
                     GroupCard(
                         groupName = group.name,

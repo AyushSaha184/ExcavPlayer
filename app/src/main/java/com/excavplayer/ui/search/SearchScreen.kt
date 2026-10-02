@@ -51,31 +51,16 @@ fun SearchScreen(
             }
         }
 
-        if (query.isNotBlank() && results.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp, vertical = 24.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                EmptyState(
-                    icon = Icons.Default.SearchOff,
-                    label = stringResource(R.string.empty_search)
-                )
-            }
-        } else {
-            val hazeState = LocalHazeState.current
-            LazyColumn(
-                state = searchListState,
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 74.dp, bottom = 90.dp),
-                modifier = Modifier
-                    .fillMaxSize()
-                    .hazeSource(state = hazeState)
-            ) {
-                items(results, key = { it.id }) { video ->
-                    ListVideoRow(video = video, onClick = { onPlay(video) })
-                }
+        val hazeState = LocalHazeState.current
+        LazyColumn(
+            state = searchListState,
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 74.dp, bottom = 90.dp),
+            modifier = Modifier
+                .fillMaxSize()
+        ) {
+            items(results, key = { it.id }) { video ->
+                ListVideoRow(video = video, onClick = { onPlay(video) })
             }
         }
 
