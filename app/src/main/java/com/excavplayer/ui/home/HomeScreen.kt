@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.excavplayer.R
 import com.excavplayer.domain.model.Folder
+import com.excavplayer.domain.model.NaturalVideoComparator
 import com.excavplayer.domain.model.Playlist
 import com.excavplayer.domain.model.Video
 import com.excavplayer.ui.VideoGroup
@@ -62,6 +63,15 @@ import com.excavplayer.ui.components.*
 import com.excavplayer.ui.theme.ExcavPalette
 import com.excavplayer.ui.theme.ExcavShapes
 import dev.chrisbanes.haze.hazeSource
+
+private fun checkStoragePermission(context: android.content.Context): Boolean {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED ||
+        (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == PackageManager.PERMISSION_GRANTED)
+    } else {
+        ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+    }
+}
 
 @Composable
 fun HomeScreen(
@@ -71,7 +81,7 @@ fun HomeScreen(
     playlists: List<Playlist>,
     favorites: List<Video>,
     groups: List<VideoGroup> = emptyList(),
-    onPlay: (Video) -> Unit,
+    onPlay: (Video, List<Video>?) -> Unit,
     onOpenFolder: (Folder) -> Unit,
     onToggleFavorite: (Video) -> Unit,
     onAddToPlaylist: (Long, Video) -> Unit,
@@ -85,19 +95,26 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     var hasStoragePermission by remember {
-        mutableStateOf(
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED
-            } else {
-                ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
-            }
-        )
+        mutableStateOf(checkStoragePermission(context))
     }
 
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        hasStoragePermission = permissions.entries.any { it.value }
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                val currentPerm = checkStoragePermission(context)
+                if (currentPerm != hasStoragePermission) {
+                    hasStoragePermission = currentPerm
+                    if (currentPerm) {
+                        onRefresh?.invoke()
+                    }
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
 
     var selectedGroup by remember { mutableStateOf<VideoGroup?>(null) }
@@ -122,7 +139,8 @@ fun HomeScreen(
         if (currentGroup != null) {
             val group = currentGroup
         val groupVideos = remember(group, videos) {
-            videos.filter { it.folderPath == group.path || it.folderName == group.name }.ifEmpty { group.videos }
+            val list = videos.filter { it.folderPath == group.path || it.folderName == group.name }.ifEmpty { group.videos }
+            list.sortedWith(NaturalVideoComparator)
         }
         val groupListState = androidx.compose.foundation.lazy.rememberLazyListState()
         val isGroupScrolled by remember {
@@ -143,7 +161,7 @@ fun HomeScreen(
                 items(groupVideos, key = { it.id }, contentType = { "video_row" }) { video ->
                     ListVideoRow(
                         video = video,
-                        onClick = { onPlay(video) },
+                        onClick = { onPlay(video, groupVideos) },
                         modifier = Modifier.animateItem(),
                         onMoreClick = { selectedVideoForMenu = video },
                         dropdownMenu = {
@@ -280,61 +298,30 @@ fun HomeScreen(
 
                             Spacer(Modifier.height(16.dp))
 
-                            Column(
+                            Button(
+                                onClick = {
+                                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                        data = Uri.fromParts("package", context.packageName, null)
+                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                    }
+                                    context.startActivity(intent)
+                                },
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                                colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
+                                shape = ExcavShapes.Pill
                             ) {
-                                Button(
-                                    onClick = {
-                                        val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                            arrayOf(Manifest.permission.READ_MEDIA_VIDEO)
-                                        } else {
-                                            arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
-                                        }
-                                        permissionLauncher.launch(permissions)
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
-                                    shape = ExcavShapes.Pill
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.LockOpen,
-                                        contentDescription = null,
-                                        tint = ExcavPalette.Ink,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(
-                                        text = "Grant Permission",
-                                        color = ExcavPalette.Ink,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-
-                                OutlinedButton(
-                                    onClick = {
-                                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                            data = Uri.fromParts("package", context.packageName, null)
-                                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                        }
-                                        context.startActivity(intent)
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = ExcavShapes.Pill
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Settings,
-                                        contentDescription = null,
-                                        tint = ExcavPalette.Text,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(
-                                        text = "App Settings",
-                                        color = ExcavPalette.Text
-                                    )
-                                }
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = null,
+                                    tint = ExcavPalette.Ink,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = "Open App Settings",
+                                    color = ExcavPalette.Ink,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         }
                     }
@@ -354,7 +341,7 @@ fun HomeScreen(
                             items(continueWatching, key = { "cw_${it.id}" }, contentType = { "continue_watching_card" }) { video ->
                                 ContinueWatchingRowCard(
                                     video = video,
-                                    onClick = { onPlay(video) },
+                                    onClick = { onPlay(video, null) },
                                     onMoreClick = { selectedVideoForMenu = video },
                                     dropdownMenu = {
                                         if (selectedVideoForMenu?.id == video.id) {
@@ -407,7 +394,11 @@ fun HomeScreen(
 
         BrandHeader(
             onSearch = onSearch,
-            onRefresh = onRefresh,
+            onRefresh = {
+                val currentPerm = checkStoragePermission(context)
+                hasStoragePermission = currentPerm
+                onRefresh?.invoke()
+            },
             isScrolled = isHomeScrolled,
             modifier = Modifier.align(Alignment.TopCenter)
         )

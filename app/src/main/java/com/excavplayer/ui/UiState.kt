@@ -87,7 +87,7 @@ private fun computeVideoGroups(videos: List<Video>, folders: List<Folder>): List
                     id = folder.path,
                     name = folder.name,
                     path = folder.path,
-                    videos = combined
+                    videos = combined.sortedWith(NaturalVideoComparator)
                 )
             } else null
         }
@@ -97,7 +97,7 @@ private fun computeVideoGroups(videos: List<Video>, folders: List<Folder>): List
                 id = name,
                 name = name,
                 path = vids.firstOrNull()?.folderPath.orEmpty(),
-                videos = vids
+                videos = vids.sortedWith(NaturalVideoComparator)
             )
         }
     }
@@ -113,7 +113,7 @@ private fun computeFolderVideosMap(videos: List<Video>): Map<String, List<Video>
             map.getOrPut(v.folderName.lowercase()) { mutableListOf() }.add(v)
         }
     }
-    return map
+    return map.mapValues { (_, list) -> list.sortedWith(NaturalVideoComparator) }
 }
 
 @HiltViewModel

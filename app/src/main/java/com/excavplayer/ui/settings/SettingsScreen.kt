@@ -202,7 +202,7 @@ fun SettingsScreen(
                 SettingsNavRow(
                     icon = Icons.Default.MusicNote,
                     title = "Default Audio Track",
-                    subtitle = settings.preferredAudioLanguage ?: "System default",
+                    subtitle = settings.preferredAudioLanguage ?: "English",
                     onClick = { activeDialog = SettingDialog.AUDIO_LANG }
                 )
                 SettingsDivider()
@@ -430,11 +430,11 @@ fun SettingsScreen(
         SettingDialog.AUDIO_LANG -> {
             RadioChoiceDialog(
                 title = "Preferred Audio Language",
-                options = listOf("System default", "English", "Japanese", "Spanish", "French", "German"),
-                selected = settings.preferredAudioLanguage ?: "System default",
+                options = listOf("English", "Hindi", "Japanese"),
+                selected = settings.preferredAudioLanguage ?: "English",
                 labelFor = { it },
                 onSelect = {
-                    vm.setPreferredAudioLanguage(if (it == "System default") null else it)
+                    vm.setPreferredAudioLanguage(it)
                     activeDialog = SettingDialog.NONE
                 },
                 onDismiss = { activeDialog = SettingDialog.NONE }

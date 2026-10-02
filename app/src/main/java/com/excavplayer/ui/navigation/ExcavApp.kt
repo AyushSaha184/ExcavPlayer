@@ -94,13 +94,12 @@ fun ExcavApp(
     val favoritesGridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
 
     Scaffold(
-        containerColor = ExcavPalette.Ink
-    ) { padding ->
+        containerColor = ExcavPalette.Ink,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
+    ) { _ ->
         CompositionLocalProvider(LocalHazeState provides hazeState) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
+                modifier = Modifier.fillMaxSize()
             ) {
                 Box(
                     modifier = Modifier
@@ -144,8 +143,8 @@ fun ExcavApp(
                                     playlists = library.playlists,
                                     favorites = library.favorites,
                                     groups = library.groups,
-                                    onPlay = {
-                                        vm.play(it)
+                                    onPlay = { vid, list ->
+                                        vm.play(vid, list)
                                     },
                                     onOpenFolder = { folder ->
                                         vm.openFolder(folder)

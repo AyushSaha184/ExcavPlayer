@@ -907,7 +907,7 @@ private fun PlayerControlsOverlay(
             }
         }
 
-        // Center Transport Controls Pill - Vertically and Horizontally Centered in Screen
+        // Center Transport Controls - Vertically and Horizontally Centered in Screen (Separated Buttons)
         val playPauseScale by animateFloatAsState(
             targetValue = if (state.playback.isPlaying) 1f else 0.92f,
             animationSpec = spring(
@@ -918,17 +918,16 @@ private fun PlayerControlsOverlay(
         )
 
         Row(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .playerGlass(RoundedCornerShape(36.dp))
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.align(Alignment.Center),
+            horizontalArrangement = Arrangement.spacedBy(28.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(
                 enabled = hasPrevious,
                 onClick = onPlayPrevious,
-                modifier = Modifier.size(48.dp)
+                modifier = Modifier
+                    .size(52.dp)
+                    .playerGlass(CircleShape)
             ) {
                 Icon(
                     imageVector = Icons.Default.SkipPrevious,
@@ -943,7 +942,8 @@ private fun PlayerControlsOverlay(
                     if (state.playback.isPlaying) player.pause() else player.resume()
                 },
                 modifier = Modifier
-                    .size(56.dp)
+                    .size(68.dp)
+                    .playerGlass(CircleShape)
                     .graphicsLayer {
                         scaleX = playPauseScale
                         scaleY = playPauseScale
@@ -953,14 +953,16 @@ private fun PlayerControlsOverlay(
                     imageVector = if (state.playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                     contentDescription = stringResource(R.string.cd_play_pause),
                     tint = Color.White,
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(38.dp)
                 )
             }
 
             IconButton(
                 enabled = hasNext,
                 onClick = onPlayNext,
-                modifier = Modifier.size(48.dp)
+                modifier = Modifier
+                    .size(52.dp)
+                    .playerGlass(CircleShape)
             ) {
                 Icon(
                     imageVector = Icons.Default.SkipNext,

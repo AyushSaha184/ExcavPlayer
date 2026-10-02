@@ -8,7 +8,7 @@ data class UserSettings(
     val autoplayNextVideo: Boolean = true,
     val subtitlesEnabled: Boolean = true,
     val preferredSubtitleLanguage: String? = "English",
-    val preferredAudioLanguage: String? = null,
+    val preferredAudioLanguage: String? = "English",
     val gestureControlsEnabled: Boolean = true,
     val brightnessGestureEnabled: Boolean = true,
     val volumeGestureEnabled: Boolean = true,
