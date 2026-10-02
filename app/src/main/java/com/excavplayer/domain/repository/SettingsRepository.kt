@@ -20,7 +20,6 @@ interface SettingsRepository {
     suspend fun updateSubtitleTextSize(size: String)
     suspend fun updateSubtitleTextColor(color: String)
     suspend fun updateSubtitleBackgroundStyle(style: String)
-    suspend fun updateRememberVolume(enabled: Boolean)
     suspend fun updateContinueWatching(enabled: Boolean)
     suspend fun updateDefaultScreenOrientation(orientation: String)
     suspend fun updateDefaultMediaFit(fit: String)

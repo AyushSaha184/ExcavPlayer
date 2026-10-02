@@ -3,6 +3,8 @@ package com.excavplayer.ui.navigation
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -16,6 +18,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,14 +34,20 @@ import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import com.excavplayer.R
 import com.excavplayer.ui.ExcavViewModel
 import com.excavplayer.ui.components.*
@@ -269,17 +278,14 @@ fun ExcavApp(
                 onDismiss = { vm.dismissUpdate() }
             )
 
-            // Fullscreen Player with slide and fade animation
+            // Fullscreen Player with slide and fade in animation, and immediate clean close
             AnimatedVisibility(
                 visible = playerOpen,
                 enter = slideInVertically(
                     initialOffsetY = { it / 3 },
                     animationSpec = tween(260, easing = FastOutSlowInEasing)
                 ) + fadeIn(tween(220)),
-                exit = slideOutVertically(
-                    targetOffsetY = { it / 3 },
-                    animationSpec = tween(200, easing = FastOutSlowInEasing)
-                ) + fadeOut(tween(180)),
+                exit = androidx.compose.animation.ExitTransition.None,
                 modifier = Modifier.fillMaxSize()
             ) {
                 PlayerScreen(
@@ -316,19 +322,84 @@ fun MiniPlayerOverlay(
         modifier = modifier
     ) {
         val currentVideo = playerState.currentVideo ?: return@AnimatedVisibility
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        val coroutineScope = rememberCoroutineScope()
+        val dragOffsetY = remember { androidx.compose.animation.core.Animatable(0f) }
+        val thresholdPx = with(density) { 70.dp.toPx() }
+        val maxDragPx = with(density) { 150.dp.toPx() }
+
+        // Real-time dynamic drag progress (0f..1f)
+        val dragProgress = (dragOffsetY.value / thresholdPx).coerceIn(0f, 1f)
+        val pillAlpha = (1f - (dragProgress * 0.85f)).coerceIn(0.1f, 1f)
+        val pillBlur = (dragProgress * 16f).dp
+
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
                 .padding(horizontal = 20.dp)
                 .padding(bottom = if (searchOpen) 16.dp else 84.dp)
+                .offset { androidx.compose.ui.unit.IntOffset(0, dragOffsetY.value.toInt()) }
+                .graphicsLayer {
+                    alpha = pillAlpha
+                }
+                .blur(pillBlur)
+                .pointerInput(Unit) {
+                    detectVerticalDragGestures(
+                        onDragEnd = {
+                            coroutineScope.launch {
+                                if (dragOffsetY.value >= thresholdPx) {
+                                    // Pulled down past threshold: animate down and close player
+                                    dragOffsetY.animateTo(
+                                        targetValue = maxDragPx,
+                                        animationSpec = tween(120, easing = FastOutSlowInEasing)
+                                    )
+                                    vm.player.stop()
+                                    dragOffsetY.snapTo(0f)
+                                } else {
+                                    // Pulled down but released before threshold: spring back to normal
+                                    dragOffsetY.animateTo(
+                                        targetValue = 0f,
+                                        animationSpec = spring(
+                                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                                            stiffness = Spring.StiffnessMedium
+                                        )
+                                    )
+                                }
+                            }
+                        },
+                        onDragCancel = {
+                            coroutineScope.launch {
+                                dragOffsetY.animateTo(
+                                    targetValue = 0f,
+                                    animationSpec = spring(
+                                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                                        stiffness = Spring.StiffnessMedium
+                                    )
+                                )
+                            }
+                        },
+                        onVerticalDrag = { change, dragAmount ->
+                            // Update drag offset in real-time as finger moves up or down
+                            val nextOffset = (dragOffsetY.value + dragAmount).coerceIn(0f, maxDragPx)
+                            if (nextOffset > 0f || dragAmount > 0f) {
+                                change.consume()
+                                coroutineScope.launch {
+                                    dragOffsetY.snapTo(nextOffset)
+                                }
+                            }
+                        }
+                    )
+                }
         ) {
             GlassmorphicItem(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(64.dp)
                     .clickable {
-                        vm.setPlayerOpen(true)
+                        if (dragOffsetY.value < 10f) {
+                            vm.setPlayerOpen(true)
+                        }
                     },
                 cornerRadius = 32,
                 blurRadius = 15,

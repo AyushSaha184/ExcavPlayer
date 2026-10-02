@@ -49,7 +49,6 @@ class SettingsRepositoryImpl @Inject constructor(
         val KEY_SUBTITLE_TEXT_SIZE = stringPreferencesKey("subtitle_text_size")
         val KEY_SUBTITLE_TEXT_COLOR = stringPreferencesKey("subtitle_text_color")
         val KEY_SUBTITLE_BACKGROUND_STYLE = stringPreferencesKey("subtitle_background_style")
-        val KEY_REMEMBER_VOLUME = booleanPreferencesKey("remember_volume")
         val KEY_CONTINUE_WATCHING = booleanPreferencesKey("continue_watching")
         val KEY_DEFAULT_SCREEN_ORIENTATION = stringPreferencesKey("default_screen_orientation")
         val KEY_DEFAULT_MEDIA_FIT = stringPreferencesKey("default_media_fit")
@@ -95,7 +94,6 @@ class SettingsRepositoryImpl @Inject constructor(
                 subtitleTextSize = preferences[KEY_SUBTITLE_TEXT_SIZE] ?: "Normal",
                 subtitleTextColor = preferences[KEY_SUBTITLE_TEXT_COLOR] ?: "White",
                 subtitleBackgroundStyle = preferences[KEY_SUBTITLE_BACKGROUND_STYLE] ?: "Outline",
-                rememberVolume = preferences[KEY_REMEMBER_VOLUME] ?: true,
                 continueWatchingEnabled = preferences[KEY_CONTINUE_WATCHING] ?: true,
                 defaultScreenOrientation = preferences[KEY_DEFAULT_SCREEN_ORIENTATION] ?: "Auto",
                 defaultMediaFit = preferences[KEY_DEFAULT_MEDIA_FIT] ?: "Fit to Screen",
@@ -184,11 +182,6 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun updateSubtitleBackgroundStyle(style: String) {
         logger.i(TAG, "updateSubtitleBackgroundStyle: $style")
         edit { it[KEY_SUBTITLE_BACKGROUND_STYLE] = style }
-    }
-
-    override suspend fun updateRememberVolume(enabled: Boolean) {
-        logger.i(TAG, "updateRememberVolume: $enabled")
-        edit { it[KEY_REMEMBER_VOLUME] = enabled }
     }
 
     override suspend fun updateContinueWatching(enabled: Boolean) {

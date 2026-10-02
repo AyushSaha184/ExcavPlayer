@@ -207,14 +207,6 @@ fun SettingsScreen(
                     subtitle = settings.preferredAudioLanguage ?: "English",
                     onClick = { activeDialog = SettingDialog.AUDIO_LANG }
                 )
-                SettingsDivider()
-                SettingsSwitchRow(
-                    icon = Icons.AutoMirrored.Filled.VolumeUp,
-                    title = "Remember Volume",
-                    subtitle = "Save volume level across sessions",
-                    checked = settings.rememberVolume,
-                    onCheckedChange = { vm.setRememberVolume(it) }
-                )
             }
 
             Spacer(Modifier.height(20.dp))

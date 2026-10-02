@@ -9,6 +9,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
 import kotlin.OptIn
+import kotlin.math.roundToInt
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -48,6 +49,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -114,6 +116,9 @@ fun PlayerScreen(
     val settings by vm.userSettings.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val activity = context as? android.app.Activity
+    val audioManager = remember(context) {
+        context.getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
+    }
     val pipHelper = remember { PipHelper(context.applicationContext, com.excavplayer.core.logging.AndroidAppLogger()) }
 
     var controlsVisible by rememberSaveable { mutableStateOf(true) }
@@ -318,7 +323,7 @@ fun PlayerScreen(
         return
     }
 
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
@@ -414,6 +419,7 @@ fun PlayerScreen(
                 if (!isLocked && zoomScale <= 1.05f) {
                     var isDragEligible = false
                     var totalVerticalDrag = 0f
+                    var accumulatedVolumeDelta = 0f
                     detectDragGestures(
                         onDragStart = { startOffset ->
                             // Ignore touches in top 20% (status bar pull-down zone) and bottom 18% (nav bar zone)
@@ -423,14 +429,17 @@ fun PlayerScreen(
                             val safeRight = size.width * 0.92f
                             isDragEligible = startOffset.y in safeTop..safeBottom && startOffset.x in safeLeft..safeRight
                             totalVerticalDrag = 0f
+                            accumulatedVolumeDelta = 0f
                         },
                         onDragEnd = {
                             isDragEligible = false
+                            accumulatedVolumeDelta = 0f
                             gestureHudText = null
                             gestureHudIcon = null
                         },
                         onDragCancel = {
                             isDragEligible = false
+                            accumulatedVolumeDelta = 0f
                             gestureHudText = null
                             gestureHudIcon = null
                         },
@@ -449,18 +458,27 @@ fun PlayerScreen(
                                 gestureHudProgress = newBrightness
                                 gestureHudIcon = Icons.Default.WbSunny
                             } else if (!isLeft && settings.volumeGestureEnabled) {
-                                val currentVolume = state.playback.volume
-                                val newVolume = (currentVolume - (dragAmount.y / size.height) * 2.0f).coerceIn(0f, 2.0f)
-                                vm.player.setVolume(newVolume)
-                                val volPercent = (newVolume * 100).toInt()
-                                if (newVolume > 1.0f) {
-                                    gestureHudText = "Volume $volPercent% (Boost)"
-                                    gestureHudProgress = newVolume / 2.0f
-                                    gestureHudIcon = Icons.Default.Bolt
-                                } else {
+                                audioManager?.let { am ->
+                                    val maxVol = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+                                    val delta = -(dragAmount.y / (size.height * 0.75f)) * maxVol
+                                    accumulatedVolumeDelta += delta
+                                    if (Math.abs(accumulatedVolumeDelta) >= 1.0f) {
+                                        val stepChange = accumulatedVolumeDelta.toInt()
+                                        val currentVol = am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
+                                        val newTargetVol = (currentVol + stepChange).coerceIn(0, maxVol)
+                                        am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, newTargetVol, 0)
+                                        accumulatedVolumeDelta -= stepChange
+                                    }
+                                    val currentVol = am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
+                                    val volFraction = (currentVol.toFloat() / maxVol.toFloat()).coerceIn(0f, 1f)
+                                    val volPercent = (volFraction * 100f).roundToInt()
                                     gestureHudText = "Volume $volPercent%"
-                                    gestureHudProgress = newVolume
-                                    gestureHudIcon = Icons.AutoMirrored.Filled.VolumeUp
+                                    gestureHudProgress = volFraction
+                                    gestureHudIcon = if (currentVol == 0) {
+                                        Icons.AutoMirrored.Filled.VolumeOff
+                                    } else {
+                                        Icons.AutoMirrored.Filled.VolumeUp
+                                    }
                                 }
                             }
                         }
@@ -468,6 +486,10 @@ fun PlayerScreen(
                 }
             }
     ) {
+        // Split-screen responsive scale indicators
+        val isVeryCompact = maxHeight < 260.dp || maxWidth < 320.dp
+        val isCompact = maxHeight < 360.dp || maxWidth < 440.dp
+
         // Video Surface with Pinch-to-Zoom and Pan transformations
         AndroidView(
             factory = { ctx ->
@@ -532,13 +554,17 @@ fun PlayerScreen(
         )
 
         // Double-Tap Quick Seek Visual Indicator (text + chevrons only, no background pill)
+        val seekChevronSize = if (isVeryCompact) 18.dp else if (isCompact) 22.dp else 28.dp
+        val seekFontSize = if (isVeryCompact) 10.sp else if (isCompact) 12.sp else 14.sp
+        val seekPaddingH = if (isVeryCompact) 16.dp else if (isCompact) 28.dp else 44.dp
+
         AnimatedVisibility(
             visible = doubleTapSeekSide != null,
             enter = fadeIn(tween(100)) + scaleIn(initialScale = 0.82f, animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMedium)),
             exit = fadeOut(tween(180)),
             modifier = Modifier
                 .align(if (doubleTapSeekSide == DoubleTapSide.LEFT) Alignment.CenterStart else Alignment.CenterEnd)
-                .padding(horizontal = 44.dp)
+                .padding(horizontal = seekPaddingH)
         ) {
             doubleTapSeekSide?.let { side ->
                 val isLeft = side == DoubleTapSide.LEFT
@@ -555,13 +581,13 @@ fun PlayerScreen(
                             imageVector = chevron,
                             contentDescription = null,
                             tint = Color.White,
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(seekChevronSize)
                         )
                         Icon(
                             imageVector = chevron,
                             contentDescription = null,
                             tint = Color.White,
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(seekChevronSize)
                         )
                     }
                     Spacer(Modifier.height(4.dp))
@@ -570,7 +596,7 @@ fun PlayerScreen(
                         color = Color.White,
                         style = MaterialTheme.typography.labelLarge.copy(
                             fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
+                            fontSize = seekFontSize
                         )
                     )
                 }
@@ -578,6 +604,12 @@ fun PlayerScreen(
         }
 
         // Gesture HUD Overlay - frosted glass box with spring animation for volume and brightness gestures
+        val hudIconSize = if (isVeryCompact) 20.dp else if (isCompact) 26.dp else 32.dp
+        val hudFontSize = if (isVeryCompact) 11.sp else if (isCompact) 13.sp else 15.sp
+        val hudPadH = if (isVeryCompact) 14.dp else 24.dp
+        val hudPadV = if (isVeryCompact) 10.dp else 20.dp
+        val hudProgWidth = if (isVeryCompact) 75.dp else if (isCompact) 95.dp else 120.dp
+
         AnimatedVisibility(
             visible = gestureHudText != null,
             enter = scaleIn(initialScale = 0.88f, animationSpec = spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMedium)) + fadeIn(tween(120)),
@@ -592,7 +624,7 @@ fun PlayerScreen(
             Box(
                 modifier = Modifier
                     .playerGlass(RoundedCornerShape(24.dp))
-                    .padding(horizontal = 24.dp, vertical = 20.dp),
+                    .padding(horizontal = hudPadH, vertical = hudPadV),
                 contentAlignment = Alignment.Center
             ) {
                 Column(
@@ -603,21 +635,21 @@ fun PlayerScreen(
                             imageVector = icon,
                             contentDescription = null,
                             tint = ExcavPalette.Blue,
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(hudIconSize)
                         )
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(if (isVeryCompact) 4.dp else 8.dp))
                     }
                     Text(
                         text = gestureHudText.orEmpty(),
                         color = Color.White,
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, fontSize = hudFontSize)
                     )
                     if (gestureHudProgress > 0f) {
-                        Spacer(Modifier.height(10.dp))
+                        Spacer(Modifier.height(if (isVeryCompact) 6.dp else 10.dp))
                         LinearProgressIndicator(
                             progress = { animatedHudProgress },
                             modifier = Modifier
-                                .width(120.dp)
+                                .width(hudProgWidth)
                                 .height(4.dp)
                                 .clip(ExcavShapes.Pill),
                             color = ExcavPalette.Blue,
@@ -629,8 +661,12 @@ fun PlayerScreen(
         }
 
         // Skip Intro / Outro / Recap Floating Pill (isolated state read)
+        val pillBottomPad = if (isVeryCompact) 36.dp else if (isCompact) 56.dp else 90.dp
+        val pillEndPad = if (isVeryCompact) 10.dp else if (isCompact) 16.dp else 24.dp
+
         FloatingSkipChapterPill(
             state = state,
+            isCompact = isCompact || isVeryCompact,
             onSeekTo = { vm.player.seekTo(it) },
             onHud = { text, icon ->
                 gestureHudText = text
@@ -638,13 +674,14 @@ fun PlayerScreen(
             },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(bottom = 90.dp, end = 24.dp)
+                .padding(bottom = pillBottomPad, end = pillEndPad)
         )
 
         // Floating Next Episode Pill (isolated state read)
         FloatingNextEpisodePill(
             state = state,
             queue = queue,
+            isCompact = isCompact || isVeryCompact,
             onPlayNext = { index -> vm.playQueueItem(index) },
             modifier = Modifier.align(Alignment.BottomEnd)
         )
@@ -721,12 +758,17 @@ fun PlayerScreen(
 
         // Locked HUD Button (matches bottom-left lock button position)
         if (isLocked) {
+            val lockBtnSize = if (isVeryCompact) 32.dp else if (isCompact) 38.dp else 44.dp
+            val lockIconSize = if (isVeryCompact) 16.dp else if (isCompact) 19.dp else 22.dp
+            val lockPadH = if (isVeryCompact) 8.dp else 16.dp
+            val lockPadV = if (isVeryCompact) 4.dp else 10.dp
+
             AnimatedVisibility(
                 visible = controlsVisible,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .windowInsetsPadding(WindowInsets.safeDrawing)
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                    .padding(horizontal = lockPadH, vertical = lockPadV),
                 enter = fadeIn(),
                 exit = fadeOut()
             ) {
@@ -740,14 +782,14 @@ fun PlayerScreen(
                             vm.player.dispatch(PlayerCommand.SetScreenLocked(false))
                         },
                         modifier = Modifier
-                            .size(44.dp)
+                            .size(lockBtnSize)
                             .playerGlass(CircleShape)
                     ) {
                         Icon(
                             imageVector = Icons.Default.LockOpen,
                             contentDescription = stringResource(R.string.cd_unlock),
                             tint = ExcavPalette.Blue,
-                            modifier = Modifier.size(22.dp)
+                            modifier = Modifier.size(lockIconSize)
                         )
                     }
                 }
@@ -767,6 +809,8 @@ fun PlayerScreen(
                     PlayerControlsOverlay(
                         state = state,
                         player = vm.player,
+                        isVeryCompact = isVeryCompact,
+                        isCompact = isCompact,
                         onClose = {
                             if (!keepAudioOnBackground && !state.isBackgroundAudio) {
                                 vm.player.stop()
@@ -853,6 +897,7 @@ fun PlayerScreen(
                     sheet = sheetType,
                     state = state,
                     vm = vm,
+                    maxSheetHeight = maxHeight,
                     onDismiss = {
                         onUserInteraction()
                         activeSheet = null
@@ -869,6 +914,8 @@ fun PlayerScreen(
 private fun PlayerControlsOverlay(
     state: PlayerState,
     player: PlayerManager,
+    isVeryCompact: Boolean = false,
+    isCompact: Boolean = false,
     onClose: () -> Unit,
     onOpenSheet: (PlayerSheet) -> Unit,
     onLock: () -> Unit,
@@ -889,35 +936,147 @@ private fun PlayerControlsOverlay(
     CompositionLocalProvider(
         LocalRippleConfiguration provides null
     ) {
+        val topBtnSize = when {
+            isVeryCompact -> 32.dp
+            isCompact -> 38.dp
+            else -> 44.dp
+        }
+        val topIconSize = when {
+            isVeryCompact -> 16.dp
+            isCompact -> 19.dp
+            else -> 22.dp
+        }
+        val titleFontSize = when {
+            isVeryCompact -> 12.sp
+            isCompact -> 14.sp
+            else -> 16.sp
+        }
+        val topSpacing = when {
+            isVeryCompact -> 6.dp
+            isCompact -> 10.dp
+            else -> 16.dp
+        }
+        val topBtnSpacing = when {
+            isVeryCompact -> 4.dp
+            isCompact -> 6.dp
+            else -> 10.dp
+        }
+
+        val centerPlaySize = when {
+            isVeryCompact -> 44.dp
+            isCompact -> 56.dp
+            else -> 68.dp
+        }
+        val centerPlayIconSize = when {
+            isVeryCompact -> 24.dp
+            isCompact -> 30.dp
+            else -> 38.dp
+        }
+        val centerSkipSize = when {
+            isVeryCompact -> 34.dp
+            isCompact -> 42.dp
+            else -> 52.dp
+        }
+        val centerSkipIconSize = when {
+            isVeryCompact -> 18.dp
+            isCompact -> 22.dp
+            else -> 28.dp
+        }
+        val centerSpacing = when {
+            isVeryCompact -> 14.dp
+            isCompact -> 20.dp
+            else -> 28.dp
+        }
+
+        val bottomPillBtnSize = when {
+            isVeryCompact -> 28.dp
+            isCompact -> 34.dp
+            else -> 40.dp
+        }
+        val bottomPillIconSize = when {
+            isVeryCompact -> 14.dp
+            isCompact -> 18.dp
+            else -> 22.dp
+        }
+        val bottomPillPaddingH = when {
+            isVeryCompact -> 4.dp
+            isCompact -> 6.dp
+            else -> 8.dp
+        }
+        val bottomPillPaddingV = when {
+            isVeryCompact -> 2.dp
+            isCompact -> 3.dp
+            else -> 4.dp
+        }
+        val bottomPillSpacing = when {
+            isVeryCompact -> 2.dp
+            else -> 4.dp
+        }
+        val speedTextSize = when {
+            isVeryCompact -> 10.sp
+            isCompact -> 11.5.sp
+            else -> 13.sp
+        }
+        val speedPaddingH = when {
+            isVeryCompact -> 6.dp
+            isCompact -> 9.dp
+            else -> 12.dp
+        }
+        val speedPaddingV = when {
+            isVeryCompact -> 4.dp
+            isCompact -> 6.dp
+            else -> 8.dp
+        }
+        val timelineTextSize = when {
+            isVeryCompact -> 10.5.sp
+            isCompact -> 12.sp
+            else -> 14.sp
+        }
+        val timelineSpacing = when {
+            isVeryCompact -> 4.dp
+            isCompact -> 8.dp
+            else -> 14.dp
+        }
+        val outerPaddingH = when {
+            isVeryCompact -> 8.dp
+            isCompact -> 12.dp
+            else -> 16.dp
+        }
+        val outerPaddingV = when {
+            isVeryCompact -> 4.dp
+            isCompact -> 8.dp
+            else -> 10.dp
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(horizontal = 16.dp, vertical = 10.dp)
+                .padding(horizontal = outerPaddingH, vertical = outerPaddingV)
         ) {
             // Top Bar: Back button, Marquee Title, Dialogue Booster, Subtitle (CC), Audio Track
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 4.dp)
+                    .padding(top = if (isVeryCompact) 0.dp else 4.dp)
                     .align(Alignment.TopCenter),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(
                     onClick = onClose,
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(topBtnSize)
                         .playerGlass(CircleShape)
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = stringResource(R.string.cd_back),
                         tint = Color.White,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(topIconSize)
                     )
                 }
 
-                Spacer(Modifier.width(16.dp))
+                Spacer(Modifier.width(topSpacing))
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -925,14 +1084,14 @@ private fun PlayerControlsOverlay(
                         color = Color.White,
                         style = MaterialTheme.typography.titleMedium.copy(
                             fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp
+                            fontSize = titleFontSize
                         ),
                         maxLines = 1,
                         modifier = Modifier.basicMarquee()
                     )
                 }
 
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(topBtnSpacing))
 
                 // Dialogue Booster Button
                 IconButton(
@@ -941,18 +1100,18 @@ private fun PlayerControlsOverlay(
                         onToggleDialogueBoost()
                     },
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(topBtnSize)
                         .playerGlass(CircleShape)
                 ) {
                     Icon(
                         imageVector = Icons.Default.RecordVoiceOver,
                         contentDescription = "Dialogue Booster",
                         tint = if (isDialogueBoostActive) Color.White else Color.White.copy(alpha = 0.35f),
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(topIconSize)
                     )
                 }
 
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(topBtnSpacing))
 
                 // Subtitle Button (CC)
                 val hasSubtitles = state.playback.selectedSubtitleTrackId != null
@@ -962,18 +1121,18 @@ private fun PlayerControlsOverlay(
                         onOpenSheet(PlayerSheet.SUBTITLES)
                     },
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(topBtnSize)
                         .playerGlass(CircleShape)
                 ) {
                     Icon(
                         imageVector = Icons.Default.ClosedCaption,
                         contentDescription = stringResource(R.string.cd_subtitles),
                         tint = if (hasSubtitles) Color.White else Color.White.copy(alpha = 0.35f),
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(topIconSize)
                     )
                 }
 
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(topBtnSpacing))
 
                 // Audio Track Button
                 IconButton(
@@ -982,14 +1141,14 @@ private fun PlayerControlsOverlay(
                         onOpenSheet(PlayerSheet.AUDIO)
                     },
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(topBtnSize)
                         .playerGlass(CircleShape)
                 ) {
                     Icon(
                         imageVector = Icons.Default.MusicNote,
                         contentDescription = stringResource(R.string.audio_tracks),
                         tint = Color.White,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(topIconSize)
                     )
                 }
             }
@@ -1006,7 +1165,7 @@ private fun PlayerControlsOverlay(
 
             Row(
                 modifier = Modifier.align(Alignment.Center),
-                horizontalArrangement = Arrangement.spacedBy(28.dp),
+                horizontalArrangement = Arrangement.spacedBy(centerSpacing),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(
@@ -1016,14 +1175,14 @@ private fun PlayerControlsOverlay(
                         onPlayPrevious()
                     },
                     modifier = Modifier
-                        .size(52.dp)
+                        .size(centerSkipSize)
                         .playerGlass(CircleShape)
                 ) {
                     Icon(
                         imageVector = Icons.Default.SkipPrevious,
                         contentDescription = "Previous Video",
                         tint = if (hasPrevious) Color.White else Color.White.copy(alpha = 0.35f),
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.size(centerSkipIconSize)
                     )
                 }
 
@@ -1033,7 +1192,7 @@ private fun PlayerControlsOverlay(
                         if (state.playback.isPlaying) player.pause() else player.resume()
                     },
                     modifier = Modifier
-                        .size(68.dp)
+                        .size(centerPlaySize)
                         .playerGlass(CircleShape)
                         .graphicsLayer {
                             scaleX = playPauseScale
@@ -1044,7 +1203,7 @@ private fun PlayerControlsOverlay(
                         imageVector = if (state.playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                         contentDescription = stringResource(R.string.cd_play_pause),
                         tint = Color.White,
-                        modifier = Modifier.size(38.dp)
+                        modifier = Modifier.size(centerPlayIconSize)
                     )
                 }
 
@@ -1055,14 +1214,14 @@ private fun PlayerControlsOverlay(
                         onPlayNext()
                     },
                     modifier = Modifier
-                        .size(52.dp)
+                        .size(centerSkipSize)
                         .playerGlass(CircleShape)
                 ) {
                     Icon(
                         imageVector = Icons.Default.SkipNext,
                         contentDescription = "Next Video",
                         tint = if (hasNext) Color.White else Color.White.copy(alpha = 0.35f),
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.size(centerSkipIconSize)
                     )
                 }
             }
@@ -1077,13 +1236,14 @@ private fun PlayerControlsOverlay(
                 PlayerTimelineSection(
                     positionMs = state.playback.currentPositionMs,
                     durationMs = state.playback.durationMs,
+                    timeTextSize = timelineTextSize,
                     onSeek = {
                         onInteraction()
                         player.seekTo(it)
                     }
                 )
 
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(timelineSpacing))
 
                 // Bottom Floating Glass Pills:
                 // Left: Screen Lock, Picture-in-Picture, Screen Orientation, Chapters
@@ -1097,8 +1257,8 @@ private fun PlayerControlsOverlay(
                     Row(
                         modifier = Modifier
                             .playerGlass(RoundedCornerShape(32.dp))
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            .padding(horizontal = bottomPillPaddingH, vertical = bottomPillPaddingV),
+                        horizontalArrangement = Arrangement.spacedBy(bottomPillSpacing),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         // Screen Lock
@@ -1107,13 +1267,13 @@ private fun PlayerControlsOverlay(
                                 onInteraction()
                                 onLock()
                             },
-                            modifier = Modifier.size(40.dp)
+                            modifier = Modifier.size(bottomPillBtnSize)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Lock,
                                 contentDescription = stringResource(R.string.cd_lock),
                                 tint = Color.White,
-                                modifier = Modifier.size(22.dp)
+                                modifier = Modifier.size(bottomPillIconSize)
                             )
                         }
 
@@ -1123,13 +1283,13 @@ private fun PlayerControlsOverlay(
                                 onInteraction()
                                 onPip()
                             },
-                            modifier = Modifier.size(40.dp)
+                            modifier = Modifier.size(bottomPillBtnSize)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.PictureInPictureAlt,
                                 contentDescription = "Picture-in-Picture",
                                 tint = Color.White,
-                                modifier = Modifier.size(22.dp)
+                                modifier = Modifier.size(bottomPillIconSize)
                             )
                         }
 
@@ -1139,7 +1299,7 @@ private fun PlayerControlsOverlay(
                                 onInteraction()
                                 onCycleOrientation()
                             },
-                            modifier = Modifier.size(40.dp)
+                            modifier = Modifier.size(bottomPillBtnSize)
                         ) {
                             AnimatedContent(
                                 targetState = orientationIndex,
@@ -1172,7 +1332,7 @@ private fun PlayerControlsOverlay(
                                     imageVector = icon,
                                     contentDescription = desc,
                                     tint = Color.White,
-                                    modifier = Modifier.size(22.dp)
+                                    modifier = Modifier.size(bottomPillIconSize)
                                 )
                             }
                         }
@@ -1185,13 +1345,13 @@ private fun PlayerControlsOverlay(
                                 onInteraction()
                                 onOpenSheet(PlayerSheet.CHAPTERS)
                             },
-                            modifier = Modifier.size(40.dp)
+                            modifier = Modifier.size(bottomPillBtnSize)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Bookmarks,
                                 contentDescription = "Chapters & Timeline",
                                 tint = if (hasChapters) Color.White else Color.White.copy(alpha = 0.35f),
-                                modifier = Modifier.size(22.dp)
+                                modifier = Modifier.size(bottomPillIconSize)
                             )
                         }
                     }
@@ -1200,8 +1360,8 @@ private fun PlayerControlsOverlay(
                     Row(
                         modifier = Modifier
                             .playerGlass(RoundedCornerShape(32.dp))
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            .padding(horizontal = bottomPillPaddingH, vertical = bottomPillPaddingV),
+                        horizontalArrangement = Arrangement.spacedBy(bottomPillSpacing),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         // Playback Speed Pill Button
@@ -1211,7 +1371,7 @@ private fun PlayerControlsOverlay(
                                     onInteraction()
                                     onOpenSheet(PlayerSheet.SPEED)
                                 }
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                .padding(horizontal = speedPaddingH, vertical = speedPaddingV),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
@@ -1219,7 +1379,7 @@ private fun PlayerControlsOverlay(
                                 color = Color.White,
                                 style = MaterialTheme.typography.labelMedium.copy(
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp
+                                    fontSize = speedTextSize
                                 )
                             )
                         }
@@ -1230,13 +1390,13 @@ private fun PlayerControlsOverlay(
                                 onInteraction()
                                 onToggleBackgroundAudio()
                             },
-                            modifier = Modifier.size(40.dp)
+                            modifier = Modifier.size(bottomPillBtnSize)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Headphones,
                                 contentDescription = "Background Play Audio",
                                 tint = if (isBackgroundAudioActive) Color.White else Color.White.copy(alpha = 0.35f),
-                                modifier = Modifier.size(22.dp)
+                                modifier = Modifier.size(bottomPillIconSize)
                             )
                         }
 
@@ -1246,13 +1406,13 @@ private fun PlayerControlsOverlay(
                                 onInteraction()
                                 onCycleResizeMode()
                             },
-                            modifier = Modifier.size(40.dp)
+                            modifier = Modifier.size(bottomPillBtnSize)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.AspectRatio,
                                 contentDescription = "Fullscreen & Aspect Ratio",
                                 tint = Color.White,
-                                modifier = Modifier.size(22.dp)
+                                modifier = Modifier.size(bottomPillIconSize)
                             )
                         }
                     }
@@ -1270,6 +1430,7 @@ private fun SheetContainer(
     sheet: PlayerSheet,
     state: PlayerState,
     vm: ExcavViewModel,
+    maxSheetHeight: androidx.compose.ui.unit.Dp = 420.dp,
     onDismiss: () -> Unit,
     onPickSubtitle: () -> Unit
 ) {
@@ -1319,6 +1480,7 @@ private fun SheetContainer(
                         PlayerSheet.SPEED -> 320.dp
                     }
                 )
+                .heightIn(max = (maxSheetHeight * 0.85f).coerceAtLeast(180.dp))
                 .darkUltraThinBlur(
                     shape = RoundedCornerShape(22.dp),
                     backgroundColor = Color(0xF20E121B),
@@ -1709,6 +1871,7 @@ private fun SpeedSheet(
 @Composable
 fun FloatingSkipChapterPill(
     state: PlayerState,
+    isCompact: Boolean = false,
     onSeekTo: (Long) -> Unit,
     onHud: (String, ImageVector) -> Unit,
     modifier: Modifier = Modifier
@@ -1751,22 +1914,25 @@ fun FloatingSkipChapterPill(
                 shadowElevation = 8.dp
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+                    modifier = Modifier.padding(
+                        horizontal = if (isCompact) 10.dp else 18.dp,
+                        vertical = if (isCompact) 6.dp else 10.dp
+                    ),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
                         imageVector = Icons.Default.FastForward,
                         contentDescription = null,
                         tint = ExcavPalette.Blue,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(if (isCompact) 15.dp else 20.dp)
                     )
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(if (isCompact) 5.dp else 8.dp))
                     Text(
                         text = skipLabel,
                         color = ExcavPalette.Text,
                         style = MaterialTheme.typography.bodyMedium.copy(
                             fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
+                            fontSize = if (isCompact) 11.5.sp else 14.sp
                         )
                     )
                 }
@@ -1779,6 +1945,7 @@ fun FloatingSkipChapterPill(
 fun FloatingNextEpisodePill(
     state: PlayerState,
     queue: com.excavplayer.player.queue.QueueState,
+    isCompact: Boolean = false,
     onPlayNext: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -1797,9 +1964,13 @@ fun FloatingNextEpisodePill(
 
     if (isNearEnd || isAtEnd || isOutro) {
         val nextVid = queue.items[queue.currentIndex + 1]
+        val outroPad = if (isCompact) 70.dp else 150.dp
+        val normalPad = if (isCompact) 42.dp else 90.dp
+        val endPad = if (isCompact) 12.dp else 24.dp
+
         Box(
             modifier = modifier
-                .padding(bottom = if (isOutro) 150.dp else 90.dp, end = 24.dp)
+                .padding(bottom = if (isOutro) outroPad else normalPad, end = endPad)
         ) {
             Surface(
                 modifier = Modifier
@@ -1812,22 +1983,25 @@ fun FloatingNextEpisodePill(
                 shadowElevation = 8.dp
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    modifier = Modifier.padding(
+                        horizontal = if (isCompact) 10.dp else 16.dp,
+                        vertical = if (isCompact) 6.dp else 10.dp
+                    ),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
                         imageVector = Icons.Default.SkipNext,
                         contentDescription = null,
                         tint = ExcavPalette.Blue,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(if (isCompact) 15.dp else 20.dp)
                     )
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(if (isCompact) 5.dp else 8.dp))
                     Text(
-                        text = "Next: ${nextVid.displayName.take(18)}",
+                        text = "Next: ${nextVid.displayName.take(if (isCompact) 12 else 18)}",
                         color = ExcavPalette.Text,
                         style = MaterialTheme.typography.bodyMedium.copy(
                             fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
+                            fontSize = if (isCompact) 11.sp else 13.sp
                         )
                     )
                 }
@@ -1841,6 +2015,7 @@ fun PlayerTimelineSection(
     positionMs: Long,
     durationMs: Long,
     onSeek: (Long) -> Unit,
+    timeTextSize: androidx.compose.ui.unit.TextUnit = 14.sp,
     modifier: Modifier = Modifier
 ) {
     val duration = durationMs.coerceAtLeast(0L)
@@ -1857,12 +2032,12 @@ fun PlayerTimelineSection(
             Text(
                 text = formatDuration(position),
                 color = Color.White,
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, fontSize = timeTextSize)
             )
             Text(
                 text = formatDuration(duration),
                 color = Color.White.copy(alpha = 0.65f),
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium, fontSize = timeTextSize)
             )
         }
 

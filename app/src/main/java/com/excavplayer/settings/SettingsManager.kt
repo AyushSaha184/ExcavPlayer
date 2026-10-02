@@ -89,11 +89,6 @@ class SettingsManager @Inject constructor(
         settingsRepository.updateSubtitleBackgroundStyle(style)
     }
 
-    suspend fun setRememberVolume(enabled: Boolean) {
-        logger.i(TAG, "Setting remember volume to: $enabled")
-        settingsRepository.updateRememberVolume(enabled)
-    }
-
     suspend fun setContinueWatching(enabled: Boolean) {
         logger.i(TAG, "Setting continue watching to: $enabled")
         settingsRepository.updateContinueWatching(enabled)

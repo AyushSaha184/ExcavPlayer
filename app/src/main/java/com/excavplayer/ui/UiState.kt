@@ -464,13 +464,6 @@ class ExcavViewModel @Inject constructor(
         }
     }
 
-    fun setRememberVolume(enabled: Boolean) {
-        viewModelScope.launch {
-            logger.i(TAG, "setRememberVolume: $enabled")
-            settingsManager.setRememberVolume(enabled)
-        }
-    }
-
     fun setContinueWatching(enabled: Boolean) {
         viewModelScope.launch {
             logger.i(TAG, "setContinueWatching: $enabled")

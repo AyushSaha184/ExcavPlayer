@@ -15,7 +15,6 @@ data class UserSettings(
     val subtitleTextSize: String = "Normal",
     val subtitleTextColor: String = "White",
     val subtitleBackgroundStyle: String = "Outline",
-    val rememberVolume: Boolean = true,
     val continueWatchingEnabled: Boolean = true,
     val defaultScreenOrientation: String = "Auto",
     val defaultMediaFit: String = "Fit to Screen",
