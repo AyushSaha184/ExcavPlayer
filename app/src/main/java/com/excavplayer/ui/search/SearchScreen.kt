@@ -63,7 +63,7 @@ fun SearchScreen(
             contentPadding = PaddingValues(
                 start = 16.dp,
                 end = 16.dp,
-                top = statusBarTop + 64.dp,
+                top = statusBarTop + 96.dp,
                 bottom = 100.dp
             ),
             modifier = Modifier
@@ -121,11 +121,11 @@ fun SearchScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 GlassmorphicBackButton(onClick = onBack)
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(12.dp))
                 GlassmorphicItem(
                     modifier = Modifier.weight(1f),
                     cornerRadius = 20,

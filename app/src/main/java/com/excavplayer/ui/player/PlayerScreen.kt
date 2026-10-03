@@ -1795,7 +1795,7 @@ private fun AudioSheet(
 
         if (state.availableAudioTracks.isNotEmpty()) {
             state.availableAudioTracks.forEach { track ->
-                val label = track.language ?: track.label
+                val label = track.label.takeIf { it.isNotBlank() } ?: track.language ?: "Audio Track"
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()

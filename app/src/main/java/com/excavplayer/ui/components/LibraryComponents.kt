@@ -643,7 +643,7 @@ fun VideoCard(
 ) {
     val resLabel = formatResolution(video.width, video.height)
     val animatedBlur by animateDpAsState(
-        targetValue = if (isSelectionMode && !isSelected) 8.dp else 0.dp,
+        targetValue = if (isSelectionMode && !isSelected) 2.dp else 0.dp,
         animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
         label = "selectionBlur"
     )
@@ -662,8 +662,8 @@ fun VideoCard(
             .blur(animatedBlur)
             .clip(ExcavShapes.Card)
             .border(
-                if (isSelected) 2.dp else 1.dp,
-                if (isSelected) ExcavPalette.LogoBlue else ExcavPalette.Line,
+                if (isSelected) 1.5.dp else 1.dp,
+                if (isSelected) ExcavPalette.Gray else ExcavPalette.Line,
                 ExcavShapes.Card
             )
             .tactilePress(
@@ -687,7 +687,7 @@ fun VideoCard(
                             .padding(6.dp)
                             .size(22.dp)
                             .clip(CircleShape)
-                            .background(ExcavPalette.LogoBlue),
+                            .background(ExcavPalette.Gray),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -954,7 +954,7 @@ fun GroupCard(
     val cardShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 38.dp, bottomEnd = 38.dp)
     val thumbnailShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 14.dp, bottomEnd = 14.dp)
     val animatedBlur by animateDpAsState(
-        targetValue = if (isSelectionMode && !isSelected) 8.dp else 0.dp,
+        targetValue = if (isSelectionMode && !isSelected) 2.dp else 0.dp,
         animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
         label = "selectionBlur"
     )
@@ -973,8 +973,8 @@ fun GroupCard(
             .blur(animatedBlur)
             .clip(cardShape)
             .border(
-                if (isSelected) 2.dp else 1.dp,
-                if (isSelected) ExcavPalette.LogoBlue else Color(0xFF282F3B),
+                if (isSelected) 1.5.dp else 1.dp,
+                if (isSelected) ExcavPalette.Gray else Color(0xFF282F3B),
                 cardShape
             )
             .tactilePress(
@@ -1023,7 +1023,7 @@ fun GroupCard(
                             .padding(8.dp)
                             .size(22.dp)
                             .clip(CircleShape)
-                            .background(ExcavPalette.LogoBlue),
+                            .background(ExcavPalette.Gray),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -1111,7 +1111,7 @@ fun ContinueWatchingRowCard(
     val watched = video.resumePositionMs ?: 0L
     val remaining = (video.durationMs - watched).coerceAtLeast(0L)
     val animatedBlur by animateDpAsState(
-        targetValue = if (isSelectionMode && !isSelected) 8.dp else 0.dp,
+        targetValue = if (isSelectionMode && !isSelected) 2.dp else 0.dp,
         animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
         label = "selectionBlur"
     )
@@ -1130,8 +1130,8 @@ fun ContinueWatchingRowCard(
             .blur(animatedBlur)
             .clip(ExcavShapes.Card)
             .border(
-                if (isSelected) 2.dp else 1.dp,
-                if (isSelected) ExcavPalette.LogoBlue else ExcavPalette.Line,
+                if (isSelected) 1.5.dp else 1.dp,
+                if (isSelected) ExcavPalette.Gray else ExcavPalette.Line,
                 ExcavShapes.Card
             )
             .tactilePress(
@@ -1155,7 +1155,7 @@ fun ContinueWatchingRowCard(
                             .padding(6.dp)
                             .size(22.dp)
                             .clip(CircleShape)
-                            .background(ExcavPalette.LogoBlue),
+                            .background(ExcavPalette.Gray),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -1277,7 +1277,7 @@ fun FolderCard(
     val cardShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 38.dp, bottomEnd = 38.dp)
     val thumbnailShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 14.dp, bottomEnd = 14.dp)
     val animatedBlur by animateDpAsState(
-        targetValue = if (isSelectionMode && !isSelected) 8.dp else 0.dp,
+        targetValue = if (isSelectionMode && !isSelected) 2.dp else 0.dp,
         animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
         label = "selectionBlur"
     )
@@ -1296,8 +1296,8 @@ fun FolderCard(
             .blur(animatedBlur)
             .clip(cardShape)
             .border(
-                if (isSelected) 2.dp else 1.dp,
-                if (isSelected) ExcavPalette.LogoBlue else Color(0xFF282F3B),
+                if (isSelected) 1.5.dp else 1.dp,
+                if (isSelected) ExcavPalette.Gray else Color(0xFF282F3B),
                 cardShape
             )
             .tactilePress(
@@ -1346,7 +1346,7 @@ fun FolderCard(
                             .padding(8.dp)
                             .size(22.dp)
                             .clip(CircleShape)
-                            .background(ExcavPalette.LogoBlue),
+                            .background(ExcavPalette.Gray),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -1610,7 +1610,7 @@ fun PlaylistGridCard(
     val cardShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 38.dp, bottomEnd = 38.dp)
     val thumbnailShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 14.dp, bottomEnd = 14.dp)
     val animatedBlur by animateDpAsState(
-        targetValue = if (isSelectionMode && !isSelected) 8.dp else 0.dp,
+        targetValue = if (isSelectionMode && !isSelected) 2.dp else 0.dp,
         animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
         label = "selectionBlur"
     )
@@ -1629,8 +1629,8 @@ fun PlaylistGridCard(
             .blur(animatedBlur)
             .clip(cardShape)
             .border(
-                if (isSelected) 2.dp else 1.dp,
-                if (isSelected) ExcavPalette.LogoBlue else Color(0xFF282F3B),
+                if (isSelected) 1.5.dp else 1.dp,
+                if (isSelected) ExcavPalette.Gray else Color(0xFF282F3B),
                 cardShape
             )
             .tactilePress(
@@ -1679,7 +1679,7 @@ fun PlaylistGridCard(
                             .padding(8.dp)
                             .size(22.dp)
                             .clip(CircleShape)
-                            .background(ExcavPalette.LogoBlue),
+                            .background(ExcavPalette.Gray),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -1794,7 +1794,7 @@ fun ListVideoRow(
     val formatStr = video.fileFormat
     val resumePos = video.resumePositionMs ?: 0L
     val animatedBlur by animateDpAsState(
-        targetValue = if (isSelectionMode && !isSelected) 8.dp else 0.dp,
+        targetValue = if (isSelectionMode && !isSelected) 2.dp else 0.dp,
         animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
         label = "selectionBlur"
     )
@@ -1813,8 +1813,8 @@ fun ListVideoRow(
             .blur(animatedBlur)
             .clip(ExcavShapes.Row)
             .border(
-                if (isSelected) 2.dp else 1.dp,
-                if (isSelected) ExcavPalette.LogoBlue else ExcavPalette.Line,
+                if (isSelected) 1.5.dp else 1.dp,
+                if (isSelected) ExcavPalette.Gray else ExcavPalette.Line,
                 ExcavShapes.Row
             )
             .tactilePress(
@@ -1840,7 +1840,7 @@ fun ListVideoRow(
                             .padding(4.dp)
                             .size(20.dp)
                             .clip(CircleShape)
-                            .background(ExcavPalette.LogoBlue),
+                            .background(ExcavPalette.Gray),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -2336,14 +2336,16 @@ fun BatchVideoOptionsMenu(
             strokeColor = Color.White.copy(alpha = 0.16f)
         )
     ) {
-        DropdownMenuItem(
-            text = { Text(if (selectedVideos.size == 1) "Play" else "Play All", color = ExcavPalette.Text) },
-            leadingIcon = { Icon(Icons.Default.PlayArrow, null, tint = ExcavPalette.Text) },
-            onClick = {
-                onPlaySelected()
-                onDismiss()
-            }
-        )
+        if (selectedVideos.size == 1) {
+            DropdownMenuItem(
+                text = { Text("Play", color = ExcavPalette.Text) },
+                leadingIcon = { Icon(Icons.Default.PlayArrow, null, tint = ExcavPalette.Text) },
+                onClick = {
+                    onPlaySelected()
+                    onDismiss()
+                }
+            )
+        }
         DropdownMenuItem(
             text = { Text(if (allFavorites) "Remove from Favorites" else "Add to Favorites", color = ExcavPalette.Text) },
             leadingIcon = {

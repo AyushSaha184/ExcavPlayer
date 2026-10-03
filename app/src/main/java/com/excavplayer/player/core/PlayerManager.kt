@@ -66,6 +66,77 @@ class PlayerManager @Inject constructor(
 
     companion object {
         private const val TAG = "PlayerManager"
+
+        private val LANGUAGE_MAP = mapOf(
+            "english" to listOf("en", "eng", "english"),
+            "hindi" to listOf("hi", "hin", "hindi"),
+            "japanese" to listOf("ja", "jpn", "japanese"),
+            "spanish" to listOf("es", "spa", "spanish", "espanol", "español"),
+            "french" to listOf("fr", "fra", "fre", "french", "francais", "français"),
+            "german" to listOf("de", "deu", "ger", "german", "deutsch"),
+            "chinese" to listOf("zh", "zho", "chi", "chinese", "mandarin", "cantonese"),
+            "korean" to listOf("ko", "kor", "korean"),
+            "russian" to listOf("ru", "rus", "russian"),
+            "portuguese" to listOf("pt", "por", "portuguese"),
+            "italian" to listOf("it", "ita", "italian"),
+            "telugu" to listOf("te", "tel", "telugu"),
+            "tamil" to listOf("ta", "tam", "tamil"),
+            "kannada" to listOf("kn", "kan", "kannada"),
+            "malayalam" to listOf("ml", "mal", "malayalam"),
+            "bengali" to listOf("bn", "ben", "bengali"),
+            "marathi" to listOf("mr", "mar", "marathi"),
+            "gujarati" to listOf("gu", "guj", "gujarati"),
+            "punjabi" to listOf("pa", "pan", "punjabi"),
+            "arabic" to listOf("ar", "ara", "arabic"),
+            "turkish" to listOf("tr", "tur", "turkish"),
+            "vietnamese" to listOf("vi", "vie", "vietnamese"),
+            "thai" to listOf("th", "tha", "thai"),
+            "indonesian" to listOf("id", "ind", "indonesian")
+        )
+
+        fun getLanguageCodes(preferred: String?): List<String> {
+            if (preferred.isNullOrBlank() || preferred.equals("auto", ignoreCase = true) || preferred.equals("none", ignoreCase = true) || preferred.equals("auto (default)", ignoreCase = true)) {
+                return emptyList()
+            }
+            val key = preferred.trim().lowercase()
+            return LANGUAGE_MAP[key] ?: listOf(key)
+        }
+
+        fun matchesLanguage(language: String?, label: String?, preferred: String): Boolean {
+            if (preferred.isBlank() || preferred.equals("none", ignoreCase = true) || preferred.equals("auto", ignoreCase = true) || preferred.equals("auto (default)", ignoreCase = true)) {
+                return false
+            }
+            val pref = preferred.trim().lowercase()
+            val synonyms = getLanguageCodes(pref)
+            if (synonyms.isEmpty()) return false
+
+            val lang = language?.trim()?.lowercase()?.takeIf { it.isNotBlank() && it != "und" }
+            val lab = label?.trim()?.lowercase()?.takeIf { it.isNotBlank() }
+
+            // 1. Direct language code / tag match
+            if (lang != null) {
+                if (synonyms.any { s -> lang == s || lang.startsWith("$s-") || lang.startsWith("${s}_") }) {
+                    return true
+                }
+                // If the track explicitly defines another recognized language family, prevent accidental fallback
+                val belongsToOther = LANGUAGE_MAP.entries.any { (otherKey, otherSyns) ->
+                    otherKey != pref && otherSyns.any { s -> lang == s || lang.startsWith("$s-") || lang.startsWith("${s}_") }
+                }
+                if (belongsToOther) {
+                    return false
+                }
+            }
+
+            // 2. Tokenized whole-word match on label (prevents false positives like "clean" matching "en" or "stereo" matching "es")
+            if (lab != null) {
+                val words = lab.split(Regex("[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ]+")).filter { it.isNotBlank() }
+                if (words.any { word -> synonyms.any { s -> word.equals(s, ignoreCase = true) } }) {
+                    return true
+                }
+            }
+
+            return false
+        }
     }
 
     private val playerScope = CoroutineScope(SupervisorJob() + dispatchers.main)
@@ -132,9 +203,28 @@ class PlayerManager @Inject constructor(
     private val _state = MutableStateFlow(PlayerState())
     override val state: StateFlow<PlayerState> = _state.asStateFlow()
 
-    private val becomingNoisyReceiver = AudioBecomingNoisyReceiver(context, logger) {
-        pause()
-    }
+    private var pausedByHeadset = false
+
+    private val becomingNoisyReceiver = AudioBecomingNoisyReceiver(
+        context = context,
+        logger = logger,
+        onHeadsetDisconnected = {
+            if (currentSettings.headsetDetectionEnabled && exoPlayer.isPlaying) {
+                logger.i(TAG, "Headset disconnected while playing -> auto pausing")
+                pausedByHeadset = true
+                exoPlayer.pause()
+            }
+        },
+        onHeadsetConnected = {
+            if (currentSettings.headsetDetectionEnabled && pausedByHeadset) {
+                logger.i(TAG, "Headset connected after disconnect -> auto resuming")
+                pausedByHeadset = false
+                if (exoPlayer.playbackState != Player.STATE_ENDED && exoPlayer.playbackState != Player.STATE_IDLE) {
+                    exoPlayer.play()
+                }
+            }
+        }
+    )
 
     init {
         startPositionTicker()
@@ -142,6 +232,9 @@ class PlayerManager @Inject constructor(
             settingsRepository.userSettings.collect { settings ->
                 val prevDialogue = currentSettings.dialogueBoostEnabled
                 val prevMatchRate = currentSettings.matchDisplayRefreshRate
+                val prevAudioLang = currentSettings.preferredAudioLanguage
+                val prevSubLang = currentSettings.preferredSubtitleLanguage
+                val prevSubsEnabled = currentSettings.subtitlesEnabled
                 currentSettings = settings
                 if (prevDialogue != settings.dialogueBoostEnabled) {
                     applyDialogueBooster(settings.dialogueBoostEnabled)
@@ -149,7 +242,34 @@ class PlayerManager @Inject constructor(
                 if (prevMatchRate != settings.matchDisplayRefreshRate) {
                     applyDisplayRefreshRateOptimization(settings.matchDisplayRefreshRate)
                 }
+                if (prevAudioLang != settings.preferredAudioLanguage || 
+                    prevSubLang != settings.preferredSubtitleLanguage || 
+                    prevSubsEnabled != settings.subtitlesEnabled) {
+                    applyTrackSelectionPreferences(settings)
+                }
             }
+        }
+    }
+
+    private fun applyTrackSelectionPreferences(settings: UserSettings) {
+        try {
+            val builder = exoPlayer.trackSelectionParameters.buildUpon()
+            val audioLangs = getLanguageCodes(settings.preferredAudioLanguage)
+            if (audioLangs.isNotEmpty()) {
+                builder.setPreferredAudioLanguages(*audioLangs.toTypedArray())
+            }
+            if (settings.subtitlesEnabled && !settings.preferredSubtitleLanguage.isNullOrBlank()) {
+                val textLangs = getLanguageCodes(settings.preferredSubtitleLanguage)
+                if (textLangs.isNotEmpty()) {
+                    builder.setPreferredTextLanguages(*textLangs.toTypedArray())
+                }
+                builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+            } else if (!settings.subtitlesEnabled || userDisabledSubtitlesForSession) {
+                builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+            }
+            exoPlayer.trackSelectionParameters = builder.build()
+        } catch (e: Exception) {
+            logger.w(TAG, "Failed to apply track selection preferences: ${e.message}")
         }
     }
 
@@ -181,14 +301,31 @@ class PlayerManager @Inject constructor(
     override suspend fun play(video: Video, startPositionMs: Long?) = withContext(dispatchers.main) {
         logger.i(TAG, "play() called for video: ${video.id}")
         val settings = settingsRepository.userSettings.first()
+        currentSettings = settings
         userDisabledSubtitlesForSession = false
+        pausedByHeadset = false
+        applyTrackSelectionPreferences(settings)
 
-        val resumePos = startPositionMs ?: if (settings.autoResume) {
-            val savedState = playbackRepository.getPlaybackState(video.id)
-            savedState?.currentPositionMs ?: 0L
-        } else {
+        val rawPos = if (!settings.autoResume) {
             0L
+        } else {
+            val savedState = playbackRepository.getPlaybackState(video.id)
+            startPositionMs ?: savedState?.currentPositionMs ?: 0L
         }
+
+        val duration = video.durationMs
+        val thresholdMs = when {
+            settings.resumeThresholdPercent >= 0.99f -> 5_000L
+            settings.resumeThresholdPercent >= 0.95f -> 10_000L
+            settings.resumeThresholdPercent >= 0.90f -> 30_000L
+            else -> 60_000L
+        }
+        val isCompleted = duration > 0 && (
+            rawPos < 3_000L ||
+            (duration - rawPos) <= thresholdMs ||
+            (rawPos.toFloat() / duration.toFloat()) >= settings.resumeThresholdPercent
+        )
+        val resumePos = if (isCompleted) 0L else rawPos
 
         val mediaItem = buildMediaItem(video)
         persistenceManager.onSessionStarted()
@@ -234,8 +371,8 @@ class PlayerManager @Inject constructor(
 
     override fun pause() {
         logger.d(TAG, "pause()")
+        pausedByHeadset = false
         exoPlayer.pause()
-        becomingNoisyReceiver.unregister()
         persistenceManager.stopPeriodicSave()
         playerScope.launch {
             persistenceManager.saveImmediate(_state.value.playback, _state.value.currentVideo)
@@ -244,6 +381,7 @@ class PlayerManager @Inject constructor(
 
     override fun resume() {
         logger.d(TAG, "resume()")
+        pausedByHeadset = false
         val curVid = _state.value.currentVideo
         if (exoPlayer.playbackState == Player.STATE_ENDED ||
             exoPlayer.playbackState == Player.STATE_IDLE ||
@@ -622,10 +760,8 @@ class PlayerManager @Inject constructor(
                 it.copy(playback = it.playback.copy(isPlaying = isPlaying))
             }
             if (isPlaying) {
-                becomingNoisyReceiver.register()
                 persistenceManager.startPeriodicSave(playerScope, { _state.value.playback }, { _state.value.currentVideo })
             } else {
-                becomingNoisyReceiver.unregister()
                 persistenceManager.stopPeriodicSave()
                 playerScope.launch {
                     persistenceManager.saveImmediate(_state.value.playback, _state.value.currentVideo)
@@ -688,35 +824,7 @@ class PlayerManager @Inject constructor(
             }
         }
 
-        private fun matchesLanguage(language: String?, label: String?, preferred: String): Boolean {
-            if (preferred.isBlank()) return false
-            val pref = preferred.trim().lowercase()
-            val lang = language?.trim()?.lowercase()
-            val lab = label?.trim()?.lowercase()
 
-            if (lang != null && (lang == pref || lang.startsWith(pref) || pref.startsWith(lang))) return true
-            if (lab != null && (lab.contains(pref) || pref.contains(lab))) return true
-
-            val synonyms = when (pref) {
-                "english", "en" -> listOf("en", "eng", "english")
-                "japanese", "ja" -> listOf("ja", "jpn", "japanese", "jp")
-                "spanish", "es" -> listOf("es", "spa", "spanish", "espanol", "español")
-                "french", "fr" -> listOf("fr", "fra", "fre", "french", "francais", "français")
-                "german", "de" -> listOf("de", "deu", "ger", "german", "deutsch")
-                "chinese", "zh" -> listOf("zh", "zho", "chi", "chinese")
-                "korean", "ko" -> listOf("ko", "kor", "korean")
-                "hindi", "hi" -> listOf("hi", "hin", "hindi")
-                "russian", "ru" -> listOf("ru", "rus", "russian")
-                "portuguese", "pt" -> listOf("pt", "por", "portuguese")
-                "italian", "it" -> listOf("it", "ita", "italian")
-                else -> listOf(pref)
-            }
-
-            return synonyms.any { s ->
-                (lang != null && (lang == s || lang.startsWith(s))) ||
-                (lab != null && lab.contains(s))
-            }
-        }
 
         override fun onMetadata(metadata: Metadata) {
             val extracted = chapterExtractor.extractFromMetadata(metadata)

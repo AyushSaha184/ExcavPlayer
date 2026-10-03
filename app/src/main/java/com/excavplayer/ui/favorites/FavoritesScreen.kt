@@ -433,7 +433,7 @@ fun CompactFavoriteCard(
     }
 
     val animatedBlur by animateDpAsState(
-        targetValue = if (isSelectionMode && !isSelected) 8.dp else 0.dp,
+        targetValue = if (isSelectionMode && !isSelected) 2.dp else 0.dp,
         animationSpec = androidx.compose.animation.core.tween(durationMillis = 200, easing = androidx.compose.animation.core.FastOutSlowInEasing),
         label = "selectionBlur"
     )
@@ -452,8 +452,8 @@ fun CompactFavoriteCard(
             .blur(animatedBlur)
             .clip(RoundedCornerShape(12.dp))
             .border(
-                if (isSelected) 2.dp else 1.dp,
-                if (isSelected) ExcavPalette.LogoBlue else ExcavPalette.Line,
+                if (isSelected) 1.5.dp else 1.dp,
+                if (isSelected) ExcavPalette.Gray else ExcavPalette.Line,
                 RoundedCornerShape(12.dp)
             )
             .tactilePress(
@@ -478,7 +478,7 @@ fun CompactFavoriteCard(
                             .padding(6.dp)
                             .size(22.dp)
                             .clip(CircleShape)
-                            .background(ExcavPalette.LogoBlue),
+                            .background(ExcavPalette.Gray),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(

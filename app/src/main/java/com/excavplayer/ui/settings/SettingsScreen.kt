@@ -115,7 +115,7 @@ fun SettingsScreen(
                 SettingsSwitchRow(
                     icon = Icons.Default.Sync,
                     title = "Match Display Refresh Rate",
-                    subtitle = "Seamless frame rate sync to eliminate 24fps motion judder on 60Hz/120Hz displays",
+                    subtitle = null,
                     checked = settings.matchDisplayRefreshRate,
                     onCheckedChange = { vm.setMatchDisplayRefreshRate(it) }
                 )
@@ -145,7 +145,7 @@ fun SettingsScreen(
                         settings.resumeThresholdPercent >= 0.99f -> "5 seconds"
                         settings.resumeThresholdPercent >= 0.95f -> "10 seconds"
                         settings.resumeThresholdPercent >= 0.90f -> "30 seconds"
-                        else -> "${(settings.resumeThresholdPercent * 100).toInt()}%"
+                        else -> "1 minute"
                     },
                     onClick = { activeDialog = SettingDialog.THRESHOLD }
                 )
@@ -369,10 +369,10 @@ fun SettingsScreen(
                 selected = settings.resumeThresholdPercent,
                 labelFor = {
                     when {
-                        it >= 0.99f -> "5 seconds (99%)"
-                        it >= 0.95f -> "10 seconds (95%)"
-                        it >= 0.90f -> "30 seconds (90%)"
-                        else -> "1 minute (80%)"
+                        it >= 0.99f -> "5 seconds"
+                        it >= 0.95f -> "10 seconds"
+                        it >= 0.90f -> "30 seconds"
+                        else -> "1 minute"
                     }
                 },
                 onSelect = {
@@ -424,11 +424,26 @@ fun SettingsScreen(
         SettingDialog.AUDIO_LANG -> {
             RadioChoiceDialog(
                 title = "Preferred Audio Language",
-                options = listOf("English", "Hindi", "Japanese"),
+                options = listOf(
+                    "English",
+                    "Hindi",
+                    "Japanese",
+                    "Spanish",
+                    "French",
+                    "German",
+                    "Korean",
+                    "Chinese",
+                    "Russian",
+                    "Portuguese",
+                    "Italian",
+                    "Telugu",
+                    "Tamil",
+                    "Auto (Default)"
+                ),
                 selected = settings.preferredAudioLanguage ?: "English",
                 labelFor = { it },
                 onSelect = {
-                    vm.setPreferredAudioLanguage(it)
+                    vm.setPreferredAudioLanguage(if (it == "Auto (Default)") null else it)
                     activeDialog = SettingDialog.NONE
                 },
                 onDismiss = { activeDialog = SettingDialog.NONE }
@@ -476,7 +491,7 @@ private fun SettingsDivider() {
 private fun SettingsSwitchRow(
     icon: ImageVector,
     title: String,
-    subtitle: String,
+    subtitle: String? = null,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
@@ -511,12 +526,14 @@ private fun SettingsSwitchRow(
                     fontSize = 15.sp
                 )
             )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                text = subtitle,
-                color = ExcavPalette.TextMuted,
-                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp)
-            )
+            if (subtitle != null) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    color = ExcavPalette.TextMuted,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp)
+                )
+            }
         }
         Spacer(Modifier.width(8.dp))
         SleekSwitch(

@@ -62,20 +62,30 @@ class PlaybackPersistenceManager @Inject constructor(
         val settings = settingsRepository.userSettings.first()
         val currentPos = state.currentPositionMs
         val duration = state.durationMs
-        val progressPercent = (currentPos.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
-        val isCompleted = progressPercent >= settings.resumeThresholdPercent
+        val remainingMs = (duration - currentPos).coerceAtLeast(0L)
+        val thresholdMs = when {
+            settings.resumeThresholdPercent >= 0.99f -> 5_000L
+            settings.resumeThresholdPercent >= 0.95f -> 10_000L
+            settings.resumeThresholdPercent >= 0.90f -> 30_000L
+            else -> 60_000L
+        }
+        val isCompleted = duration > 0 && (
+            currentPos < 3_000L ||
+            remainingMs <= thresholdMs ||
+            (currentPos.toFloat() / duration.toFloat()) >= settings.resumeThresholdPercent
+        )
 
         // Persist Playback State (for AutoResume / Continue Watching)
-        if (settings.autoResume && settings.continueWatchingEnabled) {
+        if (settings.autoResume) {
             if (isCompleted) {
-                // If finished, reset position to 0 so next play starts from start
+                // If finished or near the beginning, reset position to 0 so next play starts from start
                 playbackRepository.savePlaybackState(state.copy(currentPositionMs = 0L, videoId = videoId))
             } else {
                 playbackRepository.savePlaybackState(state.copy(videoId = videoId))
             }
         }
 
-        logger.d(TAG, "Saved playback state: pos=$currentPos/${duration}ms ($progressPercent%) immediate=$isImmediate")
+        logger.d(TAG, "Saved playback state: pos=$currentPos/${duration}ms isCompleted=$isCompleted immediate=$isImmediate")
     }
 
     fun onSessionStarted() {
