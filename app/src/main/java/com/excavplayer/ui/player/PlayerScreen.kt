@@ -157,6 +157,7 @@ fun PlayerScreen(
     var gestureHudText by remember { mutableStateOf<String?>(null) }
     var gestureHudProgress by remember { mutableFloatStateOf(0f) }
     var gestureHudIcon by remember { mutableStateOf<ImageVector?>(null) }
+    var gestureHudIsBoost by remember { mutableStateOf(false) }
 
     var doubleTapSeekSide by remember { mutableStateOf<DoubleTapSide?>(null) }
     var doubleTapSeekAccumulatedSeconds by remember { mutableIntStateOf(10) }
@@ -184,6 +185,7 @@ fun PlayerScreen(
             gestureHudText = null
             gestureHudIcon = null
             gestureHudProgress = 0f
+            gestureHudIsBoost = false
         }
     }
 
@@ -419,7 +421,7 @@ fun PlayerScreen(
                 if (!isLocked && zoomScale <= 1.05f) {
                     var isDragEligible = false
                     var totalVerticalDrag = 0f
-                    var accumulatedVolumeDelta = 0f
+                    var currentEffectiveVol = 1.0f
                     detectDragGestures(
                         onDragStart = { startOffset ->
                             // Ignore touches in top 20% (status bar pull-down zone) and bottom 18% (nav bar zone)
@@ -429,19 +431,28 @@ fun PlayerScreen(
                             val safeRight = size.width * 0.92f
                             isDragEligible = startOffset.y in safeTop..safeBottom && startOffset.x in safeLeft..safeRight
                             totalVerticalDrag = 0f
-                            accumulatedVolumeDelta = 0f
+                            audioManager?.let { am ->
+                                val maxVol = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+                                val curDeviceVol = am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
+                                val playerVol = state.playback.volume
+                                currentEffectiveVol = if (playerVol > 1.0f) {
+                                    playerVol.coerceIn(1.0f, 2.0f)
+                                } else {
+                                    (curDeviceVol.toFloat() / maxVol.toFloat()).coerceIn(0f, 1f)
+                                }
+                            }
                         },
                         onDragEnd = {
                             isDragEligible = false
-                            accumulatedVolumeDelta = 0f
                             gestureHudText = null
                             gestureHudIcon = null
+                            gestureHudIsBoost = false
                         },
                         onDragCancel = {
                             isDragEligible = false
-                            accumulatedVolumeDelta = 0f
                             gestureHudText = null
                             gestureHudIcon = null
+                            gestureHudIsBoost = false
                         },
                         onDrag = { change, dragAmount ->
                             if (!isDragEligible) return@detectDragGestures
@@ -456,28 +467,37 @@ fun PlayerScreen(
                                 activity?.window?.attributes = activity.window.attributes.apply { screenBrightness = newBrightness }
                                 gestureHudText = "Brightness ${(newBrightness * 100).toInt()}%"
                                 gestureHudProgress = newBrightness
+                                gestureHudIsBoost = false
                                 gestureHudIcon = Icons.Default.WbSunny
                             } else if (!isLeft && settings.volumeGestureEnabled) {
                                 audioManager?.let { am ->
                                     val maxVol = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC).coerceAtLeast(1)
-                                    val delta = -(dragAmount.y / (size.height * 0.75f)) * maxVol
-                                    accumulatedVolumeDelta += delta
-                                    if (Math.abs(accumulatedVolumeDelta) >= 1.0f) {
-                                        val stepChange = accumulatedVolumeDelta.toInt()
-                                        val currentVol = am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
-                                        val newTargetVol = (currentVol + stepChange).coerceIn(0, maxVol)
-                                        am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, newTargetVol, 0)
-                                        accumulatedVolumeDelta -= stepChange
-                                    }
-                                    val currentVol = am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
-                                    val volFraction = (currentVol.toFloat() / maxVol.toFloat()).coerceIn(0f, 1f)
-                                    val volPercent = (volFraction * 100f).roundToInt()
-                                    gestureHudText = "Volume $volPercent%"
-                                    gestureHudProgress = volFraction
-                                    gestureHudIcon = if (currentVol == 0) {
-                                        Icons.AutoMirrored.Filled.VolumeOff
+                                    val delta = -(dragAmount.y / (size.height * 0.75f)) * 1.25f
+                                    currentEffectiveVol = (currentEffectiveVol + delta).coerceIn(0f, 2.0f)
+
+                                    if (currentEffectiveVol <= 1.0f) {
+                                        if (state.playback.volume > 1.0f) {
+                                            vm.player.setVolume(1.0f)
+                                        }
+                                        val targetDeviceVol = (currentEffectiveVol * maxVol).roundToInt().coerceIn(0, maxVol)
+                                        am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, targetDeviceVol, 0)
+                                        val volPercent = (currentEffectiveVol * 100f).roundToInt()
+                                        gestureHudText = "Volume $volPercent%"
+                                        gestureHudProgress = currentEffectiveVol
+                                        gestureHudIsBoost = false
+                                        gestureHudIcon = if (targetDeviceVol == 0) {
+                                            Icons.AutoMirrored.Filled.VolumeOff
+                                        } else {
+                                            Icons.AutoMirrored.Filled.VolumeUp
+                                        }
                                     } else {
-                                        Icons.AutoMirrored.Filled.VolumeUp
+                                        am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, maxVol, 0)
+                                        vm.player.setVolume(currentEffectiveVol)
+                                        val volPercent = (currentEffectiveVol * 100f).roundToInt()
+                                        gestureHudText = "Volume $volPercent% (Boost)"
+                                        gestureHudProgress = (currentEffectiveVol - 1.0f).coerceIn(0f, 1f)
+                                        gestureHudIsBoost = true
+                                        gestureHudIcon = Icons.AutoMirrored.Filled.VolumeUp
                                     }
                                 }
                             }
@@ -634,7 +654,7 @@ fun PlayerScreen(
                         Icon(
                             imageVector = icon,
                             contentDescription = null,
-                            tint = ExcavPalette.Blue,
+                            tint = if (gestureHudIsBoost) ExcavPalette.Yellow else ExcavPalette.Blue,
                             modifier = Modifier.size(hudIconSize)
                         )
                         Spacer(Modifier.height(if (isVeryCompact) 4.dp else 8.dp))
@@ -652,7 +672,7 @@ fun PlayerScreen(
                                 .width(hudProgWidth)
                                 .height(4.dp)
                                 .clip(ExcavShapes.Pill),
-                            color = ExcavPalette.Blue,
+                            color = if (gestureHudIsBoost) ExcavPalette.Yellow else ExcavPalette.Blue,
                             trackColor = Color.White.copy(alpha = 0.25f)
                         )
                     }
@@ -661,8 +681,16 @@ fun PlayerScreen(
         }
 
         // Skip Intro / Outro / Recap Floating Pill (isolated state read)
-        val pillBottomPad = if (isVeryCompact) 36.dp else if (isCompact) 56.dp else 90.dp
-        val pillEndPad = if (isVeryCompact) 10.dp else if (isCompact) 16.dp else 24.dp
+        val pillBottomPad = when {
+            isVeryCompact -> 82.dp
+            isCompact -> 112.dp
+            else -> 142.dp
+        }
+        val pillEndPad = when {
+            isVeryCompact -> 10.dp
+            isCompact -> 16.dp
+            else -> 24.dp
+        }
 
         FloatingSkipChapterPill(
             state = state,
@@ -674,6 +702,7 @@ fun PlayerScreen(
             },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
+                .windowInsetsPadding(WindowInsets.safeDrawing)
                 .padding(bottom = pillBottomPad, end = pillEndPad)
         )
 
@@ -681,9 +710,12 @@ fun PlayerScreen(
         FloatingNextEpisodePill(
             state = state,
             queue = queue,
-            isCompact = isCompact || isVeryCompact,
+            isVeryCompact = isVeryCompact,
+            isCompact = isCompact,
             onPlayNext = { index -> vm.playQueueItem(index) },
-            modifier = Modifier.align(Alignment.BottomEnd)
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .windowInsetsPadding(WindowInsets.safeDrawing)
         )
 
         // Error Overlay
@@ -1945,6 +1977,7 @@ fun FloatingSkipChapterPill(
 fun FloatingNextEpisodePill(
     state: PlayerState,
     queue: com.excavplayer.player.queue.QueueState,
+    isVeryCompact: Boolean = false,
     isCompact: Boolean = false,
     onPlayNext: (Int) -> Unit,
     modifier: Modifier = Modifier
@@ -1961,50 +1994,70 @@ fun FloatingNextEpisodePill(
         state.chapters.find { curPos >= it.startTimeMs && curPos < it.endTimeMs }
     }
     val isOutro = activeChapter?.type == ChapterType.OUTRO
+    val isVisible = isNearEnd || isAtEnd || isOutro
 
-    if (isNearEnd || isAtEnd || isOutro) {
+    val normalPad = when {
+        isVeryCompact -> 82.dp
+        isCompact -> 112.dp
+        else -> 142.dp
+    }
+    val outroPad = when {
+        isVeryCompact -> 118.dp
+        isCompact -> 152.dp
+        else -> 188.dp
+    }
+    val endPad = when {
+        isVeryCompact -> 10.dp
+        isCompact -> 16.dp
+        else -> 24.dp
+    }
+
+    AnimatedVisibility(
+        visible = isVisible,
+        enter = slideInHorizontally(
+            initialOffsetX = { it },
+            animationSpec = spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMediumLow)
+        ) + fadeIn(tween(200)),
+        exit = slideOutHorizontally(
+            targetOffsetX = { it },
+            animationSpec = tween(180)
+        ) + fadeOut(tween(150)),
+        modifier = modifier
+            .padding(bottom = if (isOutro) outroPad else normalPad, end = endPad)
+    ) {
         val nextVid = queue.items[queue.currentIndex + 1]
-        val outroPad = if (isCompact) 70.dp else 150.dp
-        val normalPad = if (isCompact) 42.dp else 90.dp
-        val endPad = if (isCompact) 12.dp else 24.dp
-
-        Box(
-            modifier = modifier
-                .padding(bottom = if (isOutro) outroPad else normalPad, end = endPad)
+        Surface(
+            modifier = Modifier
+                .clip(ExcavShapes.Pill)
+                .border(1.5.dp, ExcavPalette.BlueGlow, ExcavShapes.Pill)
+                .clickable {
+                    onPlayNext(queue.currentIndex + 1)
+                },
+            color = ExcavPalette.Ink.copy(alpha = 0.95f),
+            shadowElevation = 8.dp
         ) {
-            Surface(
-                modifier = Modifier
-                    .clip(ExcavShapes.Pill)
-                    .border(1.5.dp, ExcavPalette.BlueGlow, ExcavShapes.Pill)
-                    .clickable {
-                        onPlayNext(queue.currentIndex + 1)
-                    },
-                color = ExcavPalette.Ink.copy(alpha = 0.95f),
-                shadowElevation = 8.dp
+            Row(
+                modifier = Modifier.padding(
+                    horizontal = if (isVeryCompact) 8.dp else if (isCompact) 10.dp else 16.dp,
+                    vertical = if (isVeryCompact) 5.dp else if (isCompact) 6.dp else 10.dp
+                ),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.padding(
-                        horizontal = if (isCompact) 10.dp else 16.dp,
-                        vertical = if (isCompact) 6.dp else 10.dp
-                    ),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.SkipNext,
-                        contentDescription = null,
-                        tint = ExcavPalette.Blue,
-                        modifier = Modifier.size(if (isCompact) 15.dp else 20.dp)
+                Icon(
+                    imageVector = Icons.Default.SkipNext,
+                    contentDescription = null,
+                    tint = ExcavPalette.Blue,
+                    modifier = Modifier.size(if (isVeryCompact) 14.dp else if (isCompact) 16.dp else 20.dp)
+                )
+                Spacer(Modifier.width(if (isVeryCompact) 4.dp else if (isCompact) 5.dp else 8.dp))
+                Text(
+                    text = "Next: ${nextVid.displayName.take(if (isVeryCompact) 10 else if (isCompact) 14 else 18)}",
+                    color = ExcavPalette.Text,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = if (isVeryCompact) 10.5.sp else if (isCompact) 11.5.sp else 13.sp
                     )
-                    Spacer(Modifier.width(if (isCompact) 5.dp else 8.dp))
-                    Text(
-                        text = "Next: ${nextVid.displayName.take(if (isCompact) 12 else 18)}",
-                        color = ExcavPalette.Text,
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = if (isCompact) 11.sp else 13.sp
-                        )
-                    )
-                }
+                )
             }
         }
     }

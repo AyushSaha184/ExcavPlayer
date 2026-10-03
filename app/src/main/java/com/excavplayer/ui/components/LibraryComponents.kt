@@ -58,6 +58,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.Hyphens
 import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
+import com.excavplayer.ui.normalizeFolderPath
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
@@ -72,16 +73,21 @@ import com.excavplayer.domain.model.Video
 import com.excavplayer.media.thumbnail.ThumbnailLoader
 import com.excavplayer.ui.UserMessage
 import com.excavplayer.ui.theme.*
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.draw.blur
 import dagger.hilt.android.EntryPointAccessors
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.materials.CupertinoMaterials
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun Modifier.tactilePress(
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
     pressScale: Float = 0.97f,
+    onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit
 ): Modifier {
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -98,10 +104,11 @@ fun Modifier.tactilePress(
             scaleX = scale
             scaleY = scale
         }
-        .clickable(
+        .combinedClickable(
             interactionSource = interactionSource,
             indication = ripple(bounded = true, color = ExcavPalette.Blue.copy(alpha = 0.2f)),
-            onClick = onClick
+            onClick = onClick,
+            onLongClick = onLongClick
         )
 }
 
@@ -141,8 +148,12 @@ fun BrandHeader(
     onSearch: () -> Unit,
     onRefresh: (() -> Unit)? = null,
     isScrolled: Boolean = true,
+    isSelectionMode: Boolean = false,
+    selectedCount: Int = 0,
+    onMoreClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
-    hazeState: HazeState = LocalHazeState.current
+    hazeState: HazeState = LocalHazeState.current,
+    dropdownMenu: (@Composable () -> Unit)? = null
 ) {
     val context = LocalContext.current
     val iconBitmap = remember(context) {
@@ -188,22 +199,33 @@ fun BrandHeader(
             }
             Spacer(Modifier.width(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "Excav",
-                    color = ExcavPalette.Text,
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                )
-                Text(
-                    text = "Player",
-                    color = ExcavPalette.TextMuted,
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                )
+                if (isSelectionMode) {
+                    Text(
+                        text = "$selectedCount selected",
+                        color = ExcavPalette.Text,
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    )
+                } else {
+                    Text(
+                        text = "Excav",
+                        color = ExcavPalette.Text,
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                    )
+                    Text(
+                        text = "Player",
+                        color = ExcavPalette.TextMuted,
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                    )
+                }
             }
             Spacer(Modifier.weight(1f))
             GlassmorphicHeaderActions(
                 onSearch = onSearch,
                 onRefresh = onRefresh,
-                hazeState = hazeState
+                isSelectionMode = isSelectionMode,
+                onMoreClick = onMoreClick,
+                hazeState = hazeState,
+                dropdownMenu = dropdownMenu
             )
         }
     }
@@ -217,8 +239,12 @@ fun FoldersBrandHeader(
     onSearch: () -> Unit,
     onRefresh: (() -> Unit)? = null,
     isScrolled: Boolean = true,
+    isSelectionMode: Boolean = false,
+    selectedCount: Int = 0,
+    onMoreClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
-    hazeState: HazeState = LocalHazeState.current
+    hazeState: HazeState = LocalHazeState.current,
+    dropdownMenu: (@Composable () -> Unit)? = null
 ) {
     val context = LocalContext.current
     val iconBitmap = remember(context) {
@@ -319,22 +345,33 @@ fun FoldersBrandHeader(
                 }
                 Spacer(Modifier.width(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "Excav",
-                        color = ExcavPalette.Text,
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                    )
-                    Text(
-                        text = "Player",
-                        color = ExcavPalette.TextMuted,
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                    )
+                    if (isSelectionMode) {
+                        Text(
+                            text = "$selectedCount selected",
+                            color = ExcavPalette.Text,
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        )
+                    } else {
+                        Text(
+                            text = "Excav",
+                            color = ExcavPalette.Text,
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                        )
+                        Text(
+                            text = "Player",
+                            color = ExcavPalette.TextMuted,
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                        )
+                    }
                 }
                 Spacer(Modifier.weight(1f))
                 GlassmorphicHeaderActions(
                     onSearch = onSearch,
                     onRefresh = onRefresh,
-                    hazeState = hazeState
+                    isSelectionMode = isSelectionMode,
+                    onMoreClick = onMoreClick,
+                    hazeState = hazeState,
+                    dropdownMenu = dropdownMenu
                 )
             }
 
@@ -598,18 +635,42 @@ fun VideoCard(
     video: Video,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    isSelected: Boolean = false,
+    isSelectionMode: Boolean = false,
+    onLongClick: (() -> Unit)? = null,
     onMoreClick: (() -> Unit)? = null,
     dropdownMenu: (@Composable () -> Unit)? = null
 ) {
     val resLabel = formatResolution(video.width, video.height)
+    val animatedBlur by animateDpAsState(
+        targetValue = if (isSelectionMode && !isSelected) 8.dp else 0.dp,
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        label = "selectionBlur"
+    )
+    val animatedAlpha by animateFloatAsState(
+        targetValue = if (isSelectionMode && !isSelected) 0.35f else 1f,
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        label = "selectionAlpha"
+    )
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
+            .graphicsLayer {
+                alpha = animatedAlpha
+            }
+            .blur(animatedBlur)
             .clip(ExcavShapes.Card)
-            .border(1.dp, ExcavPalette.Line, ExcavShapes.Card)
-            .tactilePress(onClick = onClick),
-        color = ExcavPalette.SurfaceCard
+            .border(
+                if (isSelected) 2.dp else 1.dp,
+                if (isSelected) ExcavPalette.LogoBlue else ExcavPalette.Line,
+                ExcavShapes.Card
+            )
+            .tactilePress(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
+        color = if (isSelected) ExcavPalette.SurfaceCardHighlight else ExcavPalette.SurfaceCard
     ) {
         Column {
             Box(
@@ -618,9 +679,25 @@ fun VideoCard(
                     .aspectRatio(16f / 9f)
             ) {
                 Thumbnail(video, Modifier.fillMaxSize())
-                
-                // Resolution Badge
-                if (resLabel != null) {
+
+                if (isSelected) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(6.dp)
+                            .size(22.dp)
+                            .clip(CircleShape)
+                            .background(ExcavPalette.LogoBlue),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Selected",
+                            tint = ExcavPalette.Ink,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                } else if (resLabel != null) {
                     Text(
                         text = resLabel,
                         color = ExcavPalette.Text,
@@ -867,20 +944,44 @@ fun GroupCard(
     videos: List<Video>,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    isSelected: Boolean = false,
+    isSelectionMode: Boolean = false,
+    onLongClick: (() -> Unit)? = null,
     hazeState: HazeState = LocalHazeState.current
 ) {
     val totalSize = videos.sumOf { it.sizeBytes }
     val totalCount = videos.size
     val cardShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 38.dp, bottomEnd = 38.dp)
     val thumbnailShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 14.dp, bottomEnd = 14.dp)
+    val animatedBlur by animateDpAsState(
+        targetValue = if (isSelectionMode && !isSelected) 8.dp else 0.dp,
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        label = "selectionBlur"
+    )
+    val animatedAlpha by animateFloatAsState(
+        targetValue = if (isSelectionMode && !isSelected) 0.35f else 1f,
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        label = "selectionAlpha"
+    )
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
+            .graphicsLayer {
+                alpha = animatedAlpha
+            }
+            .blur(animatedBlur)
             .clip(cardShape)
-            .border(1.dp, Color(0xFF282F3B), cardShape)
-            .tactilePress(onClick = onClick),
-        color = Color(0xFF13171F)
+            .border(
+                if (isSelected) 2.dp else 1.dp,
+                if (isSelected) ExcavPalette.LogoBlue else Color(0xFF282F3B),
+                cardShape
+            )
+            .tactilePress(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
+        color = if (isSelected) Color(0xFF1E2430) else Color(0xFF13171F)
     ) {
         Column(
             modifier = Modifier.fillMaxWidth()
@@ -913,6 +1014,25 @@ fun GroupCard(
                                 )
                             )
                     )
+                }
+
+                if (isSelected) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp)
+                            .size(22.dp)
+                            .clip(CircleShape)
+                            .background(ExcavPalette.LogoBlue),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Selected",
+                            tint = ExcavPalette.Ink,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
                 }
 
                 // Translucent Pill placed on top of the lower line of the thumbnail, left side (bisected at middle)
@@ -981,20 +1101,44 @@ fun ContinueWatchingRowCard(
     video: Video,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    isSelected: Boolean = false,
+    isSelectionMode: Boolean = false,
+    onLongClick: (() -> Unit)? = null,
     onMoreClick: (() -> Unit)? = null,
     dropdownMenu: (@Composable () -> Unit)? = null
 ) {
     val progress = ((video.resumePositionMs ?: 0L).toFloat() / video.durationMs.coerceAtLeast(1L)).coerceIn(0f, 1f)
     val watched = video.resumePositionMs ?: 0L
     val remaining = (video.durationMs - watched).coerceAtLeast(0L)
+    val animatedBlur by animateDpAsState(
+        targetValue = if (isSelectionMode && !isSelected) 8.dp else 0.dp,
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        label = "selectionBlur"
+    )
+    val animatedAlpha by animateFloatAsState(
+        targetValue = if (isSelectionMode && !isSelected) 0.35f else 1f,
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        label = "selectionAlpha"
+    )
 
     Surface(
         modifier = modifier
             .width(220.dp)
+            .graphicsLayer {
+                alpha = animatedAlpha
+            }
+            .blur(animatedBlur)
             .clip(ExcavShapes.Card)
-            .border(1.dp, ExcavPalette.Line, ExcavShapes.Card)
-            .tactilePress(onClick = onClick),
-        color = ExcavPalette.SurfaceCard
+            .border(
+                if (isSelected) 2.dp else 1.dp,
+                if (isSelected) ExcavPalette.LogoBlue else ExcavPalette.Line,
+                ExcavShapes.Card
+            )
+            .tactilePress(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
+        color = if (isSelected) ExcavPalette.SurfaceCardHighlight else ExcavPalette.SurfaceCard
     ) {
         Column {
             Box(
@@ -1004,8 +1148,24 @@ fun ContinueWatchingRowCard(
             ) {
                 Thumbnail(video, Modifier.fillMaxSize())
 
-                // Remaining Time Badge
-                if (remaining > 0) {
+                if (isSelected) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(6.dp)
+                            .size(22.dp)
+                            .clip(CircleShape)
+                            .background(ExcavPalette.LogoBlue),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Selected",
+                            tint = ExcavPalette.Ink,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                } else if (remaining > 0) {
                     Text(
                         text = "${formatDuration(remaining)} left",
                         color = ExcavPalette.Text,
@@ -1019,21 +1179,23 @@ fun ContinueWatchingRowCard(
                     )
                 }
 
-                // Play icon overlay
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(ExcavPalette.Ink.copy(alpha = 0.7f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.PlayArrow,
-                        contentDescription = null,
-                        tint = ExcavPalette.Blue,
-                        modifier = Modifier.size(20.dp)
-                    )
+                // Play icon overlay (when not selected)
+                if (!isSelected) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(ExcavPalette.Ink.copy(alpha = 0.7f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            tint = ExcavPalette.Blue,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
 
                 // Progress Bar at bottom of thumbnail
@@ -1103,20 +1265,46 @@ fun FolderCard(
     videos: List<Video> = emptyList(),
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    hazeState: HazeState = LocalHazeState.current
+    isSelected: Boolean = false,
+    isSelectionMode: Boolean = false,
+    onLongClick: (() -> Unit)? = null,
+    onMoreClick: (() -> Unit)? = null,
+    hazeState: HazeState = LocalHazeState.current,
+    dropdownMenu: (@Composable () -> Unit)? = null
 ) {
     val totalSize = if (folder.totalSizeBytes > 0) folder.totalSizeBytes else videos.sumOf { it.sizeBytes }
     val totalCount = if (folder.videoCount > 0) folder.videoCount else videos.size
     val cardShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 38.dp, bottomEnd = 38.dp)
     val thumbnailShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 14.dp, bottomEnd = 14.dp)
+    val animatedBlur by animateDpAsState(
+        targetValue = if (isSelectionMode && !isSelected) 8.dp else 0.dp,
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        label = "selectionBlur"
+    )
+    val animatedAlpha by animateFloatAsState(
+        targetValue = if (isSelectionMode && !isSelected) 0.35f else 1f,
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        label = "selectionAlpha"
+    )
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
+            .graphicsLayer {
+                alpha = animatedAlpha
+            }
+            .blur(animatedBlur)
             .clip(cardShape)
-            .border(1.dp, Color(0xFF282F3B), cardShape)
-            .tactilePress(onClick = onClick),
-        color = Color(0xFF13171F)
+            .border(
+                if (isSelected) 2.dp else 1.dp,
+                if (isSelected) ExcavPalette.LogoBlue else Color(0xFF282F3B),
+                cardShape
+            )
+            .tactilePress(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
+        color = if (isSelected) Color(0xFF1E2430) else Color(0xFF13171F)
     ) {
         Column(
             modifier = Modifier.fillMaxWidth()
@@ -1151,6 +1339,25 @@ fun FolderCard(
                     )
                 }
 
+                if (isSelected) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp)
+                            .size(22.dp)
+                            .clip(CircleShape)
+                            .background(ExcavPalette.LogoBlue),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Selected",
+                            tint = ExcavPalette.Ink,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
+
                 // Translucent Pill placed on top of the lower line of the thumbnail, left side (bisected at middle)
                 val pillShape = CircleShape
                 Row(
@@ -1173,6 +1380,33 @@ fun FolderCard(
                             fontWeight = FontWeight.SemiBold
                         )
                     )
+                }
+
+                if (onMoreClick != null || dropdownMenu != null) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 12.dp)
+                            .offset(y = 12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xCC1A202C))
+                                .border(0.75.dp, Color.White.copy(alpha = 0.22f), CircleShape)
+                                .clickable { onMoreClick?.invoke() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = stringResource(R.string.cd_more),
+                                tint = Color(0xFFCBD5E1),
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                        dropdownMenu?.invoke()
+                    }
                 }
             }
 
@@ -1365,6 +1599,9 @@ fun PlaylistGridCard(
     onOverflow: () -> Unit,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    isSelected: Boolean = false,
+    isSelectionMode: Boolean = false,
+    onLongClick: (() -> Unit)? = null,
     hazeState: HazeState = LocalHazeState.current,
     dropdownMenu: (@Composable () -> Unit)? = null
 ) {
@@ -1372,14 +1609,35 @@ fun PlaylistGridCard(
     val totalSize = videos.sumOf { it.sizeBytes }
     val cardShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 38.dp, bottomEnd = 38.dp)
     val thumbnailShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 14.dp, bottomEnd = 14.dp)
+    val animatedBlur by animateDpAsState(
+        targetValue = if (isSelectionMode && !isSelected) 8.dp else 0.dp,
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        label = "selectionBlur"
+    )
+    val animatedAlpha by animateFloatAsState(
+        targetValue = if (isSelectionMode && !isSelected) 0.35f else 1f,
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        label = "selectionAlpha"
+    )
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
+            .graphicsLayer {
+                alpha = animatedAlpha
+            }
+            .blur(animatedBlur)
             .clip(cardShape)
-            .border(1.dp, Color(0xFF282F3B), cardShape)
-            .tactilePress(onClick = onClick),
-        color = Color(0xFF13171F)
+            .border(
+                if (isSelected) 2.dp else 1.dp,
+                if (isSelected) ExcavPalette.LogoBlue else Color(0xFF282F3B),
+                cardShape
+            )
+            .tactilePress(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
+        color = if (isSelected) Color(0xFF1E2430) else Color(0xFF13171F)
     ) {
         Column(
             modifier = Modifier.fillMaxWidth()
@@ -1412,6 +1670,25 @@ fun PlaylistGridCard(
                                 )
                             )
                     )
+                }
+
+                if (isSelected) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp)
+                            .size(22.dp)
+                            .clip(CircleShape)
+                            .background(ExcavPalette.LogoBlue),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Selected",
+                            tint = ExcavPalette.Ink,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
                 }
 
                 // Translucent Pill placed on top of the lower line of the thumbnail, left side (bisected at middle)
@@ -1458,7 +1735,7 @@ fun PlaylistGridCard(
                             imageVector = Icons.Default.MoreVert,
                             contentDescription = stringResource(R.string.cd_more),
                             tint = Color(0xFFF5F7FA),
-                            modifier = Modifier.size(15.dp)
+                            modifier = Modifier.size(14.dp)
                         )
                     }
                     dropdownMenu?.invoke()
@@ -1506,6 +1783,9 @@ fun ListVideoRow(
     video: Video,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    isSelected: Boolean = false,
+    isSelectionMode: Boolean = false,
+    onLongClick: (() -> Unit)? = null,
     onMoreClick: (() -> Unit)? = null,
     dropdownMenu: (@Composable () -> Unit)? = null
 ) {
@@ -1513,14 +1793,35 @@ fun ListVideoRow(
     val sizeStr = formatFileSize(video.sizeBytes)
     val formatStr = video.fileFormat
     val resumePos = video.resumePositionMs ?: 0L
+    val animatedBlur by animateDpAsState(
+        targetValue = if (isSelectionMode && !isSelected) 8.dp else 0.dp,
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        label = "selectionBlur"
+    )
+    val animatedAlpha by animateFloatAsState(
+        targetValue = if (isSelectionMode && !isSelected) 0.35f else 1f,
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        label = "selectionAlpha"
+    )
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
+            .graphicsLayer {
+                alpha = animatedAlpha
+            }
+            .blur(animatedBlur)
             .clip(ExcavShapes.Row)
-            .border(1.dp, ExcavPalette.Line, ExcavShapes.Row)
-            .tactilePress(onClick = onClick),
-        color = ExcavPalette.SurfaceCard
+            .border(
+                if (isSelected) 2.dp else 1.dp,
+                if (isSelected) ExcavPalette.LogoBlue else ExcavPalette.Line,
+                ExcavShapes.Row
+            )
+            .tactilePress(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
+        color = if (isSelected) ExcavPalette.SurfaceCardHighlight else ExcavPalette.SurfaceCard
     ) {
         Row(
             modifier = Modifier.padding(10.dp),
@@ -1532,7 +1833,24 @@ fun ListVideoRow(
                     .clip(RoundedCornerShape(10.dp))
             ) {
                 Thumbnail(video, Modifier.fillMaxSize())
-                if (video.durationMs > 0) {
+                if (isSelected) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(4.dp)
+                            .size(20.dp)
+                            .clip(CircleShape)
+                            .background(ExcavPalette.LogoBlue),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Selected",
+                            tint = ExcavPalette.Ink,
+                            modifier = Modifier.size(13.dp)
+                        )
+                    }
+                } else if (video.durationMs > 0) {
                     Text(
                         text = video.formattedDuration,
                         color = ExcavPalette.Text,
@@ -1989,6 +2307,502 @@ private fun PropertyItem(label: String, value: String) {
 }
 
 @Composable
+fun BatchVideoOptionsMenu(
+    expanded: Boolean,
+    selectedVideos: List<Video>,
+    onDismiss: () -> Unit,
+    onPlaySelected: () -> Unit,
+    onAddToPlaylist: () -> Unit,
+    onToggleFavorites: () -> Unit,
+    onShare: () -> Unit,
+    onRename: (() -> Unit)? = null,
+    onProperties: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val allFavorites = selectedVideos.isNotEmpty() && selectedVideos.all { it.isFavorite }
+    val menuShape = RoundedCornerShape(14.dp)
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismiss,
+        offset = DpOffset(x = 0.dp, y = 0.dp),
+        shape = menuShape,
+        containerColor = Color.Transparent,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        border = null,
+        modifier = Modifier.darkUltraThinBlur(
+            shape = menuShape,
+            backgroundColor = Color(0xF2101216),
+            strokeColor = Color.White.copy(alpha = 0.16f)
+        )
+    ) {
+        DropdownMenuItem(
+            text = { Text(if (selectedVideos.size == 1) "Play" else "Play All", color = ExcavPalette.Text) },
+            leadingIcon = { Icon(Icons.Default.PlayArrow, null, tint = ExcavPalette.Text) },
+            onClick = {
+                onPlaySelected()
+                onDismiss()
+            }
+        )
+        DropdownMenuItem(
+            text = { Text(if (allFavorites) "Remove from Favorites" else "Add to Favorites", color = ExcavPalette.Text) },
+            leadingIcon = {
+                AnimatedFavoriteIcon(
+                    isFavorite = allFavorites,
+                    tint = if (allFavorites) Color(0xFFFF5277) else ExcavPalette.Text
+                )
+            },
+            onClick = {
+                onToggleFavorites()
+                onDismiss()
+            }
+        )
+        DropdownMenuItem(
+            text = { Text("Add to Playlist", color = ExcavPalette.Text) },
+            leadingIcon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, null, tint = ExcavPalette.Text) },
+            onClick = {
+                onAddToPlaylist()
+                onDismiss()
+            }
+        )
+        DropdownMenuItem(
+            text = { Text("Share", color = ExcavPalette.Text) },
+            leadingIcon = { Icon(Icons.Default.Share, null, tint = ExcavPalette.Text) },
+            onClick = {
+                onShare()
+                onDismiss()
+            }
+        )
+        // If multiple files selected, remove rename option
+        if (selectedVideos.size == 1 && onRename != null) {
+            DropdownMenuItem(
+                text = { Text("Rename", color = ExcavPalette.Text) },
+                leadingIcon = { Icon(Icons.Default.Edit, null, tint = ExcavPalette.Text) },
+                onClick = {
+                    onRename()
+                    onDismiss()
+                }
+            )
+        }
+        DropdownMenuItem(
+            text = { Text("Properties", color = ExcavPalette.Text) },
+            leadingIcon = { Icon(Icons.Default.Info, null, tint = ExcavPalette.Text) },
+            onClick = {
+                onProperties()
+                onDismiss()
+            }
+        )
+        HorizontalDivider(thickness = 0.5.dp, color = ExcavPalette.Line.copy(alpha = 0.5f))
+        DropdownMenuItem(
+            text = { Text("Delete (${selectedVideos.size})", color = ExcavPalette.Error) },
+            leadingIcon = { Icon(Icons.Default.Delete, null, tint = ExcavPalette.Error) },
+            onClick = {
+                onDelete()
+                onDismiss()
+            }
+        )
+    }
+}
+
+@Composable
+fun BatchFolderOptionsMenu(
+    expanded: Boolean,
+    selectedFolders: List<Folder>,
+    favoriteFolderPaths: Set<String> = emptySet(),
+    isFavorite: Boolean = false,
+    onDismiss: () -> Unit,
+    onToggleFavorites: () -> Unit,
+    onRename: (() -> Unit)? = null,
+    onProperties: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val allFavorites = if (favoriteFolderPaths.isNotEmpty()) {
+        selectedFolders.isNotEmpty() && selectedFolders.all { 
+            val norm = normalizeFolderPath(it.path)
+            norm in favoriteFolderPaths || it.path in favoriteFolderPaths 
+        }
+    } else {
+        isFavorite
+    }
+    val menuShape = RoundedCornerShape(14.dp)
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismiss,
+        offset = DpOffset(x = 0.dp, y = 0.dp),
+        shape = menuShape,
+        containerColor = Color.Transparent,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        border = null,
+        modifier = Modifier.darkUltraThinBlur(
+            shape = menuShape,
+            backgroundColor = Color(0xF2101216),
+            strokeColor = Color.White.copy(alpha = 0.16f)
+        )
+    ) {
+        DropdownMenuItem(
+            text = { Text(if (allFavorites) "Remove from Favorites" else "Add to Favorites", color = ExcavPalette.Text) },
+            leadingIcon = {
+                AnimatedFavoriteIcon(
+                    isFavorite = allFavorites,
+                    tint = if (allFavorites) Color(0xFFFF5277) else ExcavPalette.Text
+                )
+            },
+            onClick = {
+                onToggleFavorites()
+                onDismiss()
+            }
+        )
+        // If multiple folders selected, remove rename option
+        if (selectedFolders.size == 1 && onRename != null) {
+            DropdownMenuItem(
+                text = { Text("Rename", color = ExcavPalette.Text) },
+                leadingIcon = { Icon(Icons.Default.Edit, null, tint = ExcavPalette.Text) },
+                onClick = {
+                    onRename()
+                    onDismiss()
+                }
+            )
+        }
+        DropdownMenuItem(
+            text = { Text("Properties", color = ExcavPalette.Text) },
+            leadingIcon = { Icon(Icons.Default.Info, null, tint = ExcavPalette.Text) },
+            onClick = {
+                onProperties()
+                onDismiss()
+            }
+        )
+        HorizontalDivider(thickness = 0.5.dp, color = ExcavPalette.Line.copy(alpha = 0.5f))
+        DropdownMenuItem(
+            text = { Text("Delete (${selectedFolders.size})", color = ExcavPalette.Error) },
+            leadingIcon = { Icon(Icons.Default.Delete, null, tint = ExcavPalette.Error) },
+            onClick = {
+                onDelete()
+                onDismiss()
+            }
+        )
+    }
+}
+
+@Composable
+fun BatchPlaylistOptionsMenu(
+    expanded: Boolean,
+    selectedPlaylists: List<Playlist>,
+    onDismiss: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val menuShape = RoundedCornerShape(14.dp)
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismiss,
+        offset = DpOffset(x = 0.dp, y = 0.dp),
+        shape = menuShape,
+        containerColor = Color.Transparent,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        border = null,
+        modifier = Modifier.darkUltraThinBlur(
+            shape = menuShape,
+            backgroundColor = Color(0xF2101216),
+            strokeColor = Color.White.copy(alpha = 0.16f)
+        )
+    ) {
+        DropdownMenuItem(
+            text = { Text("Delete (${selectedPlaylists.size})", color = ExcavPalette.Error) },
+            leadingIcon = { Icon(Icons.Default.Delete, null, tint = ExcavPalette.Error) },
+            onClick = {
+                onDelete()
+                onDismiss()
+            }
+        )
+    }
+}
+
+@Composable
+fun MultiVideoPropertiesDialog(videos: List<Video>, onDismiss: () -> Unit) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        AnimatedDialogContainer(
+            modifier = Modifier
+                .fillMaxWidth(0.90f)
+                .wrapContentHeight()
+                .darkUltraThinBlur(
+                    shape = RoundedCornerShape(22.dp),
+                    backgroundColor = Color(0xF210131B),
+                    strokeColor = Color.White.copy(alpha = 0.18f)
+                )
+                .padding(22.dp)
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Selection Properties",
+                    color = ExcavPalette.Text,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 19.sp
+                    ),
+                    modifier = Modifier.padding(bottom = 14.dp)
+                )
+
+                val totalDuration = videos.sumOf { it.durationMs }
+                val totalSize = videos.sumOf { it.sizeBytes }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    PropertyItem(label = "Selected Files", value = "${videos.size} videos")
+                    PropertyItem(label = "Total Size", value = formatFileSize(totalSize))
+                    if (totalDuration > 0) {
+                        PropertyItem(label = "Total Duration", value = formatDuration(totalDuration))
+                    }
+                }
+
+                Spacer(Modifier.height(18.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Button(
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
+                        shape = ExcavShapes.Pill
+                    ) {
+                        Text("Close", color = ExcavPalette.Ink, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun FolderPropertiesDialog(folders: List<Folder>, onDismiss: () -> Unit) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        AnimatedDialogContainer(
+            modifier = Modifier
+                .fillMaxWidth(0.90f)
+                .wrapContentHeight()
+                .darkUltraThinBlur(
+                    shape = RoundedCornerShape(22.dp),
+                    backgroundColor = Color(0xF210131B),
+                    strokeColor = Color.White.copy(alpha = 0.18f)
+                )
+                .padding(22.dp)
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = if (folders.size == 1) "Folder Properties" else "Selected Folders Properties",
+                    color = ExcavPalette.Text,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 19.sp
+                    ),
+                    modifier = Modifier.padding(bottom = 14.dp)
+                )
+
+                val totalVideos = folders.sumOf { it.videoCount }
+                val totalSize = folders.sumOf { it.totalSizeBytes }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    if (folders.size == 1) {
+                        val f = folders.first()
+                        PropertyItem(label = "Folder Name", value = f.name)
+                        PropertyItem(label = "Path", value = f.path)
+                        PropertyItem(label = "Videos", value = "${f.videoCount} videos")
+                        if (f.totalSizeBytes > 0) {
+                            PropertyItem(label = "Size", value = formatFileSize(f.totalSizeBytes))
+                        }
+                    } else {
+                        PropertyItem(label = "Selected Folders", value = "${folders.size} folders")
+                        PropertyItem(label = "Total Videos", value = "$totalVideos videos")
+                        if (totalSize > 0) {
+                            PropertyItem(label = "Total Size", value = formatFileSize(totalSize))
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(18.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Button(
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
+                        shape = ExcavShapes.Pill
+                    ) {
+                        Text("Close", color = ExcavPalette.Ink, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun BatchDeleteConfirmationDialog(
+    itemCount: Int,
+    itemType: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        AnimatedDialogContainer(
+            modifier = Modifier
+                .fillMaxWidth(0.85f)
+                .wrapContentHeight()
+                .darkUltraThinBlur(
+                    shape = RoundedCornerShape(22.dp),
+                    backgroundColor = Color(0xF210131B),
+                    strokeColor = Color.White.copy(alpha = 0.18f)
+                )
+                .padding(22.dp)
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Are you sure?",
+                    color = ExcavPalette.Text,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 19.sp
+                    ),
+                    modifier = Modifier.padding(bottom = 10.dp)
+                )
+
+                Text(
+                    text = "Are you sure you want to delete $itemCount $itemType?",
+                    color = ExcavPalette.TextSecondary,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp)
+                )
+
+                Spacer(Modifier.height(20.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        border = BorderStroke(1.dp, ExcavPalette.Line),
+                        shape = ExcavShapes.Pill
+                    ) {
+                        Text("Cancel", color = ExcavPalette.TextSecondary)
+                    }
+                    Button(
+                        onClick = {
+                            onConfirm()
+                            onDismiss()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Error),
+                        shape = ExcavShapes.Pill
+                    ) {
+                        Text("Delete", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun RenameFolderDialog(
+    folder: Folder,
+    onRename: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var text by remember { mutableStateOf(folder.name) }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        AnimatedDialogContainer(
+            modifier = Modifier
+                .fillMaxWidth(0.90f)
+                .wrapContentHeight()
+                .darkUltraThinBlur(
+                    shape = RoundedCornerShape(22.dp),
+                    backgroundColor = Color(0xF210131B),
+                    strokeColor = Color.White.copy(alpha = 0.18f)
+                )
+                .padding(22.dp)
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Rename Folder",
+                    color = ExcavPalette.Text,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 19.sp
+                    ),
+                    modifier = Modifier.padding(bottom = 14.dp)
+                )
+
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = ExcavPalette.Text,
+                        unfocusedTextColor = ExcavPalette.Text,
+                        focusedBorderColor = ExcavPalette.Blue,
+                        unfocusedBorderColor = ExcavPalette.Line,
+                        cursorColor = ExcavPalette.Blue
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                Spacer(Modifier.height(20.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        border = BorderStroke(1.dp, ExcavPalette.Line),
+                        shape = ExcavShapes.Pill
+                    ) {
+                        Text("Cancel", color = ExcavPalette.TextSecondary)
+                    }
+                    Button(
+                        onClick = {
+                            if (text.isNotBlank()) {
+                                onRename(text.trim())
+                                onDismiss()
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
+                        shape = ExcavShapes.Pill
+                    ) {
+                        Text("Rename", color = ExcavPalette.Ink, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun RenameVideoDialog(
     video: Video,
     onRename: (String) -> Unit,
@@ -2121,7 +2935,7 @@ fun DeleteConfirmDialog(
                 Spacer(Modifier.height(14.dp))
 
                 Text(
-                    text = "Are you sure you want to delete \"${video.displayName}\"? This file will be removed from your library.",
+                    text = "Are you sure you want to delete \"${video.displayName}\"? This file will be permanently deleted from device storage and your library.",
                     color = ExcavPalette.TextSecondary,
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp, lineHeight = 20.sp)
                 )

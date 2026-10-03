@@ -6,8 +6,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,8 +24,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -37,6 +34,7 @@ import com.excavplayer.ui.components.GlassmorphicBackButton
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOff
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.*
@@ -84,10 +82,12 @@ fun HomeScreen(
     onPlay: (Video, List<Video>?) -> Unit,
     onOpenFolder: (Folder) -> Unit,
     onToggleFavorite: (Video) -> Unit,
+    onSetVideosFavorite: (List<Video>, Boolean) -> Unit = { _, _ -> },
     onAddToPlaylist: (Long, Video) -> Unit,
     onCreatePlaylist: (String) -> Unit,
     onRenameVideo: (Video, String) -> Unit,
     onDeleteVideo: (Video) -> Unit,
+    onDeleteVideos: (List<Video>) -> Unit = {},
     onRemoveFromContinueWatching: (Video) -> Unit = {},
     gridState: LazyGridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState(),
     onSearch: () -> Unit = {},
@@ -118,14 +118,27 @@ fun HomeScreen(
     }
 
     var selectedGroup by remember { mutableStateOf<VideoGroup?>(null) }
-    androidx.activity.compose.BackHandler(enabled = selectedGroup != null) {
-        selectedGroup = null
-    }
+    var selectedVideoIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    val isSelectionMode = selectedVideoIds.isNotEmpty()
+
+    var isOverflowMenuOpen by remember { mutableStateOf(false) }
+
+    // Dialog targets
     var selectedVideoForMenu by remember { mutableStateOf<Video?>(null) }
     var propertiesVideo by remember { mutableStateOf<Video?>(null) }
+    var propertiesMultiVideos by remember { mutableStateOf<List<Video>?>(null) }
     var renameVideoTarget by remember { mutableStateOf<Video?>(null) }
     var deleteVideoTarget by remember { mutableStateOf<Video?>(null) }
+    var batchDeleteTargetVideos by remember { mutableStateOf<List<Video>?>(null) }
     var playlistVideoTarget by remember { mutableStateOf<Video?>(null) }
+
+    BackHandler(enabled = isSelectionMode || selectedGroup != null) {
+        if (isSelectionMode) {
+            selectedVideoIds = emptySet()
+        } else {
+            selectedGroup = null
+        }
+    }
 
     AnimatedContent(
         targetState = selectedGroup,
@@ -138,277 +151,450 @@ fun HomeScreen(
     ) { currentGroup ->
         if (currentGroup != null) {
             val group = currentGroup
-        val groupVideos = remember(group, videos) {
-            val list = videos.filter { it.folderPath == group.path || it.folderName == group.name }.ifEmpty { group.videos }
-            list.sortedWith(NaturalVideoComparator)
-        }
-        val groupListState = androidx.compose.foundation.lazy.rememberLazyListState()
-        val isGroupScrolled by remember {
-            derivedStateOf {
-                groupListState.firstVisibleItemIndex > 0 || groupListState.firstVisibleItemScrollOffset > 10
+            val groupVideos = remember(group, videos) {
+                val groupIds = group.videos.map { it.id }.toSet()
+                val list = videos.filter { it.id in groupIds }.ifEmpty { group.videos }
+                list.sortedWith(NaturalVideoComparator)
             }
-        }
-
-        val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-
-        Box(modifier = Modifier.fillMaxSize()) {
-            val hazeState = LocalHazeState.current
-            LazyColumn(
-                state = groupListState,
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = statusBarTop + 64.dp, bottom = 90.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier
-                    .fillMaxSize()
-            ) {
-                items(groupVideos, key = { it.id }, contentType = { "video_row" }) { video ->
-                    ListVideoRow(
-                        video = video,
-                        onClick = { onPlay(video, groupVideos) },
-                        modifier = Modifier.animateItem(),
-                        onMoreClick = { selectedVideoForMenu = video },
-                        dropdownMenu = {
-                            if (selectedVideoForMenu?.id == video.id) {
-                                val isFav = favorites.any { it.id == video.id }
-                                VideoOptionsMenu(
-                                    expanded = true,
-                                    video = video,
-                                    isFavorite = isFav,
-                                    onDismiss = { selectedVideoForMenu = null },
-                                    onToggleFavorite = { onToggleFavorite(video) },
-                                    onAddToPlaylist = { playlistVideoTarget = video },
-                                    onRename = { renameVideoTarget = video },
-                                    onProperties = { propertiesVideo = video },
-                                    onDelete = { deleteVideoTarget = video }
-                                )
-                            }
-                        }
-                    )
-                }
-
-                item {
-                    Spacer(Modifier.height(80.dp))
+            val groupListState = androidx.compose.foundation.lazy.rememberLazyListState()
+            val isGroupScrolled by remember {
+                derivedStateOf {
+                    groupListState.firstVisibleItemIndex > 0 || groupListState.firstVisibleItemScrollOffset > 10
                 }
             }
 
-            // Floating Group Header with Glass Back Button
-            ProgressiveHeaderContainer(
-                modifier = Modifier.align(Alignment.TopCenter),
-                isScrolled = isGroupScrolled,
-                fadeHeight = 20.dp
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+            val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+
+            Box(modifier = Modifier.fillMaxSize()) {
+                val hazeState = LocalHazeState.current
+                LazyColumn(
+                    state = groupListState,
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = statusBarTop + 64.dp, bottom = 90.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxSize()
                 ) {
-                    GlassmorphicBackButton(
-                        onClick = { selectedGroup = null },
-                        size = 38.dp
-                    )
-
-                    Spacer(Modifier.width(12.dp))
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = group.name,
-                            color = ExcavPalette.Text,
-                            style = MaterialTheme.typography.titleLarge.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 18.sp
-                            ),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            text = "${groupVideos.size} ${if (groupVideos.size == 1) "video" else "videos"} • ${formatFileSize(groupVideos.sumOf { it.sizeBytes })}",
-                            color = ExcavPalette.TextMuted,
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp)
+                    items(groupVideos, key = { it.id }, contentType = { "video_row" }) { video ->
+                        val isVideoSelected = video.id in selectedVideoIds
+                        ListVideoRow(
+                            video = video,
+                            isSelected = isVideoSelected,
+                            isSelectionMode = isSelectionMode,
+                            onClick = {
+                                if (isSelectionMode) {
+                                    selectedVideoIds = if (isVideoSelected) {
+                                        selectedVideoIds - video.id
+                                    } else {
+                                        selectedVideoIds + video.id
+                                    }
+                                } else {
+                                    onPlay(video, groupVideos)
+                                }
+                            },
+                            onLongClick = {
+                                selectedVideoIds = if (isVideoSelected) {
+                                    selectedVideoIds - video.id
+                                } else {
+                                    selectedVideoIds + video.id
+                                }
+                            },
+                            modifier = Modifier.animateItem(),
+                            onMoreClick = if (!isSelectionMode) { { selectedVideoForMenu = video } } else null,
+                            dropdownMenu = {
+                                if (!isSelectionMode && selectedVideoForMenu?.id == video.id) {
+                                    val isFav = favorites.any { it.id == video.id }
+                                    VideoOptionsMenu(
+                                        expanded = true,
+                                        video = video,
+                                        isFavorite = isFav,
+                                        onDismiss = { selectedVideoForMenu = null },
+                                        onToggleFavorite = { onToggleFavorite(video) },
+                                        onAddToPlaylist = { playlistVideoTarget = video },
+                                        onRename = { renameVideoTarget = video },
+                                        onProperties = { propertiesVideo = video },
+                                        onDelete = { deleteVideoTarget = video }
+                                    )
+                                }
+                            }
                         )
                     }
+
+                    item {
+                        Spacer(Modifier.height(80.dp))
+                    }
                 }
-            }
-        }
-    } else {
-        // Main Home View
-        val isHomeScrolled by remember {
-            derivedStateOf {
-                gridState.firstVisibleItemIndex > 0 || gridState.firstVisibleItemScrollOffset > 10
-            }
-        }
 
-        val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-
-        Box(modifier = Modifier.fillMaxSize()) {
-            val hazeState = LocalHazeState.current
-            LazyVerticalGrid(
-                state = gridState,
-                columns = GridCells.Adaptive(160.dp),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = statusBarTop + 64.dp, bottom = 90.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier
-                    .fillMaxSize()
-            ) {
-            // Storage Permission Warning Banner if permission is not granted
-            if (!hasStoragePermission) {
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    Surface(
+                // Floating Group Header with Glass Back Button
+                ProgressiveHeaderContainer(
+                    modifier = Modifier.align(Alignment.TopCenter),
+                    isScrolled = isGroupScrolled,
+                    fadeHeight = 20.dp
+                ) {
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(ExcavShapes.Card)
-                            .border(1.dp, ExcavPalette.Error.copy(alpha = 0.4f), ExcavShapes.Card),
-                        color = ExcavPalette.SurfaceCard
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(
-                            modifier = Modifier.padding(20.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(50.dp)
-                                    .clip(CircleShape)
-                                    .background(ExcavPalette.ErrorContainer),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.FolderOff,
-                                    contentDescription = null,
-                                    tint = ExcavPalette.Error,
-                                    modifier = Modifier.size(26.dp)
-                                )
-                            }
+                        GlassmorphicBackButton(
+                            onClick = { selectedGroup = null },
+                            size = 38.dp
+                        )
 
-                            Spacer(Modifier.height(12.dp))
+                        Spacer(Modifier.width(12.dp))
 
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Storage Permission Required",
+                                text = group.name,
                                 color = ExcavPalette.Text,
-                                style = MaterialTheme.typography.titleMedium.copy(
+                                style = MaterialTheme.typography.titleLarge.copy(
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 17.sp
-                                )
+                                    fontSize = 18.sp
+                                ),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
-
-                            Spacer(Modifier.height(6.dp))
-
+                            Spacer(Modifier.height(2.dp))
                             Text(
-                                text = "ExcavPlayer requires access to your media files to display and play your video library.",
+                                text = "${groupVideos.size} ${if (groupVideos.size == 1) "video" else "videos"} • ${formatFileSize(groupVideos.sumOf { it.sizeBytes })}",
                                 color = ExcavPalette.TextMuted,
-                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                                textAlign = TextAlign.Center
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp)
                             )
-
-                            Spacer(Modifier.height(16.dp))
-
-                            Button(
-                                onClick = {
-                                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                        data = Uri.fromParts("package", context.packageName, null)
-                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                    }
-                                    context.startActivity(intent)
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
-                                shape = ExcavShapes.Pill
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Settings,
-                                    contentDescription = null,
-                                    tint = ExcavPalette.Ink,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Text(
-                                    text = "Open App Settings",
-                                    color = ExcavPalette.Ink,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
                         }
-                    }
-                }
-            }
 
-            // Continue Watching: Left-Swipable Horizontal Row (LazyRow)
-            if (continueWatching.isNotEmpty()) {
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        SectionTitle(stringResource(R.string.continue_watching))
-                        LazyRow(
-                            contentPadding = PaddingValues(horizontal = 4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            items(continueWatching, key = { "cw_${it.id}" }, contentType = { "continue_watching_card" }) { video ->
-                                ContinueWatchingRowCard(
-                                    video = video,
-                                    onClick = { onPlay(video, null) },
-                                    onMoreClick = { selectedVideoForMenu = video },
-                                    dropdownMenu = {
-                                        if (selectedVideoForMenu?.id == video.id) {
-                                            val isFav = favorites.any { it.id == video.id }
-                                            VideoOptionsMenu(
-                                                expanded = true,
-                                                video = video,
-                                                isFavorite = isFav,
-                                                onDismiss = { selectedVideoForMenu = null },
-                                                onToggleFavorite = { onToggleFavorite(video) },
-                                                onAddToPlaylist = { playlistVideoTarget = video },
-                                                onRename = { renameVideoTarget = video },
-                                                onProperties = { propertiesVideo = video },
-                                                onDelete = { deleteVideoTarget = video },
-                                                onRemoveFromContinueWatching = { onRemoveFromContinueWatching(video) }
-                                            )
+                        if (isSelectionMode) {
+                            val selVideos = groupVideos.filter { it.id in selectedVideoIds }
+                            Box {
+                                IconButton(onClick = { isOverflowMenuOpen = true }) {
+                                    Icon(
+                                        imageVector = Icons.Default.MoreVert,
+                                        contentDescription = "Menu",
+                                        tint = ExcavPalette.Text
+                                    )
+                                }
+                                val allFav = selVideos.isNotEmpty() && selVideos.all { v -> favorites.any { it.id == v.id } || v.isFavorite }
+                                BatchVideoOptionsMenu(
+                                    expanded = isOverflowMenuOpen,
+                                    selectedVideos = selVideos,
+                                    onDismiss = { isOverflowMenuOpen = false },
+                                    onPlaySelected = {
+                                        if (selVideos.isNotEmpty()) {
+                                            onPlay(selVideos.first(), selVideos)
+                                            selectedVideoIds = emptySet()
                                         }
+                                    },
+                                    onAddToPlaylist = {
+                                        if (selVideos.isNotEmpty()) {
+                                            playlistVideoTarget = selVideos.first()
+                                        }
+                                    },
+                                    onToggleFavorites = {
+                                        onSetVideosFavorite(selVideos, !allFav)
+                                        selectedVideoIds = emptySet()
+                                    },
+                                    onShare = {
+                                        val uris = ArrayList<Uri>()
+                                        selVideos.forEach { uris.add(Uri.parse(it.uri)) }
+                                        val intent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                                            type = "video/*"
+                                            putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        }
+                                        context.startActivity(Intent.createChooser(intent, "Share Videos"))
+                                        selectedVideoIds = emptySet()
+                                    },
+                                    onRename = if (selVideos.size == 1) {
+                                        { renameVideoTarget = selVideos.first() }
+                                    } else null,
+                                    onProperties = {
+                                        if (selVideos.size == 1) {
+                                            propertiesVideo = selVideos.first()
+                                        } else {
+                                            propertiesMultiVideos = selVideos
+                                        }
+                                    },
+                                    onDelete = {
+                                        batchDeleteTargetVideos = selVideos
                                     }
                                 )
                             }
                         }
                     }
                 }
-
-                item(span = { GridItemSpan(maxLineSpan) }, contentType = "spacer") {
-                    Spacer(Modifier.height(4.dp))
+            }
+        } else {
+            // Main Home View
+            val isHomeScrolled by remember {
+                derivedStateOf {
+                    gridState.firstVisibleItemIndex > 0 || gridState.firstVisibleItemScrollOffset > 10
                 }
             }
 
-            // Groups Section
-            if (groups.isNotEmpty()) {
-                item(span = { GridItemSpan(maxLineSpan) }, contentType = "section_header") {
-                    SectionTitle("Groups")
+            val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+
+            Box(modifier = Modifier.fillMaxSize()) {
+                val hazeState = LocalHazeState.current
+                LazyVerticalGrid(
+                    state = gridState,
+                    columns = GridCells.Adaptive(160.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = statusBarTop + 64.dp, bottom = 90.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    // Storage Permission Warning Banner if permission is not granted
+                    if (!hasStoragePermission) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(ExcavShapes.Card)
+                                    .border(1.dp, ExcavPalette.Error.copy(alpha = 0.4f), ExcavShapes.Card),
+                                color = ExcavPalette.SurfaceCard
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(20.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(50.dp)
+                                            .clip(CircleShape)
+                                            .background(ExcavPalette.ErrorContainer),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.FolderOff,
+                                            contentDescription = null,
+                                            tint = ExcavPalette.Error,
+                                            modifier = Modifier.size(26.dp)
+                                        )
+                                    }
+
+                                    Spacer(Modifier.height(12.dp))
+
+                                    Text(
+                                        text = "Storage Permission Required",
+                                        color = ExcavPalette.Text,
+                                        style = MaterialTheme.typography.titleMedium.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 17.sp
+                                        )
+                                    )
+
+                                    Spacer(Modifier.height(6.dp))
+
+                                    Text(
+                                        text = "ExcavPlayer requires access to your media files to display and play your video library.",
+                                        color = ExcavPalette.TextMuted,
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                                        textAlign = TextAlign.Center
+                                    )
+
+                                    Spacer(Modifier.height(16.dp))
+
+                                    Button(
+                                        onClick = {
+                                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                                data = Uri.fromParts("package", context.packageName, null)
+                                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                            }
+                                            context.startActivity(intent)
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
+                                        shape = ExcavShapes.Pill
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Settings,
+                                            contentDescription = null,
+                                            tint = ExcavPalette.Ink,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(
+                                            text = "Open App Settings",
+                                            color = ExcavPalette.Ink,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Continue Watching: Left-Swipable Horizontal Row (LazyRow)
+                    if (continueWatching.isNotEmpty()) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                SectionTitle(stringResource(R.string.continue_watching))
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = 4.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    items(continueWatching, key = { "cw_${it.id}" }, contentType = { "continue_watching_card" }) { video ->
+                                        val isVideoSelected = video.id in selectedVideoIds
+                                        ContinueWatchingRowCard(
+                                            video = video,
+                                            isSelected = isVideoSelected,
+                                            isSelectionMode = isSelectionMode,
+                                            onClick = {
+                                                if (isSelectionMode) {
+                                                    selectedVideoIds = if (isVideoSelected) {
+                                                        selectedVideoIds - video.id
+                                                    } else {
+                                                        selectedVideoIds + video.id
+                                                    }
+                                                } else {
+                                                    onPlay(video, null)
+                                                }
+                                            },
+                                            onLongClick = {
+                                                selectedVideoIds = if (isVideoSelected) {
+                                                    selectedVideoIds - video.id
+                                                } else {
+                                                    selectedVideoIds + video.id
+                                                }
+                                            },
+                                            onMoreClick = if (!isSelectionMode) { { selectedVideoForMenu = video } } else null,
+                                            dropdownMenu = {
+                                                if (!isSelectionMode && selectedVideoForMenu?.id == video.id) {
+                                                    val isFav = favorites.any { it.id == video.id }
+                                                    VideoOptionsMenu(
+                                                        expanded = true,
+                                                        video = video,
+                                                        isFavorite = isFav,
+                                                        onDismiss = { selectedVideoForMenu = null },
+                                                        onToggleFavorite = { onToggleFavorite(video) },
+                                                        onAddToPlaylist = { playlistVideoTarget = video },
+                                                        onRename = { renameVideoTarget = video },
+                                                        onProperties = { propertiesVideo = video },
+                                                        onDelete = { deleteVideoTarget = video },
+                                                        onRemoveFromContinueWatching = { onRemoveFromContinueWatching(video) }
+                                                    )
+                                                }
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        item(span = { GridItemSpan(maxLineSpan) }, contentType = "spacer") {
+                            Spacer(Modifier.height(4.dp))
+                        }
+                    }
+
+                    // Groups Section
+                    if (groups.isNotEmpty()) {
+                        item(span = { GridItemSpan(maxLineSpan) }, contentType = "section_header") {
+                            SectionTitle("Groups")
+                        }
+
+                        items(groups, key = { "group_${it.id}" }, contentType = { "group_card" }) { group ->
+                            GroupCard(
+                                groupName = group.name,
+                                videos = group.videos,
+                                isSelectionMode = isSelectionMode,
+                                onClick = { 
+                                    if (isSelectionMode) {
+                                        val groupVideoIds = group.videos.map { it.id }.toSet()
+                                        val allSelected = groupVideoIds.all { it in selectedVideoIds }
+                                        selectedVideoIds = if (allSelected) {
+                                            selectedVideoIds - groupVideoIds
+                                        } else {
+                                            selectedVideoIds + groupVideoIds
+                                        }
+                                    } else {
+                                        selectedGroup = group 
+                                    }
+                                },
+                                onLongClick = {
+                                    val groupVideoIds = group.videos.map { it.id }.toSet()
+                                    val allSelected = groupVideoIds.all { it in selectedVideoIds }
+                                    selectedVideoIds = if (allSelected) {
+                                        selectedVideoIds - groupVideoIds
+                                    } else {
+                                        selectedVideoIds + groupVideoIds
+                                    }
+                                },
+                                modifier = Modifier.animateItem()
+                            )
+                        }
+                    }
+
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Spacer(Modifier.height(80.dp))
+                    }
                 }
 
-                items(groups, key = { "group_${it.id}" }, contentType = { "group_card" }) { group ->
-                    GroupCard(
-                        groupName = group.name,
-                        videos = group.videos,
-                        onClick = { selectedGroup = group },
-                        modifier = Modifier.animateItem()
-                    )
-                }
-            }
-
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                Spacer(Modifier.height(80.dp))
+                BrandHeader(
+                    onSearch = onSearch,
+                    onRefresh = {
+                        val currentPerm = checkStoragePermission(context)
+                        hasStoragePermission = currentPerm
+                        onRefresh?.invoke()
+                    },
+                    isScrolled = isHomeScrolled,
+                    isSelectionMode = isSelectionMode,
+                    selectedCount = selectedVideoIds.size,
+                    onMoreClick = { isOverflowMenuOpen = true },
+                    dropdownMenu = {
+                        if (isSelectionMode) {
+                            val allVideos = videos.ifEmpty { continueWatching + groups.flatMap { it.videos } }
+                            val selVideos = allVideos.filter { it.id in selectedVideoIds }.distinctBy { it.id }
+                            val allFav = selVideos.isNotEmpty() && selVideos.all { v -> favorites.any { it.id == v.id } || v.isFavorite }
+                            BatchVideoOptionsMenu(
+                                expanded = isOverflowMenuOpen,
+                                selectedVideos = selVideos,
+                                onDismiss = { isOverflowMenuOpen = false },
+                                onPlaySelected = {
+                                    if (selVideos.isNotEmpty()) {
+                                        onPlay(selVideos.first(), selVideos)
+                                        selectedVideoIds = emptySet()
+                                    }
+                                },
+                                onAddToPlaylist = {
+                                    if (selVideos.isNotEmpty()) {
+                                        playlistVideoTarget = selVideos.first()
+                                    }
+                                },
+                                onToggleFavorites = {
+                                    onSetVideosFavorite(selVideos, !allFav)
+                                    selectedVideoIds = emptySet()
+                                },
+                                onShare = {
+                                    val uris = ArrayList<Uri>()
+                                    selVideos.forEach { uris.add(Uri.parse(it.uri)) }
+                                    val intent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                                        type = "video/*"
+                                        putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    }
+                                    context.startActivity(Intent.createChooser(intent, "Share Videos"))
+                                    selectedVideoIds = emptySet()
+                                },
+                                onRename = if (selVideos.size == 1) {
+                                    { renameVideoTarget = selVideos.first() }
+                                } else null,
+                                onProperties = {
+                                    if (selVideos.size == 1) {
+                                        propertiesVideo = selVideos.first()
+                                    } else {
+                                        propertiesMultiVideos = selVideos
+                                    }
+                                },
+                                onDelete = {
+                                    batchDeleteTargetVideos = selVideos
+                                }
+                            )
+                        }
+                    },
+                    modifier = Modifier.align(Alignment.TopCenter)
+                )
             }
         }
-
-        BrandHeader(
-            onSearch = onSearch,
-            onRefresh = {
-                val currentPerm = checkStoragePermission(context)
-                hasStoragePermission = currentPerm
-                onRefresh?.invoke()
-            },
-            isScrolled = isHomeScrolled,
-            modifier = Modifier.align(Alignment.TopCenter)
-        )
     }
-}
-}
 
     // Modals & Dialogs
     propertiesVideo?.let { video ->
@@ -418,10 +604,20 @@ fun HomeScreen(
         )
     }
 
+    propertiesMultiVideos?.let { vids ->
+        MultiVideoPropertiesDialog(
+            videos = vids,
+            onDismiss = { propertiesMultiVideos = null }
+        )
+    }
+
     renameVideoTarget?.let { video ->
         RenameVideoDialog(
             video = video,
-            onRename = { onRenameVideo(video, it) },
+            onRename = { 
+                onRenameVideo(video, it)
+                selectedVideoIds = emptySet()
+            },
             onDismiss = { renameVideoTarget = null }
         )
     }
@@ -434,11 +630,32 @@ fun HomeScreen(
         )
     }
 
+    batchDeleteTargetVideos?.let { vids ->
+        BatchDeleteConfirmationDialog(
+            itemCount = vids.size,
+            itemType = if (vids.size == 1) "video" else "videos",
+            onConfirm = {
+                onDeleteVideos(vids)
+                selectedVideoIds = emptySet()
+            },
+            onDismiss = { batchDeleteTargetVideos = null }
+        )
+    }
+
     playlistVideoTarget?.let { video ->
         AddToPlaylistDialog(
             video = video,
             playlists = playlists,
-            onSelectPlaylist = { playlistId -> onAddToPlaylist(playlistId, video) },
+            onSelectPlaylist = { playlistId -> 
+                if (selectedVideoIds.isNotEmpty()) {
+                    val allVideos = videos.ifEmpty { continueWatching + groups.flatMap { it.videos } }
+                    val selVideos = allVideos.filter { it.id in selectedVideoIds }.distinctBy { it.id }
+                    selVideos.forEach { onAddToPlaylist(playlistId, it) }
+                    selectedVideoIds = emptySet()
+                } else {
+                    onAddToPlaylist(playlistId, video) 
+                }
+            },
             onCreatePlaylist = { title -> onCreatePlaylist(title) },
             onDismiss = { playlistVideoTarget = null }
         )

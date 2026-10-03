@@ -119,11 +119,18 @@ fun ExcavApp(
                         SearchScreen(
                             query = library.searchQuery,
                             results = library.searchResults,
+                            playlists = library.playlists,
+                            favorites = library.favorites,
                             onQueryChange = vm::setSearchQuery,
                             onBack = { searchOpen = false },
                             onPlay = {
                                 vm.play(it)
-                            }
+                            },
+                            onToggleFavorite = vm::toggleFavorite,
+                            onAddToPlaylist = vm::addVideoToPlaylist,
+                            onCreatePlaylist = vm::createPlaylist,
+                            onRenameVideo = vm::renameVideo,
+                            onDeleteVideo = vm::deleteVideo
                         )
                     } else {
                         if (library.loading) {
@@ -160,10 +167,12 @@ fun ExcavApp(
                                         tab = MainTab.FOLDERS
                                     },
                                     onToggleFavorite = vm::toggleFavorite,
+                                    onSetVideosFavorite = { vids, isFav -> vm.setVideosFavorite(vids, isFav) },
                                     onAddToPlaylist = vm::addVideoToPlaylist,
                                     onCreatePlaylist = vm::createPlaylist,
                                     onRenameVideo = vm::renameVideo,
                                     onDeleteVideo = vm::deleteVideo,
+                                    onDeleteVideos = { vm.deleteVideos(it) },
                                     onRemoveFromContinueWatching = { vm.dismissFromContinueWatching(it.id) },
                                     gridState = homeGridState,
                                     onSearch = { searchOpen = true },
@@ -177,17 +186,24 @@ fun ExcavApp(
                                     folderVideosMap = library.folderVideosMap,
                                     playlists = library.playlists,
                                     favorites = library.favorites,
+                                    favoriteFolders = library.favoriteFolders,
                                     onSelectFolder = { folder ->
                                         if (folder == null) vm.closeFolder() else vm.openFolder(folder)
                                     },
-                                    onPlay = {
-                                        vm.play(it, library.folderVideos)
+                                    onPlay = { vid, list ->
+                                        vm.play(vid, list)
                                     },
                                     onToggleFavorite = vm::toggleFavorite,
+                                    onToggleFavoriteFolder = { vm.toggleFavoriteFolder(it) },
+                                    onSetVideosFavorite = { vids, isFav -> vm.setVideosFavorite(vids, isFav) },
+                                    onSetFoldersFavorite = { flds, isFav -> vm.setFoldersFavorite(flds, isFav) },
                                     onAddToPlaylist = vm::addVideoToPlaylist,
                                     onCreatePlaylist = vm::createPlaylist,
                                     onRenameVideo = vm::renameVideo,
                                     onDeleteVideo = vm::deleteVideo,
+                                    onDeleteVideos = { vm.deleteVideos(it) },
+                                    onDeleteFolders = { vm.deleteFolders(it, library.folderVideosMap) },
+                                    onRenameFolder = { folder, newName -> vm.renameFolder(folder, newName) },
                                     gridState = foldersGridState,
                                     onSearch = { searchOpen = true },
                                     onRefresh = { vm.refreshLibrary() }
@@ -198,6 +214,7 @@ fun ExcavApp(
                                     onCreate = vm::createPlaylist,
                                     onRename = vm::renamePlaylist,
                                     onDelete = vm::deletePlaylist,
+                                    onDeletePlaylists = { vm.deletePlaylists(it) },
                                     onPlay = { vid, list ->
                                         vm.play(vid, list)
                                     },
@@ -205,6 +222,7 @@ fun ExcavApp(
                                     onAddToPlaylist = vm::addVideoToPlaylist,
                                     onRenameVideo = vm::renameVideo,
                                     onDeleteVideo = vm::deleteVideo,
+                                    onDeleteVideos = { vm.deleteVideos(it) },
                                     onRemoveFromPlaylist = vm::removeVideoFromPlaylist,
                                     observePlaylistItems = vm::observePlaylistItems,
                                     onSearch = { searchOpen = true },
@@ -212,15 +230,29 @@ fun ExcavApp(
                                 )
                                 MainTab.FAVORITES -> FavoritesScreen(
                                     videos = library.favorites,
+                                    favoriteFolders = library.favoriteFolders,
+                                    folderVideosMap = library.folderVideosMap,
                                     playlists = library.playlists,
-                                    onPlay = {
-                                        vm.play(it, library.favorites)
+                                    onPlay = { vid, list ->
+                                        vm.play(vid, list)
+                                    },
+                                    onOpenFolder = { folder ->
+                                        vm.openFolder(folder)
+                                        tab = MainTab.FOLDERS
                                     },
                                     onToggleFavorite = vm::toggleFavorite,
+                                    onToggleFavoriteFolder = { vm.toggleFavoriteFolder(it) },
+                                    onSetVideosFavorite = { vids, isFav -> vm.setVideosFavorite(vids, isFav) },
+                                    onSetFoldersFavorite = { flds, isFav -> vm.setFoldersFavorite(flds, isFav) },
+                                    onAddVideosToFavorites = { vm.addVideosToFavorites(it) },
+                                    onAddFoldersToFavorites = { vm.addFoldersToFavorites(it) },
                                     onAddToPlaylist = vm::addVideoToPlaylist,
                                     onCreatePlaylist = vm::createPlaylist,
                                     onRenameVideo = vm::renameVideo,
                                     onDeleteVideo = vm::deleteVideo,
+                                    onDeleteVideos = { vm.deleteVideos(it) },
+                                    onDeleteFolders = { vm.deleteFolders(it, library.folderVideosMap) },
+                                    onRenameFolder = { folder, newName -> vm.renameFolder(folder, newName) },
                                     gridState = favoritesGridState,
                                     onSearch = { searchOpen = true },
                                     onRefresh = { vm.refreshLibrary() }

@@ -51,6 +51,7 @@ data class LibraryUiState(
     val continueWatching: List<Video> = emptyList(),
     val folders: List<Folder> = emptyList(),
     val favorites: List<Video> = emptyList(),
+    val favoriteFolders: List<Folder> = emptyList(),
     val playlists: List<Playlist> = emptyList(),
     val groups: List<VideoGroup> = emptyList(),
     val folderVideosMap: Map<String, List<Video>> = emptyMap(),
@@ -62,7 +63,7 @@ data class LibraryUiState(
     val loading: Boolean = true
 )
 
-private fun normalizeFolderPath(raw: String?): String {
+fun normalizeFolderPath(raw: String?): String {
     val trimmed = raw.orEmpty().trim().trimEnd('/')
     return when {
         trimmed.isEmpty() || trimmed == "/storage/emulated/0" || trimmed == "/storage/emulated" || trimmed.equals("Internal Storage", ignoreCase = true) -> "/storage/emulated/0"
@@ -73,34 +74,191 @@ private fun normalizeFolderPath(raw: String?): String {
     }
 }
 
-private fun computeVideoGroups(videos: List<Video>, folders: List<Folder>): List<VideoGroup> {
-    if (videos.isEmpty()) return emptyList()
-    val videosByFolderPath = videos.groupBy { it.folderPath }
-    val videosByFolderName = videos.groupBy { it.folderName }
-    return if (folders.isNotEmpty()) {
-        folders.mapNotNull { folder ->
-            val direct = videosByFolderPath[folder.path].orEmpty()
-            val byName = if (folder.name.isNotEmpty()) videosByFolderName[folder.name].orEmpty() else emptyList()
-            val combined = if (direct.isEmpty()) byName else if (byName.isEmpty()) direct else (direct + byName).distinctBy { it.id }
-            if (combined.isNotEmpty()) {
-                VideoGroup(
-                    id = folder.path,
-                    name = folder.name,
-                    path = folder.path,
-                    videos = combined.sortedWith(NaturalVideoComparator)
-                )
-            } else null
-        }
-    } else {
-        videos.groupBy { it.folderName.ifEmpty { "Videos" } }.map { (name, vids) ->
-            VideoGroup(
-                id = name,
-                name = name,
-                path = vids.firstOrNull()?.folderPath.orEmpty(),
-                videos = vids.sortedWith(NaturalVideoComparator)
-            )
+private val NOISE_TAGS = setOf(
+    "1080p", "720p", "480p", "360p", "2160p", "4k", "uhd", "fhd", "hd",
+    "x264", "x265", "h264", "h265", "hevc", "avc", "10bit", "8bit",
+    "web-dl", "webrip", "bluray", "bdrip", "dvdrip", "hdtv", "hdrip",
+    "aac", "aac2", "dts", "ac3", "ddp5", "ddp", "eac3", "flac", "mp3",
+    "repack", "proper", "remux", "dual", "multi", "eng", "ita", "sub",
+    "dub", "uncensored", "directors", "cut", "extended", "complete"
+)
+
+private val GENERIC_FOLDER_NAMES = setOf(
+    "0", "emulated", "storage", "internal storage", "videos", "video",
+    "dcim", "camera", "download", "downloads", "telegram", "whatsapp video",
+    "movies", "movie", "series", "tv shows", "tv", "media"
+)
+
+private fun cleanSeriesTitle(raw: String): String {
+    var name = raw.trim()
+    name = name.replace(Regex("""^\s*\[[^\]]+\]\s*"""), "")
+    name = name.replace(Regex("""^\s*\([^)]+\)\s*"""), "")
+    if (name.contains('.')) {
+        val ext = name.substringAfterLast('.').lowercase()
+        if (ext in setOf("mp4", "mkv", "avi", "webm", "mov", "flv", "ts", "m4v", "3gp")) {
+            name = name.substringBeforeLast('.')
         }
     }
+    name = name.replace('.', ' ').replace('_', ' ')
+
+    val tokens = name.split(Regex("""\s+""")).filter { it.isNotBlank() }
+    val cleanTokens = mutableListOf<String>()
+    for (token in tokens) {
+        val lower = token.lowercase().trim('(', ')', '[', ']', '{', '}', '-', '_', '.')
+        if (NOISE_TAGS.contains(lower) || lower.matches(Regex("""\d{3,4}p""")) || (lower.length == 4 && lower.startsWith("20") && lower.toIntOrNull() != null && cleanTokens.isNotEmpty())) {
+            break
+        }
+        val cleaned = token.trim('(', ')', '[', ']', '{', '}', '-', '_', '.')
+        if (cleaned.isNotBlank()) {
+            cleanTokens.add(cleaned)
+        }
+    }
+
+    val result = cleanTokens.joinToString(" ").trim()
+    return if (result.length >= 2) {
+        result.split(" ").joinToString(" ") { word ->
+            if (word.all { it.isUpperCase() } && word.length <= 4) word
+            else word.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+        }
+    } else {
+        raw.trim()
+    }
+}
+
+private fun extractSeriesSeason(displayName: String, folderName: String): Pair<String, String>? {
+    val cleanName = displayName.trim()
+
+    // Pattern 1: S11E01 / S11.E01 / S11_E01 / S11 - E01 / Season 11 Episode 01
+    val sMatch = Regex("""(?i)(?:^|[\s._\-\(\[])(.+?)[.\s_\-]+(?:s|season)[.\s_\-]*(\d{1,2})[.\s_\-]*(?:e|ep|episode)[.\s_\-]*\d{1,3}""", RegexOption.IGNORE_CASE).find(cleanName)
+    if (sMatch != null) {
+        val rawSeries = sMatch.groupValues[1]
+        val seasonNum = sMatch.groupValues[2].toIntOrNull()
+        val seriesTitle = cleanSeriesTitle(rawSeries)
+        if (seriesTitle.isNotBlank()) {
+            val seasonStr = if (seasonNum != null) "S$seasonNum" else ""
+            val key = "${seriesTitle.lowercase()}_s${seasonNum ?: 0}"
+            val display = if (seasonNum != null) "$seriesTitle $seasonStr" else seriesTitle
+            return Pair(key, display)
+        }
+    }
+
+    // Pattern 2: 11x01 (e.g. Supernatural.11x01.mp4)
+    val xMatch = Regex("""(?i)(?:^|[\s._\-\(\[])(.+?)[.\s_\-]+(\d{1,2})x\d{1,3}""", RegexOption.IGNORE_CASE).find(cleanName)
+    if (xMatch != null) {
+        val rawSeries = xMatch.groupValues[1]
+        val seasonNum = xMatch.groupValues[2].toIntOrNull()
+        val seriesTitle = cleanSeriesTitle(rawSeries)
+        if (seriesTitle.isNotBlank() && seasonNum != null) {
+            val key = "${seriesTitle.lowercase()}_s$seasonNum"
+            val display = "$seriesTitle S$seasonNum"
+            return Pair(key, display)
+        }
+    }
+
+    // Pattern 3: S11 / Season 11 alone in file name
+    val sOnlyMatch = Regex("""(?i)(?:^|[\s._\-\(\[])(.+?)[.\s_\-]+(?:s|season)[.\s_\-]*(\d{1,2})(?:[.\s_\-]|\b)""", RegexOption.IGNORE_CASE).find(cleanName)
+    if (sOnlyMatch != null) {
+        val rawSeries = sOnlyMatch.groupValues[1]
+        val seasonNum = sOnlyMatch.groupValues[2].toIntOrNull()
+        val seriesTitle = cleanSeriesTitle(rawSeries)
+        if (seriesTitle.isNotBlank() && seasonNum != null) {
+            val key = "${seriesTitle.lowercase()}_s$seasonNum"
+            val display = "$seriesTitle S$seasonNum"
+            return Pair(key, display)
+        }
+    }
+
+    // Pattern 4: Anime episode format: [SubsPlease] Show - 01 (1080p).mkv
+    val animeMatch = Regex("""^(?:\[[^\]]+\]\s*)?(.+?)\s*[-_]\s*(?:(?:ep|episode)\s*)?(\d{1,4})(?:\s*\(.*?\))?(?:\s*\[.*?\])?(?:\.[\w\d]+)?$""", RegexOption.IGNORE_CASE).find(cleanName)
+    if (animeMatch != null) {
+        val rawSeries = animeMatch.groupValues[1]
+        val seriesTitle = cleanSeriesTitle(rawSeries)
+        if (seriesTitle.length >= 2 && !seriesTitle.all { it.isDigit() }) {
+            val folderSeason = Regex("""(?i)(?:s|season)[.\s_\-]*(\d{1,2})""").find(folderName)?.groupValues?.get(1)?.toIntOrNull()
+            val key = if (folderSeason != null) "${seriesTitle.lowercase()}_s$folderSeason" else seriesTitle.lowercase()
+            val display = if (folderSeason != null) "$seriesTitle S$folderSeason" else seriesTitle
+            return Pair(key, display)
+        }
+    }
+
+    // Pattern 5: Check folder name for Series/Season
+    if (folderName.isNotBlank() && !GENERIC_FOLDER_NAMES.contains(folderName.lowercase().trim())) {
+        val folderSeasonMatch = Regex("""(?i)(?:^|[\s._\-\(\[])(.+?)[.\s_\-]+(?:s|season)[.\s_\-]*(\d{1,2})""", RegexOption.IGNORE_CASE).find(folderName)
+        if (folderSeasonMatch != null) {
+            val rawSeries = folderSeasonMatch.groupValues[1]
+            val seasonNum = folderSeasonMatch.groupValues[2].toIntOrNull()
+            val seriesTitle = cleanSeriesTitle(rawSeries)
+            if (seriesTitle.isNotBlank() && seasonNum != null) {
+                return Pair("${seriesTitle.lowercase()}_s$seasonNum", "$seriesTitle S$seasonNum")
+            }
+        }
+    }
+
+    return null
+}
+
+private fun computeVideoGroups(videos: List<Video>, folders: List<Folder>): List<VideoGroup> {
+    if (videos.isEmpty()) return emptyList()
+
+    val groups = mutableListOf<VideoGroup>()
+    val groupedVideoIds = mutableSetOf<String>()
+
+    // Pass 1: Smart Series & Season pattern extraction
+    val seriesSeasonBuckets = mutableMapOf<String, Pair<String, MutableList<Video>>>()
+    for (video in videos) {
+        val extracted = extractSeriesSeason(video.displayName, video.folderName)
+        if (extracted != null) {
+            val (key, display) = extracted
+            val bucket = seriesSeasonBuckets.getOrPut(key) { Pair(display, mutableListOf()) }
+            bucket.second.add(video)
+        }
+    }
+
+    for ((key, pair) in seriesSeasonBuckets) {
+        val (displayName, vids) = pair
+        if (vids.size >= 2) {
+            val sortedVideos = vids.distinctBy { it.id }.sortedWith(NaturalVideoComparator)
+            groups.add(
+                VideoGroup(
+                    id = "group_$key",
+                    name = displayName,
+                    path = sortedVideos.firstOrNull()?.folderPath.orEmpty(),
+                    videos = sortedVideos
+                )
+            )
+            vids.forEach { groupedVideoIds.add(it.id) }
+        }
+    }
+
+    // Pass 2: Remaining videos grouped by dedicated non-generic folders
+    val remainingVideos = videos.filter { it.id !in groupedVideoIds }
+    val folderBuckets = mutableMapOf<String, MutableList<Video>>()
+    for (video in remainingVideos) {
+        val folderName = video.folderName.trim()
+        val cleanNorm = folderName.lowercase()
+        if (folderName.isNotEmpty() && !GENERIC_FOLDER_NAMES.contains(cleanNorm)) {
+            val folderKey = video.folderPath.ifEmpty { folderName }
+            folderBuckets.getOrPut(folderKey) { mutableListOf() }.add(video)
+        }
+    }
+
+    for ((folderPath, vids) in folderBuckets) {
+        if (vids.size >= 2) {
+            val folderName = vids.firstOrNull()?.folderName ?: "Videos"
+            val sortedVideos = vids.distinctBy { it.id }.sortedWith(NaturalVideoComparator)
+            groups.add(
+                VideoGroup(
+                    id = "folder_$folderPath",
+                    name = cleanSeriesTitle(folderName),
+                    path = folderPath,
+                    videos = sortedVideos
+                )
+            )
+            vids.forEach { groupedVideoIds.add(it.id) }
+        }
+    }
+
+    return groups.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
 }
 
 private fun computeFolderVideosMap(videos: List<Video>): Map<String, List<Video>> {
@@ -164,7 +322,8 @@ class ExcavViewModel @Inject constructor(
         query,
         searchResults,
         selectedFolder,
-        folderVideos
+        folderVideos,
+        settingsManager.settings
     ) { values ->
         val videos = values[0] as List<Video>
         val continueWatching = values[1] as List<Video>
@@ -175,6 +334,7 @@ class ExcavViewModel @Inject constructor(
         val searchResultsList = values[6] as List<Video>
         val currentFolder = values[7] as Folder?
         val currentFolderVideos = values[8] as List<Video>
+        val settings = values[9] as UserSettings
 
         val groups: List<VideoGroup>
         val folderMap: Map<String, List<Video>>
@@ -191,11 +351,14 @@ class ExcavViewModel @Inject constructor(
             cachedFolderMap = folderMap
         }
 
+        val favoriteFolders = folders.filter { settings.favoriteFolderPaths.contains(it.path) }
+
         LibraryUiState(
             videos = videos,
             continueWatching = continueWatching,
             folders = folders,
             favorites = favorites,
+            favoriteFolders = favoriteFolders,
             playlists = playlists,
             groups = groups,
             folderVideosMap = folderMap,
@@ -367,7 +530,169 @@ class ExcavViewModel @Inject constructor(
         viewModelScope.launch {
             logger.i(TAG, "Deleting playlist: $id")
             playlistManager.deletePlaylist(id)
+            showMessage("Playlist deleted")
         }
+    }
+
+    fun deleteVideos(videos: List<Video>) {
+        viewModelScope.launch {
+            if (videos.isEmpty()) return@launch
+            logger.i(TAG, "deleteVideos: ${videos.size} items")
+            var successCount = 0
+            for (vid in videos) {
+                if (library.deleteVideo(vid.id) is ExcavResult.Success) {
+                    successCount++
+                }
+            }
+            if (successCount == videos.size) {
+                showMessage("${videos.size} ${if (videos.size == 1) "video" else "videos"} deleted")
+            } else {
+                showMessage("Deleted $successCount of ${videos.size} videos")
+            }
+        }
+    }
+
+    fun deleteFolders(folders: List<Folder>, folderVideosMap: Map<String, List<Video>>) {
+        viewModelScope.launch {
+            if (folders.isEmpty()) return@launch
+            logger.i(TAG, "deleteFolders: ${folders.size} folders")
+            var totalVidsDeleted = 0
+            var diskDeleteFailures = 0
+            for (f in folders) {
+                val normP = normalizeFolderPath(f.path)
+                val vids = folderVideosMap[normP] ?: folderVideosMap[f.name.lowercase()].orEmpty()
+                for (vid in vids) {
+                    if (library.deleteVideo(vid.id) is ExcavResult.Success) {
+                        totalVidsDeleted++
+                    }
+                }
+                try {
+                    val dir = java.io.File(f.path)
+                    if (dir.exists() && dir.isDirectory) {
+                        val deleted = dir.deleteRecursively()
+                        if (!deleted) {
+                            diskDeleteFailures++
+                            logger.w(TAG, "deleteRecursively returned false for: ${f.path}")
+                        }
+                    }
+                } catch (e: SecurityException) {
+                    diskDeleteFailures++
+                    logger.w(TAG, "SecurityException deleting folder on disk: ${f.path}", e)
+                } catch (e: Exception) {
+                    diskDeleteFailures++
+                    logger.w(TAG, "Failed to delete folder on disk: ${f.path}", e)
+                }
+            }
+            library.refresh()
+            if (diskDeleteFailures > 0) {
+                showMessage("${folders.size} ${if (folders.size == 1) "folder" else "folders"} removed from library")
+            } else {
+                showMessage("${folders.size} ${if (folders.size == 1) "folder" else "folders"} deleted")
+            }
+        }
+    }
+
+    fun renameFolder(folder: Folder, newName: String) {
+        viewModelScope.launch {
+            val clean = newName.trim()
+            if (clean.isBlank()) {
+                showMessage("Folder name cannot be empty", isError = true)
+                return@launch
+            }
+            try {
+                val oldDir = java.io.File(folder.path)
+                if (oldDir.exists() && oldDir.isDirectory) {
+                    val parent = oldDir.parentFile ?: java.io.File("/storage/emulated/0")
+                    val newDir = java.io.File(parent, clean)
+                    val renamed = oldDir.renameTo(newDir)
+                    if (renamed) {
+                        val curFavs = userSettings.value.favoriteFolderPaths
+                        if (curFavs.contains(folder.path) || curFavs.contains(normalizeFolderPath(folder.path))) {
+                            val updated = curFavs.toMutableSet()
+                            updated.remove(folder.path)
+                            updated.remove(normalizeFolderPath(folder.path))
+                            updated.add(newDir.absolutePath)
+                            updated.add(normalizeFolderPath(newDir.absolutePath))
+                            settingsManager.setFavoriteFolders(updated)
+                        }
+                        library.refresh()
+                        showMessage("Folder renamed successfully")
+                        return@launch
+                    }
+                }
+                showMessage("Could not rename folder (protected by Android storage restrictions)", isError = true)
+            } catch (e: SecurityException) {
+                logger.e(TAG, "SecurityException renaming folder", e)
+                showMessage("Permission denied by system storage", isError = true)
+            } catch (e: Exception) {
+                logger.e(TAG, "Error renaming folder", e)
+                showMessage("Error renaming folder: ${e.message}", isError = true)
+            }
+        }
+    }
+
+    fun deletePlaylists(playlists: List<Playlist>) {
+        viewModelScope.launch {
+            if (playlists.isEmpty()) return@launch
+            logger.i(TAG, "deletePlaylists: ${playlists.size} playlists")
+            for (pl in playlists) {
+                playlistManager.deletePlaylist(pl.id)
+            }
+            showMessage("${playlists.size} ${if (playlists.size == 1) "playlist" else "playlists"} deleted")
+        }
+    }
+
+    fun setVideosFavorite(videos: List<Video>, isFavorite: Boolean) {
+        viewModelScope.launch {
+            if (videos.isEmpty()) return@launch
+            for (vid in videos) {
+                if (vid.isFavorite != isFavorite) {
+                    library.toggleFavorite(vid.id)
+                }
+            }
+            showMessage(
+                if (isFavorite) "Added ${videos.size} ${if (videos.size == 1) "video" else "videos"} to Favorites"
+                else "Removed ${videos.size} ${if (videos.size == 1) "video" else "videos"} from Favorites"
+            )
+        }
+    }
+
+    fun addVideosToFavorites(videos: List<Video>) {
+        setVideosFavorite(videos, true)
+    }
+
+    fun toggleFavoriteFolder(folder: Folder) {
+        viewModelScope.launch {
+            settingsManager.toggleFavoriteFolder(folder.path)
+            val isNowFav = !userSettings.value.favoriteFolderPaths.contains(folder.path)
+            showMessage(if (isNowFav) "Added folder to Favorites" else "Removed folder from Favorites")
+        }
+    }
+
+    fun setFoldersFavorite(folders: List<Folder>, isFavorite: Boolean) {
+        viewModelScope.launch {
+            if (folders.isEmpty()) return@launch
+            val current = userSettings.value.favoriteFolderPaths.toMutableSet()
+            for (f in folders) {
+                val norm = normalizeFolderPath(f.path)
+                if (isFavorite) {
+                    current.add(f.path)
+                    current.add(norm)
+                } else {
+                    current.remove(f.path)
+                    current.remove(norm)
+                }
+            }
+            settingsManager.setFavoriteFolders(current)
+            showMessage(
+                if (isFavorite) "Added ${folders.size} ${if (folders.size == 1) "folder" else "folders"} to Favorites"
+                else "Removed ${folders.size} ${if (folders.size == 1) "folder" else "folders"} from Favorites"
+            )
+        }
+    }
+
+    fun addFoldersToFavorites(folders: List<Folder>) {
+        setFoldersFavorite(folders, true)
     }
 
     fun observePlaylistItems(playlistId: Long): kotlinx.coroutines.flow.Flow<List<com.excavplayer.domain.model.PlaylistItem>> {

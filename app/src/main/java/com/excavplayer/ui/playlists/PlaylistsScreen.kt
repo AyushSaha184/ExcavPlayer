@@ -1,5 +1,6 @@
 package com.excavplayer.ui.playlists
 
+import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
@@ -31,6 +32,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.*
@@ -40,6 +42,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -63,29 +66,53 @@ fun PlaylistsScreen(
     onCreate: (String) -> Unit,
     onRename: (Long, String) -> Unit,
     onDelete: (Long) -> Unit,
+    onDeletePlaylists: (List<Playlist>) -> Unit = {},
     onPlay: (Video, List<Video>) -> Unit = { _, _ -> },
     onToggleFavorite: (Video) -> Unit = {},
     onAddToPlaylist: (Long, Video) -> Unit = { _, _ -> },
     onRenameVideo: (Video, String) -> Unit = { _, _ -> },
     onDeleteVideo: (Video) -> Unit = {},
+    onDeleteVideos: (List<Video>) -> Unit = {},
     onRemoveFromPlaylist: (Long, String) -> Unit = { _, _ -> },
     observePlaylistItems: (Long) -> Flow<List<PlaylistItem>> = { kotlinx.coroutines.flow.emptyFlow() },
     onSearch: () -> Unit = {},
     onRefresh: (() -> Unit)? = null
 ) {
+    val context = LocalContext.current
     var isCreateDialogOpen by rememberSaveable { mutableStateOf(false) }
     var menuForPlaylistId by rememberSaveable { mutableStateOf<Long?>(null) }
     var renamePlaylist by rememberSaveable { mutableStateOf<Playlist?>(null) }
     var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }
 
+    var selectedPlaylistIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    var selectedVideoIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    val isSelectionMode = if (selectedPlaylist == null) selectedPlaylistIds.isNotEmpty() else selectedVideoIds.isNotEmpty()
+
+    var isOverflowMenuOpen by remember { mutableStateOf(false) }
+
     var selectedVideoForMenu by remember { mutableStateOf<Video?>(null) }
     var propertiesVideo by remember { mutableStateOf<Video?>(null) }
+    var propertiesMultiVideos by remember { mutableStateOf<List<Video>?>(null) }
     var renameVideoTarget by remember { mutableStateOf<Video?>(null) }
     var deleteVideoTarget by remember { mutableStateOf<Video?>(null) }
+    var deletePlaylistTarget by remember { mutableStateOf<Playlist?>(null) }
+    var batchDeleteTargetPlaylists by remember { mutableStateOf<List<Playlist>?>(null) }
+    var batchDeleteTargetVideos by remember { mutableStateOf<List<Video>?>(null) }
     var playlistVideoTarget by remember { mutableStateOf<Video?>(null) }
 
-    BackHandler(enabled = selectedPlaylist != null) {
-        selectedPlaylist = null
+    // Clear selection when navigating into/out of playlist
+    LaunchedEffect(selectedPlaylist) {
+        selectedPlaylistIds = emptySet()
+        selectedVideoIds = emptySet()
+    }
+
+    BackHandler(enabled = isSelectionMode || selectedPlaylist != null) {
+        if (isSelectionMode) {
+            selectedPlaylistIds = emptySet()
+            selectedVideoIds = emptySet()
+        } else {
+            selectedPlaylist = null
+        }
     }
 
     AnimatedContent(
@@ -117,77 +144,98 @@ fun PlaylistsScreen(
                     state = detailListState,
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = statusBarTop + 64.dp, bottom = 90.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier
-                        .fillMaxSize()
+                    modifier = Modifier.fillMaxSize()
                 ) {
                     items(videos, key = { it.id }, contentType = { "video_row" }) { video ->
+                        val isVideoSelected = video.id in selectedVideoIds
                         ListVideoRow(
                             video = video,
-                            onClick = { onPlay(video, videos) },
+                            isSelected = isVideoSelected,
+                            isSelectionMode = isSelectionMode,
+                            onClick = {
+                                if (isSelectionMode) {
+                                    selectedVideoIds = if (isVideoSelected) {
+                                        selectedVideoIds - video.id
+                                    } else {
+                                        selectedVideoIds + video.id
+                                    }
+                                } else {
+                                    onPlay(video, videos)
+                                }
+                            },
+                            onLongClick = {
+                                selectedVideoIds = if (isVideoSelected) {
+                                    selectedVideoIds - video.id
+                                } else {
+                                    selectedVideoIds + video.id
+                                }
+                            },
                             modifier = Modifier.animateItem(),
-                            onMoreClick = { selectedVideoForMenu = video },
+                            onMoreClick = if (!isSelectionMode) { { selectedVideoForMenu = video } } else null,
                             dropdownMenu = {
-                                val menuShape = RoundedCornerShape(14.dp)
-                                DropdownMenu(
-                                    expanded = selectedVideoForMenu?.id == video.id,
-                                    onDismissRequest = { selectedVideoForMenu = null },
-                                    shape = menuShape,
-                                    containerColor = Color.Transparent,
-                                    tonalElevation = 0.dp,
-                                    shadowElevation = 0.dp,
-                                    border = null,
-                                    modifier = Modifier.darkUltraThinBlur(
+                                if (!isSelectionMode && selectedVideoForMenu?.id == video.id) {
+                                    val menuShape = RoundedCornerShape(14.dp)
+                                    DropdownMenu(
+                                        expanded = true,
+                                        onDismissRequest = { selectedVideoForMenu = null },
                                         shape = menuShape,
-                                        backgroundColor = Color(0xF2101216),
-                                        strokeColor = Color.White.copy(alpha = 0.16f)
-                                    )
-                                ) {
-                                    DropdownMenuItem(
-                                        text = { Text("Remove from Playlist", color = ExcavPalette.Error) },
-                                        leadingIcon = { Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = ExcavPalette.Error) },
-                                        onClick = {
-                                            onRemoveFromPlaylist(playlist.id, video.id)
-                                            selectedVideoForMenu = null
-                                        }
-                                    )
-                                    val isFav = favorites.any { it.id == video.id }
-                                    DropdownMenuItem(
-                                        text = { Text(if (isFav) "Remove from Favorites" else "Add to Favorites", color = ExcavPalette.Text) },
-                                        leadingIcon = {
-                                            AnimatedFavoriteIcon(
-                                                isFavorite = isFav,
-                                                tint = if (isFav) Color(0xFFFF5277) else ExcavPalette.Text
-                                            )
-                                        },
-                                        onClick = {
-                                            onToggleFavorite(video)
-                                            selectedVideoForMenu = null
-                                        }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Rename", color = ExcavPalette.Text) },
-                                        leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, tint = ExcavPalette.Text) },
-                                        onClick = {
-                                            renameVideoTarget = video
-                                            selectedVideoForMenu = null
-                                        }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Properties", color = ExcavPalette.Text) },
-                                        leadingIcon = { Icon(Icons.Default.Info, contentDescription = null, tint = ExcavPalette.Text) },
-                                        onClick = {
-                                            propertiesVideo = video
-                                            selectedVideoForMenu = null
-                                        }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Delete", color = ExcavPalette.Error) },
-                                        leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = ExcavPalette.Error) },
-                                        onClick = {
-                                            deleteVideoTarget = video
-                                            selectedVideoForMenu = null
-                                        }
-                                    )
+                                        containerColor = Color.Transparent,
+                                        tonalElevation = 0.dp,
+                                        shadowElevation = 0.dp,
+                                        border = null,
+                                        modifier = Modifier.darkUltraThinBlur(
+                                            shape = menuShape,
+                                            backgroundColor = Color(0xF2101216),
+                                            strokeColor = Color.White.copy(alpha = 0.16f)
+                                        )
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = { Text("Remove from Playlist", color = ExcavPalette.Error) },
+                                            leadingIcon = { Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = ExcavPalette.Error) },
+                                            onClick = {
+                                                onRemoveFromPlaylist(playlist.id, video.id)
+                                                selectedVideoForMenu = null
+                                            }
+                                        )
+                                        val isFav = favorites.any { it.id == video.id }
+                                        DropdownMenuItem(
+                                            text = { Text(if (isFav) "Remove from Favorites" else "Add to Favorites", color = ExcavPalette.Text) },
+                                            leadingIcon = {
+                                                AnimatedFavoriteIcon(
+                                                    isFavorite = isFav,
+                                                    tint = if (isFav) Color(0xFFFF5277) else ExcavPalette.Text
+                                                )
+                                            },
+                                            onClick = {
+                                                onToggleFavorite(video)
+                                                selectedVideoForMenu = null
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("Rename", color = ExcavPalette.Text) },
+                                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, tint = ExcavPalette.Text) },
+                                            onClick = {
+                                                renameVideoTarget = video
+                                                selectedVideoForMenu = null
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("Properties", color = ExcavPalette.Text) },
+                                            leadingIcon = { Icon(Icons.Default.Info, contentDescription = null, tint = ExcavPalette.Text) },
+                                            onClick = {
+                                                propertiesVideo = video
+                                                selectedVideoForMenu = null
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("Delete", color = ExcavPalette.Error) },
+                                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = ExcavPalette.Error) },
+                                            onClick = {
+                                                deleteVideoTarget = video
+                                                selectedVideoForMenu = null
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         )
@@ -229,7 +277,62 @@ fun PlaylistsScreen(
                             )
                         }
 
-                        if (videos.isNotEmpty()) {
+                        if (isSelectionMode) {
+                            val selVideos = videos.filter { it.id in selectedVideoIds }
+                            Box {
+                                IconButton(onClick = { isOverflowMenuOpen = true }) {
+                                    Icon(
+                                        imageVector = Icons.Default.MoreVert,
+                                        contentDescription = "Menu",
+                                        tint = ExcavPalette.Text
+                                    )
+                                }
+                                BatchVideoOptionsMenu(
+                                    expanded = isOverflowMenuOpen,
+                                    selectedVideos = selVideos,
+                                    onDismiss = { isOverflowMenuOpen = false },
+                                    onPlaySelected = {
+                                        if (selVideos.isNotEmpty()) {
+                                            onPlay(selVideos.first(), selVideos)
+                                            selectedVideoIds = emptySet()
+                                        }
+                                    },
+                                    onAddToPlaylist = {
+                                        if (selVideos.isNotEmpty()) {
+                                            playlistVideoTarget = selVideos.first()
+                                        }
+                                    },
+                                    onToggleFavorites = {
+                                        selVideos.forEach { onToggleFavorite(it) }
+                                        selectedVideoIds = emptySet()
+                                    },
+                                    onShare = {
+                                        val uris = ArrayList<android.net.Uri>()
+                                        selVideos.forEach { uris.add(android.net.Uri.parse(it.uri)) }
+                                        val intent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                                            type = "video/*"
+                                            putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        }
+                                        context.startActivity(Intent.createChooser(intent, "Share Videos"))
+                                        selectedVideoIds = emptySet()
+                                    },
+                                    onRename = if (selVideos.size == 1) {
+                                        { renameVideoTarget = selVideos.first() }
+                                    } else null,
+                                    onProperties = {
+                                        if (selVideos.size == 1) {
+                                            propertiesVideo = selVideos.first()
+                                        } else {
+                                            propertiesMultiVideos = selVideos
+                                        }
+                                    },
+                                    onDelete = {
+                                        batchDeleteTargetVideos = selVideos
+                                    }
+                                )
+                            }
+                        } else if (videos.isNotEmpty()) {
                             Button(
                                 onClick = { onPlay(videos.first(), videos) },
                                 colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
@@ -267,8 +370,7 @@ fun PlaylistsScreen(
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = statusBarTop + 64.dp, bottom = 90.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier
-                        .fillMaxSize()
+                    modifier = Modifier.fillMaxSize()
                 ) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         SectionTitle(stringResource(R.string.playlists)) {
@@ -298,11 +400,32 @@ fun PlaylistsScreen(
                         gridItems(playlists, key = { "playlist_${it.id}" }, contentType = { "playlist_card" }) { playlist ->
                             val items by observePlaylistItems(playlist.id).collectAsStateWithLifecycle(initialValue = emptyList())
                             val playlistVideos = remember(items) { items.mapNotNull { it.video } }
+                            val isPlaylistSelected = playlist.id in selectedPlaylistIds
+
                             PlaylistGridCard(
                                 playlist = playlist,
                                 videos = playlistVideos,
+                                isSelected = isPlaylistSelected,
+                                isSelectionMode = isSelectionMode,
                                 onOverflow = { menuForPlaylistId = playlist.id },
-                                onClick = { selectedPlaylist = playlist },
+                                onClick = {
+                                    if (isSelectionMode) {
+                                        selectedPlaylistIds = if (isPlaylistSelected) {
+                                            selectedPlaylistIds - playlist.id
+                                        } else {
+                                            selectedPlaylistIds + playlist.id
+                                        }
+                                    } else {
+                                        selectedPlaylist = playlist
+                                    }
+                                },
+                                onLongClick = {
+                                    selectedPlaylistIds = if (isPlaylistSelected) {
+                                        selectedPlaylistIds - playlist.id
+                                    } else {
+                                        selectedPlaylistIds + playlist.id
+                                    }
+                                },
                                 modifier = Modifier.animateItem(),
                                 dropdownMenu = {
                                     val menuShape = RoundedCornerShape(14.dp)
@@ -358,7 +481,7 @@ fun PlaylistsScreen(
                                                 )
                                             },
                                             onClick = {
-                                                onDelete(playlist.id)
+                                                deletePlaylistTarget = playlist
                                                 menuForPlaylistId = null
                                             }
                                         )
@@ -373,6 +496,22 @@ fun PlaylistsScreen(
                     onSearch = onSearch,
                     onRefresh = onRefresh,
                     isScrolled = isRootScrolled,
+                    isSelectionMode = isSelectionMode,
+                    selectedCount = selectedPlaylistIds.size,
+                    onMoreClick = { isOverflowMenuOpen = true },
+                    dropdownMenu = {
+                        if (isSelectionMode) {
+                            val selPlaylists = playlists.filter { it.id in selectedPlaylistIds }
+                            BatchPlaylistOptionsMenu(
+                                expanded = isOverflowMenuOpen,
+                                selectedPlaylists = selPlaylists,
+                                onDismiss = { isOverflowMenuOpen = false },
+                                onDelete = {
+                                    batchDeleteTargetPlaylists = selPlaylists
+                                }
+                            )
+                        }
+                    },
                     modifier = Modifier.align(Alignment.TopCenter)
                 )
             }
@@ -411,10 +550,20 @@ fun PlaylistsScreen(
         )
     }
 
+    propertiesMultiVideos?.let { vids ->
+        MultiVideoPropertiesDialog(
+            videos = vids,
+            onDismiss = { propertiesMultiVideos = null }
+        )
+    }
+
     renameVideoTarget?.let { video ->
         RenameVideoDialog(
             video = video,
-            onRename = { onRenameVideo(video, it) },
+            onRename = { 
+                onRenameVideo(video, it)
+                selectedVideoIds = emptySet()
+            },
             onDismiss = { renameVideoTarget = null }
         )
     }
@@ -427,11 +576,196 @@ fun PlaylistsScreen(
         )
     }
 
+    batchDeleteTargetVideos?.let { vids ->
+        BatchDeleteConfirmationDialog(
+            itemCount = vids.size,
+            itemType = if (vids.size == 1) "video" else "videos",
+            onConfirm = {
+                onDeleteVideos(vids)
+                selectedVideoIds = emptySet()
+                batchDeleteTargetVideos = null
+            },
+            onDismiss = { batchDeleteTargetVideos = null }
+        )
+    }
+
+    deletePlaylistTarget?.let { playlist ->
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { deletePlaylistTarget = null },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            AnimatedDialogContainer(
+                modifier = Modifier
+                    .fillMaxWidth(0.90f)
+                    .wrapContentHeight()
+                    .darkUltraThinBlur(
+                        shape = RoundedCornerShape(22.dp),
+                        backgroundColor = Color(0xF210131B),
+                        strokeColor = Color.White.copy(alpha = 0.18f)
+                    )
+                    .padding(22.dp)
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(ExcavPalette.Error.copy(alpha = 0.15f))
+                                .border(1.dp, ExcavPalette.Error.copy(alpha = 0.35f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DeleteOutline,
+                                contentDescription = null,
+                                tint = ExcavPalette.Error,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            text = "Delete Playlist?",
+                            color = ExcavPalette.Text,
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 19.sp
+                            )
+                        )
+                    }
+
+                    Spacer(Modifier.height(14.dp))
+
+                    Text(
+                        text = "Are you sure you want to delete playlist \"${playlist.title}\"?",
+                        color = ExcavPalette.TextSecondary,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp, lineHeight = 20.sp)
+                    )
+
+                    Spacer(Modifier.height(20.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = { deletePlaylistTarget = null }) {
+                            Text(stringResource(R.string.cancel), color = ExcavPalette.TextMuted, fontWeight = FontWeight.Medium)
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Button(
+                            onClick = {
+                                onDelete(playlist.id)
+                                deletePlaylistTarget = null
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Error),
+                            shape = ExcavShapes.Pill
+                        ) {
+                            Text(stringResource(R.string.delete), color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    batchDeleteTargetPlaylists?.let { pls ->
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { batchDeleteTargetPlaylists = null },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            AnimatedDialogContainer(
+                modifier = Modifier
+                    .fillMaxWidth(0.90f)
+                    .wrapContentHeight()
+                    .darkUltraThinBlur(
+                        shape = RoundedCornerShape(22.dp),
+                        backgroundColor = Color(0xF210131B),
+                        strokeColor = Color.White.copy(alpha = 0.18f)
+                    )
+                    .padding(22.dp)
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(ExcavPalette.Error.copy(alpha = 0.15f))
+                                .border(1.dp, ExcavPalette.Error.copy(alpha = 0.35f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DeleteOutline,
+                                contentDescription = null,
+                                tint = ExcavPalette.Error,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            text = if (pls.size == 1) "Delete Playlist?" else "Delete ${pls.size} Playlists?",
+                            color = ExcavPalette.Text,
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 19.sp
+                            )
+                        )
+                    }
+
+                    Spacer(Modifier.height(14.dp))
+
+                    Text(
+                        text = if (pls.size == 1) {
+                            "Are you sure you want to delete playlist \"${pls.first().title}\"?"
+                        } else {
+                            "Are you sure you want to delete ${pls.size} selected playlists?"
+                        },
+                        color = ExcavPalette.TextSecondary,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp, lineHeight = 20.sp)
+                    )
+
+                    Spacer(Modifier.height(20.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = { batchDeleteTargetPlaylists = null }) {
+                            Text(stringResource(R.string.cancel), color = ExcavPalette.TextMuted, fontWeight = FontWeight.Medium)
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Button(
+                            onClick = {
+                                onDeletePlaylists(pls)
+                                batchDeleteTargetPlaylists = null
+                                selectedPlaylistIds = emptySet()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Error),
+                            shape = ExcavShapes.Pill
+                        ) {
+                            Text(stringResource(R.string.delete), color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     playlistVideoTarget?.let { video ->
         AddToPlaylistDialog(
             video = video,
             playlists = playlists,
-            onSelectPlaylist = { playlistId -> onAddToPlaylist(playlistId, video) },
+            onSelectPlaylist = { playlistId -> 
+                if (selectedVideoIds.isNotEmpty()) {
+                    val currentItems = observePlaylistItems(selectedPlaylist?.id ?: 0L)
+                    // Add video logic
+                    onAddToPlaylist(playlistId, video)
+                    selectedVideoIds = emptySet()
+                } else {
+                    onAddToPlaylist(playlistId, video) 
+                }
+            },
             onCreatePlaylist = { title -> onCreate(title) },
             onDismiss = { playlistVideoTarget = null }
         )
@@ -515,3 +849,4 @@ private fun PlaylistNameDialog(
         }
     }
 }
+

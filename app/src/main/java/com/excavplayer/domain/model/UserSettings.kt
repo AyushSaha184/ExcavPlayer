@@ -26,5 +26,6 @@ data class UserSettings(
     val hardwareAccelerationMode: String = "Automatic",
     val hardwareAccelerationEnabled: Boolean = true,
     val dialogueBoostEnabled: Boolean = false,
-    val matchDisplayRefreshRate: Boolean = false
+    val matchDisplayRefreshRate: Boolean = false,
+    val favoriteFolderPaths: Set<String> = emptySet()
 )

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
@@ -113,48 +114,74 @@ fun GlassmorphicBackButton(
 fun GlassmorphicHeaderActions(
     onSearch: () -> Unit,
     onRefresh: (() -> Unit)? = null,
+    isSelectionMode: Boolean = false,
+    onMoreClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
-    hazeState: HazeState = LocalHazeState.current
+    hazeState: HazeState = LocalHazeState.current,
+    dropdownMenu: (@Composable () -> Unit)? = null
 ) {
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        GlassmorphicItem(
-            modifier = Modifier.size(40.dp),
-            cornerRadius = 20,
-            hazeState = hazeState
-        ) {
-            IconButton(
-                onClick = onSearch,
-                modifier = Modifier.fillMaxSize()
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Search,
-                    contentDescription = stringResource(R.string.cd_search),
-                    tint = ExcavPalette.Text,
-                    modifier = Modifier.size(20.dp)
-                )
+        if (isSelectionMode) {
+            Box {
+                GlassmorphicItem(
+                    modifier = Modifier.size(40.dp),
+                    cornerRadius = 20,
+                    hazeState = hazeState
+                ) {
+                    IconButton(
+                        onClick = { onMoreClick?.invoke() },
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = stringResource(R.string.cd_more),
+                            tint = ExcavPalette.Text,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+                dropdownMenu?.invoke()
             }
-        }
-
-        if (onRefresh != null) {
+        } else {
             GlassmorphicItem(
                 modifier = Modifier.size(40.dp),
                 cornerRadius = 20,
                 hazeState = hazeState
             ) {
                 IconButton(
-                    onClick = onRefresh,
+                    onClick = onSearch,
                     modifier = Modifier.fillMaxSize()
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = stringResource(R.string.refresh),
+                        imageVector = Icons.Default.Search,
+                        contentDescription = stringResource(R.string.cd_search),
                         tint = ExcavPalette.Text,
                         modifier = Modifier.size(20.dp)
                     )
+                }
+            }
+
+            if (onRefresh != null) {
+                GlassmorphicItem(
+                    modifier = Modifier.size(40.dp),
+                    cornerRadius = 20,
+                    hazeState = hazeState
+                ) {
+                    IconButton(
+                        onClick = onRefresh,
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = stringResource(R.string.refresh),
+                            tint = ExcavPalette.Text,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
         }

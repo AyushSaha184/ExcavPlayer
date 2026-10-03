@@ -61,6 +61,7 @@ class SettingsRepositoryImpl @Inject constructor(
         val KEY_HARDWARE_ACCELERATION_MODE = stringPreferencesKey("hardware_acceleration_mode")
         val KEY_DIALOGUE_BOOST = booleanPreferencesKey("dialogue_boost")
         val KEY_MATCH_DISPLAY_REFRESH_RATE = booleanPreferencesKey("match_display_refresh_rate")
+        val KEY_FAVORITE_FOLDER_PATHS = androidx.datastore.preferences.core.stringSetPreferencesKey("favorite_folder_paths")
     }
 
     override val userSettings: Flow<UserSettings> = context.dataStore.data
@@ -105,7 +106,8 @@ class SettingsRepositoryImpl @Inject constructor(
                 hardwareAccelerationMode = hwMode,
                 hardwareAccelerationEnabled = hwMode != "Disabled",
                 dialogueBoostEnabled = preferences[KEY_DIALOGUE_BOOST] ?: false,
-                matchDisplayRefreshRate = preferences[KEY_MATCH_DISPLAY_REFRESH_RATE] ?: false
+                matchDisplayRefreshRate = preferences[KEY_MATCH_DISPLAY_REFRESH_RATE] ?: false,
+                favoriteFolderPaths = preferences[KEY_FAVORITE_FOLDER_PATHS] ?: emptySet()
             )
         }
         .flowOn(dispatchers.io)
@@ -247,6 +249,25 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun updateMatchDisplayRefreshRate(enabled: Boolean) {
         logger.i(TAG, "updateMatchDisplayRefreshRate: $enabled")
         edit { it[KEY_MATCH_DISPLAY_REFRESH_RATE] = enabled }
+    }
+
+    override suspend fun toggleFavoriteFolder(folderPath: String) {
+        logger.i(TAG, "toggleFavoriteFolder: $folderPath")
+        edit { preferences ->
+            val current = preferences[KEY_FAVORITE_FOLDER_PATHS] ?: emptySet()
+            if (current.contains(folderPath)) {
+                preferences[KEY_FAVORITE_FOLDER_PATHS] = current - folderPath
+            } else {
+                preferences[KEY_FAVORITE_FOLDER_PATHS] = current + folderPath
+            }
+        }
+    }
+
+    override suspend fun setFavoriteFolders(paths: Set<String>) {
+        logger.i(TAG, "setFavoriteFolders: ${paths.size} paths")
+        edit { preferences ->
+            preferences[KEY_FAVORITE_FOLDER_PATHS] = paths
+        }
     }
 
     private suspend fun edit(transform: suspend (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {

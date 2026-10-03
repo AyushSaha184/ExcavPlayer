@@ -148,4 +148,14 @@ class SettingsManager @Inject constructor(
         logger.i(TAG, "Setting match display refresh rate to: $enabled")
         settingsRepository.updateMatchDisplayRefreshRate(enabled)
     }
+
+    suspend fun toggleFavoriteFolder(folderPath: String) {
+        logger.i(TAG, "Toggling favorite folder: $folderPath")
+        settingsRepository.toggleFavoriteFolder(folderPath)
+    }
+
+    suspend fun setFavoriteFolders(paths: Set<String>) {
+        logger.i(TAG, "Setting favorite folders: ${paths.size}")
+        settingsRepository.setFavoriteFolders(paths)
+    }
 }

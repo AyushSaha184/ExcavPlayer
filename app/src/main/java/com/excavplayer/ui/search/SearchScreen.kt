@@ -11,36 +11,40 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.excavplayer.R
+import com.excavplayer.domain.model.Playlist
 import com.excavplayer.domain.model.Video
-import com.excavplayer.ui.components.EmptyState
-import com.excavplayer.ui.components.ListVideoRow
+import com.excavplayer.ui.components.*
 import com.excavplayer.ui.theme.ExcavPalette
-
-import androidx.compose.ui.graphics.Color
-import com.excavplayer.ui.components.GlassmorphicBackButton
-import com.excavplayer.ui.components.GlassmorphicItem
-import com.excavplayer.ui.components.LocalHazeState
-import com.excavplayer.ui.components.ProgressiveHeaderBlur
-import com.excavplayer.ui.components.ProgressiveHeaderContainer
 import dev.chrisbanes.haze.hazeSource
 
 @Composable
 fun SearchScreen(
     query: String,
     results: List<Video>,
+    playlists: List<Playlist> = emptyList(),
+    favorites: List<Video> = emptyList(),
     onQueryChange: (String) -> Unit,
     onBack: () -> Unit,
-    onPlay: (Video) -> Unit
+    onPlay: (Video) -> Unit,
+    onToggleFavorite: (Video) -> Unit = {},
+    onAddToPlaylist: (Long, Video) -> Unit = { _, _ -> },
+    onCreatePlaylist: (String) -> Unit = {},
+    onRenameVideo: (Video, String) -> Unit = { _, _ -> },
+    onDeleteVideo: (Video) -> Unit = {}
 ) {
+    var selectedVideoForMenu by remember { mutableStateOf<Video?>(null) }
+    var renameVideoTarget by remember { mutableStateOf<Video?>(null) }
+    var deleteVideoTarget by remember { mutableStateOf<Video?>(null) }
+    var playlistVideoTarget by remember { mutableStateOf<Video?>(null) }
+    var propertiesVideo by remember { mutableStateOf<Video?>(null) }
+
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
@@ -85,6 +89,23 @@ fun SearchScreen(
                     ListVideoRow(
                         video = video,
                         onClick = { onPlay(video) },
+                        onMoreClick = { selectedVideoForMenu = video },
+                        dropdownMenu = {
+                            if (selectedVideoForMenu?.id == video.id) {
+                                val isFav = favorites.any { it.id == video.id }
+                                VideoOptionsMenu(
+                                    expanded = true,
+                                    video = video,
+                                    isFavorite = isFav,
+                                    onDismiss = { selectedVideoForMenu = null },
+                                    onToggleFavorite = { onToggleFavorite(video) },
+                                    onAddToPlaylist = { playlistVideoTarget = video },
+                                    onRename = { renameVideoTarget = video },
+                                    onProperties = { propertiesVideo = video },
+                                    onDelete = { deleteVideoTarget = video }
+                                )
+                            }
+                        },
                         modifier = Modifier.animateItem()
                     )
                 }
@@ -148,5 +169,44 @@ fun SearchScreen(
                 }
             }
         }
+    }
+
+    // Modals & Dialogs
+    propertiesVideo?.let { video ->
+        VideoPropertiesDialog(
+            video = video,
+            onDismiss = { propertiesVideo = null }
+        )
+    }
+
+    renameVideoTarget?.let { video ->
+        RenameVideoDialog(
+            video = video,
+            onRename = { onRenameVideo(video, it) },
+            onDismiss = { renameVideoTarget = null }
+        )
+    }
+
+    deleteVideoTarget?.let { video ->
+        DeleteConfirmDialog(
+            video = video,
+            onDelete = { onDeleteVideo(video) },
+            onDismiss = { deleteVideoTarget = null }
+        )
+    }
+
+    playlistVideoTarget?.let { video ->
+        AddToPlaylistDialog(
+            video = video,
+            playlists = playlists,
+            onSelectPlaylist = { playlistId ->
+                onAddToPlaylist(playlistId, video)
+                playlistVideoTarget = null
+            },
+            onCreatePlaylist = { name ->
+                onCreatePlaylist(name)
+            },
+            onDismiss = { playlistVideoTarget = null }
+        )
     }
 }

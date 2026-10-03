@@ -32,4 +32,6 @@ interface SettingsRepository {
     suspend fun updateHardwareAccelerationMode(mode: String)
     suspend fun updateDialogueBoost(enabled: Boolean)
     suspend fun updateMatchDisplayRefreshRate(enabled: Boolean)
+    suspend fun toggleFavoriteFolder(folderPath: String)
+    suspend fun setFavoriteFolders(paths: Set<String>)
 }

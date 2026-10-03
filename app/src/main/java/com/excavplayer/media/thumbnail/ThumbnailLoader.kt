@@ -199,6 +199,23 @@ class ThumbnailLoader @Inject constructor(
         }
     }
 
+    fun evictThumbnail(uriString: String) {
+        listOf(
+            buildCacheKey(uriString, 120, 90),
+            buildCacheKey(uriString, 240, 160),
+            buildCacheKey(uriString, 360, 240),
+            buildCacheKey(uriString, 480, 320)
+        ).forEach { key ->
+            memoryCache.remove(key)
+            runCatching {
+                val file = getDiskFileForKey(key)
+                if (file.exists()) {
+                    file.delete()
+                }
+            }
+        }
+    }
+
     fun clearCache() {
         memoryCache.evictAll()
         inFlightRequests.clear()
