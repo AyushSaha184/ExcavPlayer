@@ -70,6 +70,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.StateFlow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -693,7 +694,8 @@ fun PlayerScreen(
         }
 
         FloatingSkipChapterPill(
-            state = state,
+            chapters = state.chapters,
+            playbackPositionFlow = vm.player.playbackPosition,
             isCompact = isCompact || isVeryCompact,
             onSeekTo = { vm.player.seekTo(it) },
             onHud = { text, icon ->
@@ -708,7 +710,9 @@ fun PlayerScreen(
 
         // Floating Next Episode Pill (isolated state read)
         FloatingNextEpisodePill(
-            state = state,
+            chapters = state.chapters,
+            playbackStatus = state.playback.playbackStatus,
+            playbackPositionFlow = vm.player.playbackPosition,
             queue = queue,
             isVeryCompact = isVeryCompact,
             isCompact = isCompact,
@@ -1266,8 +1270,7 @@ private fun PlayerControlsOverlay(
             ) {
                 // Bottom Progress Bar and Clean Action Buttons (isolated timeline scrubber)
                 PlayerTimelineSection(
-                    positionMs = state.playback.currentPositionMs,
-                    durationMs = state.playback.durationMs,
+                    playbackPositionFlow = player.playbackPosition,
                     timeTextSize = timelineTextSize,
                     onSeek = {
                         onInteraction()
@@ -1535,7 +1538,7 @@ private fun SheetContainer(
                     PlayerSheet.SPEED -> SpeedSheet(state, vm.player, onDismiss)
                     PlayerSheet.CHAPTERS -> ChaptersSheet(
                         chapters = state.chapters,
-                        currentPositionMs = state.playback.currentPositionMs,
+                        playbackPositionFlow = vm.player.playbackPosition,
                         onSelectChapter = {
                             vm.player.seekTo(it.startTimeMs)
                             onDismiss()
@@ -1555,10 +1558,13 @@ private fun SheetContainer(
 @Composable
 private fun ChaptersSheet(
     chapters: List<MediaChapter>,
-    currentPositionMs: Long,
+    playbackPositionFlow: StateFlow<PlaybackPosition>,
     onSelectChapter: (MediaChapter) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val posState by playbackPositionFlow.collectAsStateWithLifecycle()
+    val currentPositionMs = posState.currentPositionMs
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1902,15 +1908,17 @@ private fun SpeedSheet(
 
 @Composable
 fun FloatingSkipChapterPill(
-    state: PlayerState,
+    chapters: List<MediaChapter>,
+    playbackPositionFlow: StateFlow<PlaybackPosition>,
     isCompact: Boolean = false,
     onSeekTo: (Long) -> Unit,
     onHud: (String, ImageVector) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val curPos = state.playback.currentPositionMs
-    val activeChapter = remember(state.chapters, curPos) {
-        state.chapters.find { curPos >= it.startTimeMs && curPos < it.endTimeMs }
+    val posState by playbackPositionFlow.collectAsStateWithLifecycle()
+    val curPos = posState.currentPositionMs
+    val activeChapter = remember(chapters, curPos) {
+        chapters.find { curPos >= it.startTimeMs && curPos < it.endTimeMs }
     }
     val isSkippableChapter = activeChapter?.let { it.type == ChapterType.INTRO || it.type == ChapterType.OUTRO || it.type == ChapterType.RECAP } == true
 
@@ -1975,7 +1983,9 @@ fun FloatingSkipChapterPill(
 
 @Composable
 fun FloatingNextEpisodePill(
-    state: PlayerState,
+    chapters: List<MediaChapter>,
+    playbackStatus: PlaybackStatus,
+    playbackPositionFlow: StateFlow<PlaybackPosition>,
     queue: com.excavplayer.player.queue.QueueState,
     isVeryCompact: Boolean = false,
     isCompact: Boolean = false,
@@ -1985,13 +1995,14 @@ fun FloatingNextEpisodePill(
     val hasNextInQueue = queue.currentIndex in 0 until (queue.items.size - 1)
     if (!hasNextInQueue) return
 
-    val curPos = state.playback.currentPositionMs
-    val duration = state.playback.durationMs
+    val posState by playbackPositionFlow.collectAsStateWithLifecycle()
+    val curPos = posState.currentPositionMs
+    val duration = posState.durationMs
     val remainingMs = duration - curPos
     val isNearEnd = duration > 20_000 && remainingMs in 0L..45_000L
-    val isAtEnd = state.playback.playbackStatus == PlaybackStatus.ENDED
-    val activeChapter = remember(state.chapters, curPos) {
-        state.chapters.find { curPos >= it.startTimeMs && curPos < it.endTimeMs }
+    val isAtEnd = playbackStatus == PlaybackStatus.ENDED
+    val activeChapter = remember(chapters, curPos) {
+        chapters.find { curPos >= it.startTimeMs && curPos < it.endTimeMs }
     }
     val isOutro = activeChapter?.type == ChapterType.OUTRO
     val isVisible = isNearEnd || isAtEnd || isOutro
@@ -2065,14 +2076,14 @@ fun FloatingNextEpisodePill(
 
 @Composable
 fun PlayerTimelineSection(
-    positionMs: Long,
-    durationMs: Long,
+    playbackPositionFlow: StateFlow<PlaybackPosition>,
     onSeek: (Long) -> Unit,
     timeTextSize: androidx.compose.ui.unit.TextUnit = 14.sp,
     modifier: Modifier = Modifier
 ) {
-    val duration = durationMs.coerceAtLeast(0L)
-    val position = positionMs.coerceIn(0L, duration.coerceAtLeast(1L))
+    val posState by playbackPositionFlow.collectAsStateWithLifecycle()
+    val duration = posState.durationMs.coerceAtLeast(0L)
+    val position = posState.currentPositionMs.coerceIn(0L, duration.coerceAtLeast(1L))
 
     Column(modifier = modifier.fillMaxWidth()) {
         Row(

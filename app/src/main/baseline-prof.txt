@@ -1,0 +1,27 @@
+# ExcavPlayer Baseline Profile: App Startup -> Library Grid -> Open Player -> Playback
+HSPLcom/excavplayer/ExcavPlayerApp;->onCreate()V
+HSPLcom/excavplayer/MainActivity;->onCreate(Landroid/os/Bundle;)V
+HSPLcom/excavplayer/MainActivity;->onResume()V
+HSPLcom/excavplayer/ui/navigation/ExcavAppKt;->ExcavApp(Lcom/excavplayer/ui/ExcavViewModel;Lkotlin/jvm/functions/Function0;Landroidx/compose/runtime/Composer;II)V
+HSPLcom/excavplayer/ui/ExcavViewModel;-><init>(Lcom/excavplayer/library/VideoLibrary;Lcom/excavplayer/library/PlaylistManager;Lcom/excavplayer/settings/SettingsManager;Lcom/excavplayer/player/core/PlayerManager;Lcom/excavplayer/player/queue/PlaybackQueue;Lcom/excavplayer/update/AppUpdateManager;Lcom/excavplayer/core/logging/AppLogger;)V
+HSPLcom/excavplayer/library/VideoLibrary;->observeVideos()Lkotlinx/coroutines/flow/Flow;
+HSPLcom/excavplayer/library/VideoLibrary;->observeContinueWatching(F)Lkotlinx/coroutines/flow/Flow;
+HSPLcom/excavplayer/library/VideoLibrary;->observeFolders()Lkotlinx/coroutines/flow/Flow;
+HSPLcom/excavplayer/library/VideoLibrary;->observeFavorites()Lkotlinx/coroutines/flow/Flow;
+HSPLcom/excavplayer/library/VideoLibrary;->observePagedVideos()Lkotlinx/coroutines/flow/Flow;
+HSPLcom/excavplayer/data/repository/VideoRepositoryImpl;->observeVideos()Lkotlinx/coroutines/flow/Flow;
+HSPLcom/excavplayer/data/repository/VideoRepositoryImpl;->observePagedVideos()Lkotlinx/coroutines/flow/Flow;
+HSPLcom/excavplayer/data/database/dao/VideoDao_Impl;-><init>(Landroidx/room/RoomDatabase;)V
+HSPLcom/excavplayer/data/database/dao/VideoDao_Impl;->observeAllVideosWithMetadata()Lkotlinx/coroutines/flow/Flow;
+HSPLcom/excavplayer/data/database/dao/VideoDao_Impl;->pagingSourceAllVideos()Landroidx/paging/PagingSource;
+HSPLcom/excavplayer/ui/home/HomeScreenKt;->HomeScreen(Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lkotlinx/coroutines/flow/Flow;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Landroidx/compose/foundation/lazy/grid/LazyGridState;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Landroidx/compose/runtime/Composer;III)V
+HSPLcom/excavplayer/ui/folders/FoldersScreenKt;->FoldersScreen(Ljava/util/List;Lcom/excavplayer/domain/model/Folder;Ljava/util/List;Ljava/util/List;Ljava/util/Map;Ljava/util/List;Ljava/util/List;Ljava/util/List;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function2;Landroidx/compose/foundation/lazy/grid/LazyGridState;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Landroidx/compose/runtime/Composer;IIII)V
+HSPLcom/excavplayer/ui/player/PlayerScreenKt;->PlayerScreen(Lcom/excavplayer/ui/ExcavViewModel;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Landroidx/compose/runtime/Composer;I)V
+HSPLcom/excavplayer/player/core/PlayerManager;->play(Lcom/excavplayer/domain/model/Video;Ljava/lang/Long;)Ljava/lang/Object;
+HSPLcom/excavplayer/player/core/PlayerManager;->pause()V
+HSPLcom/excavplayer/player/core/PlayerManager;->resume()V
+HSPLcom/excavplayer/player/core/PlayerManager;->seekTo(J)V
+HSPLcom/excavplayer/ui/player/PlayerScreenKt;->PlayerTimelineSection(Lkotlinx/coroutines/flow/StateFlow;JLkotlin/jvm/functions/Function1;Landroidx/compose/ui/unit/TextUnit;Landroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;II)V
+HSPLcom/excavplayer/media/thumbnail/ThumbnailLoader;->loadThumbnail(Ljava/lang/String;II)Lkotlinx/coroutines/flow/Flow;
+HSPLcom/excavplayer/ui/components/VideoCardsKt;->ListVideoRow(Lcom/excavplayer/domain/model/Video;ZZLkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Landroidx/compose/ui/Modifier;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;II)V
+HSPLcom/excavplayer/ui/components/FolderCardsKt;->FolderCard(Lcom/excavplayer/domain/model/Folder;Ljava/util/List;ZZLkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Landroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;II)V

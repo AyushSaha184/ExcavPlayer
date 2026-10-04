@@ -156,6 +156,7 @@ fun ExcavApp(
                                     continueWatching = if (settings.continueWatchingEnabled) library.continueWatching else emptyList(),
                                     folders = library.folders,
                                     videos = library.videos,
+                                    pagedVideos = vm.pagedVideos,
                                     playlists = library.playlists,
                                     favorites = library.favorites,
                                     groups = library.groups,

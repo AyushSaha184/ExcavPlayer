@@ -24,6 +24,8 @@ class VideoLibrary @Inject constructor(
 
     fun observeVideos(): Flow<List<Video>> = videoRepository.observeVideos()
 
+    fun observePagedVideos(): Flow<androidx.paging.PagingData<Video>> = videoRepository.observePagedVideos()
+
     fun observeFolders(): Flow<List<Folder>> = videoRepository.observeFolders()
 
     fun observeVideosInFolder(folderPath: String): Flow<List<Video>> = videoRepository.observeVideosInFolder(folderPath)

@@ -1,5 +1,6 @@
 package com.excavplayer.domain.repository
 
+import androidx.paging.PagingData
 import com.excavplayer.core.result.ExcavResult
 import com.excavplayer.domain.model.Folder
 import com.excavplayer.domain.model.MediaAvailability
@@ -8,6 +9,7 @@ import kotlinx.coroutines.flow.Flow
 
 interface VideoRepository {
     fun observeVideos(): Flow<List<Video>>
+    fun observePagedVideos(): Flow<PagingData<Video>>
     fun observeVideoById(id: String): Flow<Video?>
     suspend fun getVideoById(id: String): Video?
     fun observeFolders(): Flow<List<Folder>>

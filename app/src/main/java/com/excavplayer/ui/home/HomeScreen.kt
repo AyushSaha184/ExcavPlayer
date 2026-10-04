@@ -76,6 +76,7 @@ fun HomeScreen(
     continueWatching: List<Video>,
     folders: List<Folder>,
     videos: List<Video> = emptyList(),
+    pagedVideos: kotlinx.coroutines.flow.Flow<androidx.paging.PagingData<Video>>? = null,
     playlists: List<Playlist>,
     favorites: List<Video>,
     groups: List<VideoGroup> = emptyList(),

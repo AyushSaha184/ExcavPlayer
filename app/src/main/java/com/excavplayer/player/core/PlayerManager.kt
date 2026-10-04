@@ -23,6 +23,7 @@ import com.excavplayer.domain.model.UserSettings
 import com.excavplayer.core.coroutine.DispatcherProvider
 import com.excavplayer.core.logging.AppLogger
 import com.excavplayer.domain.model.PlaybackError
+import com.excavplayer.domain.model.PlaybackPosition
 import com.excavplayer.domain.model.PlaybackState
 import com.excavplayer.domain.model.PlaybackStatus
 import com.excavplayer.domain.model.PlayerCommand
@@ -203,6 +204,9 @@ class PlayerManager @Inject constructor(
     private val _state = MutableStateFlow(PlayerState())
     override val state: StateFlow<PlayerState> = _state.asStateFlow()
 
+    private val _playbackPosition = MutableStateFlow(PlaybackPosition())
+    override val playbackPosition: StateFlow<PlaybackPosition> = _playbackPosition.asStateFlow()
+
     private var pausedByHeadset = false
 
     private val becomingNoisyReceiver = AudioBecomingNoisyReceiver(
@@ -275,25 +279,24 @@ class PlayerManager @Inject constructor(
 
     private fun startPositionTicker() {
         playerScope.launch {
+            var lastSecond = -1L
             while (isActive) {
                 if (exoPlayer.isPlaying) {
                     val pos = exoPlayer.currentPosition.coerceAtLeast(0L)
                     val dur = exoPlayer.duration.coerceAtLeast(0L)
                     val buffered = exoPlayer.bufferedPosition.coerceAtLeast(0L)
+                    val currentSec = pos / 1000L
 
-                    _state.update { current ->
-                        current.copy(
-                            playback = current.playback.copy(
-                                currentPositionMs = pos,
-                                durationMs = dur,
-                                bufferedPositionMs = buffered,
-                                isPlaying = true,
-                                lastUpdatedTimestamp = System.currentTimeMillis()
-                            )
+                    if (currentSec != lastSecond || dur != _playbackPosition.value.durationMs) {
+                        lastSecond = currentSec
+                        _playbackPosition.value = PlaybackPosition(
+                            currentPositionMs = pos,
+                            durationMs = dur,
+                            bufferedPositionMs = buffered
                         )
                     }
                 }
-                delay(300L)
+                delay(500L)
             }
         }
     }
@@ -406,9 +409,7 @@ class PlayerManager @Inject constructor(
             exoPlayer.prepare()
         }
         exoPlayer.seekTo(target)
-        _state.update {
-            it.copy(playback = it.playback.copy(currentPositionMs = target))
-        }
+        _playbackPosition.value = _playbackPosition.value.copy(currentPositionMs = target, durationMs = dur)
     }
 
     override fun seekForward(offsetMs: Long) {
@@ -760,11 +761,27 @@ class PlayerManager @Inject constructor(
                 it.copy(playback = it.playback.copy(isPlaying = isPlaying))
             }
             if (isPlaying) {
-                persistenceManager.startPeriodicSave(playerScope, { _state.value.playback }, { _state.value.currentVideo })
+                persistenceManager.startPeriodicSave(
+                    playerScope,
+                    {
+                        _state.value.playback.copy(
+                            currentPositionMs = _playbackPosition.value.currentPositionMs,
+                            durationMs = _playbackPosition.value.durationMs,
+                            bufferedPositionMs = _playbackPosition.value.bufferedPositionMs
+                        )
+                    },
+                    { _state.value.currentVideo }
+                )
             } else {
                 persistenceManager.stopPeriodicSave()
                 playerScope.launch {
-                    persistenceManager.saveImmediate(_state.value.playback, _state.value.currentVideo)
+                    persistenceManager.saveImmediate(
+                        _state.value.playback.copy(
+                            currentPositionMs = _playbackPosition.value.currentPositionMs,
+                            durationMs = _playbackPosition.value.durationMs
+                        ),
+                        _state.value.currentVideo
+                    )
                 }
             }
         }

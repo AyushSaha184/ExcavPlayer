@@ -23,6 +23,10 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.io.File
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.PagingData
+import androidx.paging.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -43,6 +47,19 @@ class VideoRepositoryImpl @Inject constructor(
     override fun observeVideos(): Flow<List<Video>> {
         return videoDao.observeAllVideosWithMetadata()
             .map { list -> list.map { it.toDomain() } }
+            .flowOn(dispatchers.io)
+    }
+
+    override fun observePagedVideos(): Flow<PagingData<Video>> {
+        return Pager(
+            config = PagingConfig(
+                pageSize = 40,
+                prefetchDistance = 20,
+                enablePlaceholders = false
+            ),
+            pagingSourceFactory = { videoDao.pagingSourceAllVideos() }
+        ).flow
+            .map { pagingData -> pagingData.map { it.toDomain() } }
             .flowOn(dispatchers.io)
     }
 

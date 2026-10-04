@@ -29,6 +29,18 @@ interface VideoDao {
         FROM videos v
         LEFT JOIN favorites f ON v.id = f.video_id
         LEFT JOIN playback_states p ON v.id = p.video_id
+        WHERE v.availability = 'AVAILABLE'
+        ORDER BY v.date_added DESC
+    """)
+    fun pagingSourceAllVideos(): androidx.paging.PagingSource<Int, VideoWithMetadataTuple>
+
+    @Query("""
+        SELECT v.*, 
+               (f.video_id IS NOT NULL) AS is_favorite,
+               p.current_position_ms AS resume_position_ms
+        FROM videos v
+        LEFT JOIN favorites f ON v.id = f.video_id
+        LEFT JOIN playback_states p ON v.id = p.video_id
         WHERE v.id = :id AND v.availability = 'AVAILABLE'
     """)
     fun observeVideoById(id: String): Flow<VideoWithMetadataTuple?>

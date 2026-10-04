@@ -29,6 +29,8 @@ import kotlinx.coroutines.launch
 import com.excavplayer.update.AppUpdateManager
 import com.excavplayer.update.GitHubAsset
 import com.excavplayer.update.UpdateState
+import androidx.paging.PagingData
+import androidx.paging.cachedIn
 import java.io.File
 import javax.inject.Inject
 
@@ -298,6 +300,9 @@ class ExcavViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, UserSettings())
 
     val updateState: StateFlow<UpdateState> = updateManager.updateState
+
+    val pagedVideos: kotlinx.coroutines.flow.Flow<PagingData<Video>> = library.observePagedVideos()
+        .cachedIn(viewModelScope)
 
     private val searchResults = query.flatMapLatest { value ->
         if (value.isBlank()) flowOf(emptyList()) else library.searchVideos(value)

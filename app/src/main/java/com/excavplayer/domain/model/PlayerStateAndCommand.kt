@@ -1,5 +1,11 @@
 package com.excavplayer.domain.model
 
+data class PlaybackPosition(
+    val currentPositionMs: Long = 0L,
+    val durationMs: Long = 0L,
+    val bufferedPositionMs: Long = 0L
+)
+
 data class PlayerState(
     val currentVideo: Video? = null,
     val playback: PlaybackState = PlaybackState(),

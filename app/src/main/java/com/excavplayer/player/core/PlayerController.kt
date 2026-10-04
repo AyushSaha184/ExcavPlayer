@@ -1,6 +1,7 @@
 package com.excavplayer.player.core
 
 import androidx.media3.common.Player
+import com.excavplayer.domain.model.PlaybackPosition
 import com.excavplayer.domain.model.PlayerCommand
 import com.excavplayer.domain.model.PlayerState
 import com.excavplayer.domain.model.RepeatMode
@@ -9,6 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 
 interface PlayerController {
     val state: StateFlow<PlayerState>
+    val playbackPosition: StateFlow<PlaybackPosition>
     val exoPlayer: Player
 
     suspend fun play(video: Video, startPositionMs: Long? = null)
