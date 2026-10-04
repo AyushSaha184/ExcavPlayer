@@ -212,6 +212,22 @@ fun FoldersScreen(
             } else {
                 // Selected Folder View: Display Videos directly in this directory without subfolder grouping
                 val hazeState = LocalHazeState.current
+                val currentNorm = remember(currentFolder.path) { normalizePath(currentFolder.path) }
+                val fallbackVids = remember(currentFolder, folderVideosMap, videos) {
+                    val fromMap = folderVideosMap[currentNorm] ?: folderVideosMap[currentFolder.name.lowercase()].orEmpty()
+                    if (fromMap.isNotEmpty()) {
+                        fromMap
+                    } else {
+                        videos.filter {
+                            val vNorm = normalizePath(it.folderPath)
+                            vNorm == currentNorm || it.folderPath.equals(currentFolder.path, ignoreCase = true) || it.folderName.equals(currentFolder.name, ignoreCase = true)
+                        }
+                    }
+                }
+                val effectiveVideos = if (folderVideos.isNotEmpty()) folderVideos else fallbackVids
+                val folderMeta = folders.find { normalizePath(it.path) == currentNorm || it.path == currentFolder.path }
+                val expectedCount = folderMeta?.videoCount ?: currentFolder.videoCount
+
                 LazyVerticalGrid(
                     state = gridState,
                     columns = GridCells.Adaptive(160.dp),
@@ -222,22 +238,24 @@ fun FoldersScreen(
                         .fillMaxSize()
                         .hazeSource(state = hazeState)
                 ) {
-                    if (folderVideos.isEmpty()) {
-                        item(span = { GridItemSpan(maxLineSpan) }) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 60.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                EmptyState(
-                                    icon = Icons.Default.FolderOff,
-                                    label = stringResource(R.string.empty_videos)
-                                )
+                    if (effectiveVideos.isEmpty()) {
+                        if (expectedCount == 0) {
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 60.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    EmptyState(
+                                        icon = Icons.Default.FolderOff,
+                                        label = stringResource(R.string.empty_folder)
+                                    )
+                                }
                             }
                         }
                     } else {
-                        gridItems(folderVideos, key = { "video_${it.id}" }, span = { GridItemSpan(maxLineSpan) }, contentType = { "video_row" }) { video ->
+                        gridItems(effectiveVideos, key = { "video_${it.id}" }, span = { GridItemSpan(maxLineSpan) }, contentType = { "video_row" }) { video ->
                             val isVideoSelected = video.id in selectedVideoIds
                             ListVideoRow(
                                 video = video,
@@ -251,7 +269,7 @@ fun FoldersScreen(
                                             selectedVideoIds + video.id
                                         }
                                     } else {
-                                        onPlay(video, folderVideos)
+                                        onPlay(video, effectiveVideos)
                                     }
                                 },
                                 onLongClick = {

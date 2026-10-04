@@ -353,6 +353,15 @@ class ExcavViewModel @Inject constructor(
 
         val favoriteFolders = folders.filter { settings.favoriteFolderPaths.contains(it.path) }
 
+        val resolvedFolderVideos = if (currentFolderVideos.isNotEmpty()) {
+            currentFolderVideos
+        } else if (currentFolder != null) {
+            val norm = normalizeFolderPath(currentFolder.path)
+            folderMap[norm] ?: folderMap[currentFolder.name.lowercase()].orEmpty()
+        } else {
+            emptyList()
+        }
+
         LibraryUiState(
             videos = videos,
             continueWatching = continueWatching,
@@ -365,7 +374,7 @@ class ExcavViewModel @Inject constructor(
             searchQuery = searchQuery,
             searchResults = searchResultsList,
             selectedFolder = currentFolder,
-            folderVideos = currentFolderVideos,
+            folderVideos = resolvedFolderVideos,
             loading = false
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryUiState())

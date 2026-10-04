@@ -105,8 +105,9 @@ class VideoRepositoryImpl @Inject constructor(
 
             val uri = Uri.parse(video.video.uri)
             var storageDeleted = false
+            val deletedPaths = mutableListOf<String>()
 
-            // 1. If it's a SAF document or tree URI, attempt DocumentsContract deletion
+            // 1. SAF document or tree URI deletion
             if (DocumentsContract.isDocumentUri(context, uri) ||
                 video.video.sourceType == MediaSourceType.LOCAL_DOCUMENT.name ||
                 video.video.sourceType == MediaSourceType.LOCAL_TREE.name
@@ -121,61 +122,56 @@ class VideoRepositoryImpl @Inject constructor(
                 }
             }
 
-            // 2. Direct File deletion if file path exists on disk
-            if (!storageDeleted) {
-                val directFiles = mutableListOf<File>()
-                if (uri.scheme == "file" && !uri.path.isNullOrBlank()) {
-                    directFiles.add(File(uri.path!!))
-                }
-                if (video.video.folderPath.isNotBlank() && video.video.displayName.isNotBlank()) {
-                    directFiles.add(File(video.video.folderPath, video.video.displayName))
-                }
-                if (video.video.relativePath.isNotBlank() && video.video.displayName.isNotBlank()) {
-                    val cleanRel = video.video.relativePath.trim().trim('/')
-                    directFiles.add(File("/storage/emulated/0/$cleanRel", video.video.displayName))
-                }
-
-                for (targetFile in directFiles) {
-                    if (targetFile.exists()) {
-                        runCatching {
-                            if (targetFile.delete()) {
-                                storageDeleted = true
-                                logger.i(TAG, "Deleted physical file from disk: ${targetFile.absolutePath}")
-                            }
-                        }.onFailure { e ->
-                            logger.w(TAG, "Direct File.delete() failed for ${targetFile.absolutePath}: ${e.message}")
-                        }
-                    }
-                }
+            // 2. Gather all direct file path candidates
+            val directFiles = mutableSetOf<File>()
+            if (uri.scheme == "file" && !uri.path.isNullOrBlank()) {
+                directFiles.add(File(uri.path!!))
+            }
+            if (video.video.folderPath.isNotBlank() && video.video.displayName.isNotBlank()) {
+                directFiles.add(File(video.video.folderPath, video.video.displayName))
+            }
+            if (video.video.relativePath.isNotBlank() && video.video.displayName.isNotBlank()) {
+                val cleanRel = video.video.relativePath.trim().trim('/')
+                directFiles.add(File("/storage/emulated/0/$cleanRel", video.video.displayName))
             }
 
-            // 3. If content URI, resolve underlying MediaStore DATA column and delete file if accessible
-            if (!storageDeleted && uri.scheme == ContentResolver.SCHEME_CONTENT) {
+            // Resolve DATA column from MediaStore if content URI
+            if (uri.scheme == ContentResolver.SCHEME_CONTENT) {
                 runCatching {
                     @Suppress("DEPRECATION")
                     val projection = arrayOf(MediaStore.Video.Media.DATA)
                     context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
                         if (cursor.moveToFirst()) {
-                            @Suppress("DEPRECATION")
                             val dataIdx = cursor.getColumnIndex(MediaStore.Video.Media.DATA)
                             if (dataIdx != -1 && !cursor.isNull(dataIdx)) {
                                 val filePath = cursor.getString(dataIdx)
                                 if (!filePath.isNullOrBlank()) {
-                                    val f = File(filePath)
-                                    if (f.exists() && f.delete()) {
-                                        storageDeleted = true
-                                        logger.i(TAG, "Deleted physical file resolved from MediaStore DATA: $filePath")
-                                    }
+                                    directFiles.add(File(filePath))
                                 }
                             }
                         }
                     }
                 }.onFailure { e ->
-                    logger.w(TAG, "Failed resolving and deleting DATA column path for $uri: ${e.message}")
+                    logger.w(TAG, "Query DATA column failed for $uri: ${e.message}")
                 }
             }
 
-            // 4. Delete via ContentResolver for MediaStore content URIs
+            // Attempt direct File deletion on all candidate paths
+            for (targetFile in directFiles) {
+                if (targetFile.exists()) {
+                    runCatching {
+                        if (targetFile.delete()) {
+                            storageDeleted = true
+                            deletedPaths.add(targetFile.absolutePath)
+                            logger.i(TAG, "Deleted physical file from disk: ${targetFile.absolutePath}")
+                        }
+                    }.onFailure { e ->
+                        logger.w(TAG, "Direct File.delete() failed for ${targetFile.absolutePath}: ${e.message}")
+                    }
+                }
+            }
+
+            // 3. Delete via ContentResolver for MediaStore content URIs
             if (uri.scheme == ContentResolver.SCHEME_CONTENT) {
                 runCatching {
                     val rows = context.contentResolver.delete(uri, null, null)
@@ -184,7 +180,36 @@ class VideoRepositoryImpl @Inject constructor(
                         logger.i(TAG, "Deleted MediaStore content URI: $uri (rows=$rows)")
                     }
                 }.onFailure { e ->
-                    logger.w(TAG, "ContentResolver could not delete URI directly: ${e.message}")
+                    logger.w(TAG, "ContentResolver delete failed for URI $uri: ${e.message}")
+                }
+
+                if (videoId.startsWith("ms_")) {
+                    val msId = videoId.removePrefix("ms_")
+                    runCatching {
+                        val rows = context.contentResolver.delete(
+                            MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                            "${MediaStore.Video.Media._ID} = ?",
+                            arrayOf(msId)
+                        )
+                        if (rows > 0) {
+                            storageDeleted = true
+                            logger.i(TAG, "Deleted MediaStore row for ID $msId (rows=$rows)")
+                        }
+                    }.onFailure { e ->
+                        logger.w(TAG, "ContentResolver delete by ID failed for $msId: ${e.message}")
+                    }
+                }
+            }
+
+            // 4. Trigger MediaScanner to remove deleted paths from MediaStore index immediately
+            if (deletedPaths.isNotEmpty()) {
+                runCatching {
+                    android.media.MediaScannerConnection.scanFile(
+                        context,
+                        deletedPaths.toTypedArray(),
+                        null,
+                        null
+                    )
                 }
             }
 
@@ -193,7 +218,16 @@ class VideoRepositoryImpl @Inject constructor(
                 thumbnailLoader.evictThumbnail(video.video.uri)
             }
 
-            // 6. Remove from local Room database
+            // 6. Check if file still exists on disk
+            val stillExists = directFiles.any { it.exists() }
+            if (stillExists && !storageDeleted) {
+                logger.w(TAG, "File could not be deleted from physical storage: ${video.video.displayName}")
+                return@withContext ExcavResult.Error(
+                    java.io.IOException("Could not delete video file from device storage. Please check storage permissions.")
+                )
+            }
+
+            // 7. Remove from local Room database
             videoDao.deleteVideo(videoId)
             logger.i(TAG, "Deleted video from repository & storage: $videoId (storageDeleted=$storageDeleted)")
             ExcavResult.Success(Unit)

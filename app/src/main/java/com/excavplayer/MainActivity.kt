@@ -125,6 +125,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun checkHasStoragePermission(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (android.os.Environment.isExternalStorageManager()) return true
+        }
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED ||
             (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == PackageManager.PERMISSION_GRANTED)
@@ -139,6 +142,9 @@ class MainActivity : ComponentActivity() {
             permissions.add(Manifest.permission.READ_MEDIA_VIDEO)
         } else {
             permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
+                permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
         }
 
         val missing = permissions.filter {

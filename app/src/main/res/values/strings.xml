@@ -30,6 +30,7 @@
     <string name="empty_continue">Nothing to continue watching</string>
     <string name="empty_folders">No folders found</string>
     <string name="empty_videos">No videos found on device</string>
+    <string name="empty_folder">No videos in this folder</string>
     <string name="empty_playlists">No playlists created yet</string>
     <string name="empty_favorites">No favorite videos yet</string>
     <string name="empty_search">No matching videos found</string>

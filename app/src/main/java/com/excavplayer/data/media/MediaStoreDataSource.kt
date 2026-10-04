@@ -54,10 +54,9 @@ class MediaStoreDataSource @Inject constructor(
             baseProjection.add(MediaStore.Video.Media.RELATIVE_PATH)
             baseProjection.add(MediaStore.Video.Media.ORIENTATION)
             baseProjection.add(MediaStore.Video.Media.BITRATE)
-        } else {
-            @Suppress("DEPRECATION")
-            baseProjection.add(MediaStore.Video.Media.DATA)
         }
+        @Suppress("DEPRECATION")
+        baseProjection.add(MediaStore.Video.Media.DATA)
 
         return baseProjection.toTypedArray()
     }
@@ -140,10 +139,10 @@ class MediaStoreDataSource @Inject constructor(
             cursor.getColumnIndex(MediaStore.Video.Media.BITRATE)
         } else -1
 
-        val dataColumn = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+        val dataColumn = try {
             @Suppress("DEPRECATION")
             cursor.getColumnIndex(MediaStore.Video.Media.DATA)
-        } else -1
+        } catch (_: Exception) { -1 }
 
         while (cursor.moveToNext()) {
             val mediaStoreId = cursor.getLong(idColumn)
@@ -194,18 +193,22 @@ class MediaStoreDataSource @Inject constructor(
             var folderName = ""
             var folderPath = ""
 
-            if (relativePathColumn != -1 && !cursor.isNull(relativePathColumn)) {
+            if (dataColumn != -1 && !cursor.isNull(dataColumn)) {
+                val data = cursor.getString(dataColumn) ?: ""
+                if (data.isNotBlank()) {
+                    val parentFile = File(data).parentFile
+                    if (parentFile != null) {
+                        folderPath = parentFile.absolutePath
+                        folderName = parentFile.name
+                    }
+                }
+            }
+
+            if (folderPath.isEmpty() && relativePathColumn != -1 && !cursor.isNull(relativePathColumn)) {
                 relativePath = cursor.getString(relativePathColumn) ?: ""
                 val cleanRel = relativePath.trim().trim('/')
                 folderPath = if (cleanRel.isNotEmpty()) "/storage/emulated/0/$cleanRel" else "/storage/emulated/0"
                 folderName = cleanRel.substringAfterLast('/', cleanRel.ifEmpty { "Internal Storage" })
-            } else if (dataColumn != -1 && !cursor.isNull(dataColumn)) {
-                val data = cursor.getString(dataColumn) ?: ""
-                val parentFile = File(data).parentFile
-                if (parentFile != null) {
-                    folderPath = parentFile.absolutePath
-                    folderName = parentFile.name
-                }
             }
 
             if (folderName.isEmpty() && bucketNameColumn != -1 && !cursor.isNull(bucketNameColumn)) {
