@@ -512,26 +512,15 @@ fun PlayerScreen(
 
                             if (dragMode == DragClassifierMode.HORIZONTAL_SEEK) {
                                 controlsVisible = true
-                                // Lower-medium sensitivity:
-                                // Base span = 120s, scaled moderately with duration: clamp(duration / 3.5, 90s, 300s)
-                                val maxSwipeSpan = (currentDurationMs / 3.5f).coerceIn(90_000f, 300_000f)
+                                // Medium sensitivity:
+                                val maxSwipeSpan = (currentDurationMs / 2.2f).coerceIn(60_000f, 180_000f)
                                 val deltaX = change.position.x - startTouch.x
                                 val targetMs = (originPositionMs + (deltaX / size.width) * maxSwipeSpan)
                                     .toLong()
                                     .coerceIn(0L, currentDurationMs)
 
                                 scrubState = ScrubState(targetMs, ScrubSource.SWIPE)
-
-                                val deltaMs = targetMs - originPositionMs
-                                val deltaSec = (deltaMs / 1000L).toInt()
-                                val sign = if (deltaSec >= 0) "+" else "-"
-                                val absDeltaFormatted = formatDuration(Math.abs(deltaMs))
-                                val targetFormatted = formatDuration(targetMs)
-
-                                gestureHudText = "$sign$absDeltaFormatted → $targetFormatted"
-                                gestureHudProgress = if (currentDurationMs > 0L) targetMs.toFloat() / currentDurationMs.toFloat() else 0f
-                                gestureHudIcon = if (deltaMs >= 0) Icons.Default.FastForward else Icons.Default.FastRewind
-                                gestureHudIsBoost = false
+                                // Do not set gestureHudText for seek so middle box does not show
                             } else if (dragMode == DragClassifierMode.VERTICAL) {
                                 val isLeft = startTouch.x < size.width / 2
                                 if (isLeft && settings.brightnessGestureEnabled) {
@@ -2202,7 +2191,6 @@ fun SeekbarPreviewPopup(
         if (cached != null) {
             previewBitmap = cached
         } else {
-            delay(80L) // Debounce settled drag
             val uri = android.net.Uri.parse(video.uri)
             val bmp = previewLoader.loadPreview(video.id, uri, target, durationMs)
             previewBitmap = bmp
@@ -2214,14 +2202,14 @@ fun SeekbarPreviewPopup(
 
     AnimatedVisibility(
         visible = scrubState != null && durationMs > 0L,
-        enter = fadeIn(tween(120)) + scaleIn(initialScale = 0.85f, animationSpec = spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMedium)),
-        exit = fadeOut(tween(120)) + scaleOut(targetScale = 0.85f, animationSpec = tween(120)),
+        enter = fadeIn(tween(100)) + scaleIn(initialScale = 0.88f, animationSpec = spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMedium)),
+        exit = fadeOut(tween(100)) + scaleOut(targetScale = 0.88f, animationSpec = tween(100)),
         modifier = modifier.fillMaxWidth()
     ) {
         BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
             val totalWidth = maxWidth
-            val popupWidth = if (isVeryCompact) 120.dp else if (isCompact) 145.dp else 170.dp
-            val popupHeight = if (isVeryCompact) 70.dp else if (isCompact) 85.dp else 100.dp
+            val popupWidth = if (isVeryCompact) 130.dp else if (isCompact) 155.dp else 180.dp
+            val popupHeight = if (isVeryCompact) 75.dp else if (isCompact) 88.dp else 102.dp
 
             val scrubFrac = if (durationMs > 0L && scrubState != null) {
                 (scrubState.targetMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)

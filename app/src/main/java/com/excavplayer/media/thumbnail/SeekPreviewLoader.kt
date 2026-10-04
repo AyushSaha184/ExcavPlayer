@@ -29,10 +29,10 @@ class SeekPreviewLoader @Inject constructor(
 
     companion object {
         private const val TAG = "SeekPreviewLoader"
-        const val BUCKET_MS = 10_000L // 10s per storyboard bucket
-        private const val TARGET_WIDTH = 200
-        private const val TARGET_HEIGHT = 112
-        private const val MAX_CACHE_ENTRIES = 64
+        const val BUCKET_MS = 5_000L // 5s per storyboard bucket for granular preview
+        private const val TARGET_WIDTH = 420
+        private const val TARGET_HEIGHT = 236
+        private const val MAX_CACHE_ENTRIES = 120
     }
 
     private val memoryCache = object : LruCache<String, Bitmap>(MAX_CACHE_ENTRIES) {
@@ -46,6 +46,11 @@ class SeekPreviewLoader @Inject constructor(
     // to prevent heavy I/O contention with ExoPlayer on slow storage
     private val retrieverMutex = Mutex()
 
+    // Reusable active retriever session to eliminate ~200ms setup overhead on every scrub tick
+    private var activeRetriever: MediaMetadataRetriever? = null
+    private var activeUriString: String? = null
+    private var activeRotation: Int = 0
+
     init {
         context.registerComponentCallbacks(this)
     }
@@ -54,6 +59,25 @@ class SeekPreviewLoader @Inject constructor(
         val bucket = targetMs.coerceAtLeast(0L) / BUCKET_MS
         val key = "$videoId:$bucket"
         return memoryCache.get(key)
+    }
+
+    private fun getOrCreateRetriever(uri: Uri): MediaMetadataRetriever {
+        val uriStr = uri.toString()
+        if (activeRetriever != null && activeUriString == uriStr) {
+            return activeRetriever!!
+        }
+
+        try {
+            activeRetriever?.release()
+        } catch (_: Throwable) {}
+
+        val newRetriever = MediaMetadataRetriever()
+        newRetriever.setDataSource(context, uri)
+        val rotationStr = newRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)
+        activeRotation = rotationStr?.toIntOrNull() ?: 0
+        activeRetriever = newRetriever
+        activeUriString = uriStr
+        return newRetriever
     }
 
     suspend fun loadPreview(
@@ -76,9 +100,8 @@ class SeekPreviewLoader @Inject constructor(
             memoryCache.get(key)?.let { return@withContext it }
             if (failedKeys.contains(key)) return@withContext null
 
-            val retriever = MediaMetadataRetriever()
             try {
-                retriever.setDataSource(context, uri)
+                val retriever = getOrCreateRetriever(uri)
                 val timeUs = (clampedTarget * 1000L).coerceAtLeast(0L)
 
                 val rawBitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
@@ -101,10 +124,7 @@ class SeekPreviewLoader @Inject constructor(
                 }
 
                 if (rawBitmap != null) {
-                    // Check video rotation metadata (phone video clips 90/180/270 deg)
-                    val rotationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)
-                    val rotation = rotationStr?.toIntOrNull() ?: 0
-
+                    val rotation = activeRotation
                     val rotatedBitmap = if (rotation != 0) {
                         val matrix = Matrix().apply { postRotate(rotation.toFloat()) }
                         val rotated = Bitmap.createBitmap(
@@ -144,11 +164,12 @@ class SeekPreviewLoader @Inject constructor(
             } catch (e: Throwable) {
                 logger.w(TAG, "Failed to extract seek preview at $clampedTarget ms for video $videoId: ${e.message}")
                 failedKeys.add(key)
-                null
-            } finally {
                 try {
-                    retriever.release()
+                    activeRetriever?.release()
                 } catch (_: Throwable) {}
+                activeRetriever = null
+                activeUriString = null
+                null
             }
         }
     }
@@ -177,6 +198,11 @@ class SeekPreviewLoader @Inject constructor(
         if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
             memoryCache.evictAll()
             failedKeys.clear()
+            try {
+                activeRetriever?.release()
+            } catch (_: Throwable) {}
+            activeRetriever = null
+            activeUriString = null
         }
     }
 
@@ -187,5 +213,10 @@ class SeekPreviewLoader @Inject constructor(
     override fun onLowMemory() {
         memoryCache.evictAll()
         failedKeys.clear()
+        try {
+            activeRetriever?.release()
+        } catch (_: Throwable) {}
+        activeRetriever = null
+        activeUriString = null
     }
 }

@@ -114,13 +114,24 @@ fun FoldersScreen(
         } else {
             val match = folders.find {
                 normalizePath(it.path) == targetPath || it.path == targetPath
-            } ?: Folder(
-                name = targetPath.substringAfterLast('/'),
-                path = targetPath,
-                videoCount = 0,
-                totalSizeBytes = 0L
-            )
-            onSelectFolder(match.copy(path = targetPath))
+            }
+            if (match != null) {
+                onSelectFolder(match.copy(path = targetPath))
+            } else {
+                val hasChildren = folders.any { normalizePath(it.path).startsWith("$targetPath/") }
+                if (hasChildren) {
+                    onSelectFolder(
+                        Folder(
+                            name = targetPath.substringAfterLast('/'),
+                            path = targetPath,
+                            videoCount = 0,
+                            totalSizeBytes = 0L
+                        )
+                    )
+                } else {
+                    onSelectFolder(null)
+                }
+            }
         }
     }
 
@@ -130,7 +141,15 @@ fun FoldersScreen(
             if (parentPath.isEmpty() || parentPath == "/storage/emulated" || parentPath == "/storage/emulated/0") {
                 onSelectFolder(null)
             } else {
-                selectPath(parentPath)
+                val hasAncestorVideos = folders.any {
+                    val p = normalizePath(it.path)
+                    p == parentPath || p.startsWith("$parentPath/")
+                }
+                if (hasAncestorVideos) {
+                    selectPath(parentPath)
+                } else {
+                    onSelectFolder(null)
+                }
             }
         }
     }
@@ -150,8 +169,8 @@ fun FoldersScreen(
         AnimatedContent(
             targetState = selectedFolder,
             transitionSpec = {
-                fadeIn(animationSpec = tween(200, easing = FastOutSlowInEasing))
-                    .togetherWith(fadeOut(animationSpec = tween(160, easing = FastOutSlowInEasing)))
+                fadeIn(animationSpec = tween(180, easing = FastOutSlowInEasing))
+                    .togetherWith(fadeOut(animationSpec = tween(140, easing = FastOutSlowInEasing)))
             },
             label = "folderNavigationTransition",
             modifier = Modifier.fillMaxSize()
@@ -210,7 +229,7 @@ fun FoldersScreen(
                     }
                 }
             } else {
-                // Selected Folder View: Display Videos directly in this directory without subfolder grouping
+                // Selected Folder View: Display Videos & Subfolders directly in this directory
                 val hazeState = LocalHazeState.current
                 val currentNorm = remember(currentFolder.path) { normalizePath(currentFolder.path) }
                 val fallbackVids = remember(currentFolder, folderVideosMap, videos) {
@@ -225,11 +244,32 @@ fun FoldersScreen(
                     }
                 }
                 val effectiveVideos = if (folderVideos.isNotEmpty()) folderVideos else fallbackVids
+                val directSubfolders = remember(folders, currentNorm) {
+                    folders.mapNotNull { f ->
+                        val fNorm = normalizePath(f.path)
+                        if (fNorm.startsWith("$currentNorm/") && fNorm != currentNorm) {
+                            val relative = fNorm.removePrefix("$currentNorm/")
+                            val nextSegment = relative.substringBefore('/')
+                            val directSubPath = "$currentNorm/$nextSegment"
+                            val isDirect = !relative.contains('/')
+                            if (isDirect) f else {
+                                Folder(
+                                    name = nextSegment,
+                                    path = directSubPath,
+                                    videoCount = 0,
+                                    totalSizeBytes = 0L
+                                )
+                            }
+                        } else null
+                    }.distinctBy { normalizePath(it.path) }
+                }
+
                 val folderMeta = folders.find { normalizePath(it.path) == currentNorm || it.path == currentFolder.path }
                 val expectedCount = folderMeta?.videoCount ?: currentFolder.videoCount
+                val folderGridState = remember(currentFolder.path) { LazyGridState() }
 
                 LazyVerticalGrid(
-                    state = gridState,
+                    state = folderGridState,
                     columns = GridCells.Adaptive(160.dp),
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = statusBarTop + 96.dp, bottom = 90.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -238,7 +278,52 @@ fun FoldersScreen(
                         .fillMaxSize()
                         .hazeSource(state = hazeState)
                 ) {
-                    if (effectiveVideos.isEmpty()) {
+                    // Render any Subfolders under this directory
+                    if (directSubfolders.isNotEmpty()) {
+                        item(span = { GridItemSpan(maxLineSpan) }, contentType = "subfolders_header") {
+                            SectionTitle("Subfolders")
+                        }
+
+                        gridItems(directSubfolders, key = { "sub_folder_${it.path}" }, contentType = { "folder_card" }) { subFolder ->
+                            val normP = remember(subFolder.path) { normalizePath(subFolder.path) }
+                            val subFolderVids = folderVideosMap[normP] ?: folderVideosMap[subFolder.name.lowercase()].orEmpty()
+                            val isFolderSelected = subFolder.path in selectedFolderPaths
+
+                            FolderCard(
+                                folder = subFolder,
+                                videos = subFolderVids,
+                                isSelected = isFolderSelected,
+                                isSelectionMode = isSelectionMode,
+                                onClick = {
+                                    if (isSelectionMode) {
+                                        selectedFolderPaths = if (isFolderSelected) {
+                                            selectedFolderPaths - subFolder.path
+                                        } else {
+                                            selectedFolderPaths + subFolder.path
+                                        }
+                                    } else {
+                                        onSelectFolder(subFolder)
+                                    }
+                                },
+                                onLongClick = {
+                                    selectedFolderPaths = if (isFolderSelected) {
+                                        selectedFolderPaths - subFolder.path
+                                    } else {
+                                        selectedFolderPaths + subFolder.path
+                                    }
+                                },
+                                modifier = Modifier.animateItem()
+                            )
+                        }
+
+                        if (effectiveVideos.isNotEmpty()) {
+                            item(span = { GridItemSpan(maxLineSpan) }, contentType = "videos_header") {
+                                SectionTitle(stringResource(R.string.videos))
+                            }
+                        }
+                    }
+
+                    if (effectiveVideos.isEmpty() && directSubfolders.isEmpty()) {
                         if (expectedCount == 0) {
                             item(span = { GridItemSpan(maxLineSpan) }) {
                                 Box(
