@@ -70,6 +70,7 @@ import com.excavplayer.R
 import com.excavplayer.domain.model.Folder
 import com.excavplayer.domain.model.Playlist
 import com.excavplayer.domain.model.Video
+import com.excavplayer.media.thumbnail.SeekPreviewLoader
 import com.excavplayer.media.thumbnail.ThumbnailLoader
 import com.excavplayer.ui.UserMessage
 import com.excavplayer.ui.theme.*
@@ -3338,15 +3339,31 @@ fun ExcavSleekSlider(
     onValueChange: (Float) -> Unit,
     valueRange: ClosedFloatingPointRange<Float>,
     modifier: Modifier = Modifier,
+    onValueChangeStarted: (() -> Unit)? = null,
+    onValueChangeFinished: (() -> Unit)? = null,
+    bufferedFraction: Float = 0f,
+    chapterFractions: List<Float> = emptyList(),
     startLabel: String? = null,
     centerLabel: String? = null,
     endLabel: String? = null,
     showZeroMarker: Boolean = false
 ) {
+    var isDragging by remember { mutableStateOf(false) }
+
     Column(modifier = modifier.fillMaxWidth()) {
         Slider(
             value = value.coerceIn(valueRange.start, valueRange.endInclusive),
-            onValueChange = onValueChange,
+            onValueChange = { newVal ->
+                if (!isDragging) {
+                    isDragging = true
+                    onValueChangeStarted?.invoke()
+                }
+                onValueChange(newVal)
+            },
+            onValueChangeFinished = {
+                isDragging = false
+                onValueChangeFinished?.invoke()
+            },
             valueRange = valueRange,
             colors = SliderDefaults.colors(
                 thumbColor = Color.White,
@@ -3383,6 +3400,34 @@ fun ExcavSleekSlider(
                         .background(Color(0xFF232A3B))
                 ) {
                     val fullWidth = maxWidth
+
+                    // Layer 1: Buffered Progress Layer
+                    if (bufferedFraction > 0f) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .fillMaxWidth(bufferedFraction.coerceIn(0f, 1f))
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(Color.White.copy(alpha = 0.25f))
+                        )
+                    }
+
+                    // Layer 2: Chapter Tick Marks (Defensive density filtered)
+                    if (chapterFractions.isNotEmpty()) {
+                        chapterFractions.forEach { tickFrac ->
+                            if (tickFrac in 0.01f..0.99f) {
+                                Box(
+                                    modifier = Modifier
+                                        .offset(x = fullWidth * tickFrac - 1.dp)
+                                        .width(2.dp)
+                                        .fillMaxHeight()
+                                        .background(Color.White.copy(alpha = 0.65f))
+                                )
+                            }
+                        }
+                    }
+
+                    // Layer 3: Active Played Progress Layer
                     Box(
                         modifier = Modifier
                             .fillMaxHeight()
@@ -3394,6 +3439,7 @@ fun ExcavSleekSlider(
                                 )
                             )
                     )
+
                     if (showZeroMarker && valueRange.start < 0f && valueRange.endInclusive > 0f) {
                         val zeroFrac = (-valueRange.start) / (valueRange.endInclusive - valueRange.start)
                         Box(
@@ -3441,6 +3487,7 @@ fun ExcavSleekSlider(
 }
 
 val LocalThumbnailLoader = staticCompositionLocalOf<ThumbnailLoader?> { null }
+val LocalSeekPreviewLoader = staticCompositionLocalOf<SeekPreviewLoader?> { null }
 
 @Composable
 fun rememberThumbnailLoader(): ThumbnailLoader {
@@ -3452,10 +3499,26 @@ fun rememberThumbnailLoader(): ThumbnailLoader {
     }
 }
 
+@Composable
+fun rememberSeekPreviewLoader(): SeekPreviewLoader {
+    val local = LocalSeekPreviewLoader.current
+    if (local != null) return local
+    val context = LocalContext.current
+    return remember(context.applicationContext) {
+        EntryPointAccessors.fromApplication(context.applicationContext, SeekPreviewEntryPoint::class.java).seekPreviewLoader()
+    }
+}
+
 @dagger.hilt.EntryPoint
 @dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
 interface ThumbnailEntryPoint {
     fun thumbnailLoader(): ThumbnailLoader
+}
+
+@dagger.hilt.EntryPoint
+@dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
+interface SeekPreviewEntryPoint {
+    fun seekPreviewLoader(): SeekPreviewLoader
 }
 
 fun formatFileSize(bytes: Long): String {

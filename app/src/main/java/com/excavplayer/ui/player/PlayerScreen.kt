@@ -87,11 +87,15 @@ import com.excavplayer.R
 import com.excavplayer.domain.model.*
 import com.excavplayer.player.core.PlayerManager
 import com.excavplayer.player.playback.PipHelper
+import androidx.compose.ui.graphics.asImageBitmap
 import com.excavplayer.ui.ExcavViewModel
 import com.excavplayer.ui.components.*
 import com.excavplayer.ui.theme.ExcavPalette
 import com.excavplayer.ui.theme.ExcavShapes
 
+enum class ScrubSource { SLIDER, SWIPE }
+data class ScrubState(val targetMs: Long, val source: ScrubSource)
+private enum class DragClassifierMode { NONE, VERTICAL, HORIZONTAL_SEEK }
 private enum class PlayerSheet { SUBTITLES, AUDIO, SPEED, CHAPTERS }
 private enum class DoubleTapSide { LEFT, RIGHT }
 
@@ -112,6 +116,7 @@ fun PlayerScreen(
     onClose: () -> Unit,
     onPickSubtitle: () -> Unit
 ) {
+    val player = vm.player
     val state by vm.playerState.collectAsStateWithLifecycle()
     val queue by vm.queueState.collectAsStateWithLifecycle()
     val settings by vm.userSettings.collectAsStateWithLifecycle()
@@ -123,6 +128,7 @@ fun PlayerScreen(
     val pipHelper = remember { PipHelper(context.applicationContext, com.excavplayer.core.logging.AndroidAppLogger()) }
 
     var controlsVisible by rememberSaveable { mutableStateOf(true) }
+    var scrubState by remember { mutableStateOf<ScrubState?>(null) }
     var activeSheet by rememberSaveable { mutableStateOf<PlayerSheet?>(null) }
     var isLocked by rememberSaveable { mutableStateOf(false) }
     var keepAudioOnBackground by rememberSaveable { mutableStateOf(false) }
@@ -420,9 +426,14 @@ fun PlayerScreen(
             }
             .pointerInput(isLocked, settings, zoomScale) {
                 if (!isLocked && zoomScale <= 1.05f) {
+                    var dragMode = DragClassifierMode.NONE
                     var isDragEligible = false
-                    var totalVerticalDrag = 0f
+                    var startTouch = Offset.Zero
+                    var originPositionMs = 0L
+                    var currentDurationMs = 0L
+                    var totalDragDelta = Offset.Zero
                     var currentEffectiveVol = 1.0f
+
                     detectDragGestures(
                         onDragStart = { startOffset ->
                             // Ignore touches in top 20% (status bar pull-down zone) and bottom 18% (nav bar zone)
@@ -431,7 +442,15 @@ fun PlayerScreen(
                             val safeLeft = size.width * 0.08f
                             val safeRight = size.width * 0.92f
                             isDragEligible = startOffset.y in safeTop..safeBottom && startOffset.x in safeLeft..safeRight
-                            totalVerticalDrag = 0f
+                            if (!isDragEligible) return@detectDragGestures
+
+                            dragMode = DragClassifierMode.NONE
+                            startTouch = startOffset
+                            totalDragDelta = Offset.Zero
+                            val pos = player.playbackPosition.value
+                            originPositionMs = (scrubState?.targetMs ?: pos.currentPositionMs).coerceAtLeast(0L)
+                            currentDurationMs = pos.durationMs.coerceAtLeast(0L)
+
                             audioManager?.let { am ->
                                 val maxVol = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC).coerceAtLeast(1)
                                 val curDeviceVol = am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
@@ -444,12 +463,24 @@ fun PlayerScreen(
                             }
                         },
                         onDragEnd = {
+                            if (dragMode == DragClassifierMode.HORIZONTAL_SEEK) {
+                                scrubState?.let { s ->
+                                    player.seekTo(s.targetMs)
+                                }
+                                scrubState = null
+                            }
+                            dragMode = DragClassifierMode.NONE
                             isDragEligible = false
                             gestureHudText = null
                             gestureHudIcon = null
                             gestureHudIsBoost = false
+                            onUserInteraction()
                         },
                         onDragCancel = {
+                            if (dragMode == DragClassifierMode.HORIZONTAL_SEEK) {
+                                scrubState = null
+                            }
+                            dragMode = DragClassifierMode.NONE
                             isDragEligible = false
                             gestureHudText = null
                             gestureHudIcon = null
@@ -457,48 +488,90 @@ fun PlayerScreen(
                         },
                         onDrag = { change, dragAmount ->
                             if (!isDragEligible) return@detectDragGestures
-                            totalVerticalDrag += Math.abs(dragAmount.y)
-                            if (totalVerticalDrag < 12f) return@detectDragGestures
 
-                            change.consume()
-                            val isLeft = change.position.x < size.width / 2
-                            if (isLeft && settings.brightnessGestureEnabled) {
-                                val currentBrightness = activity?.window?.attributes?.screenBrightness?.takeIf { it >= 0f } ?: 0.5f
-                                val newBrightness = (currentBrightness - (dragAmount.y / size.height) * 1.5f).coerceIn(0.01f, 1f)
-                                activity?.window?.attributes = activity.window.attributes.apply { screenBrightness = newBrightness }
-                                gestureHudText = "Brightness ${(newBrightness * 100).toInt()}%"
-                                gestureHudProgress = newBrightness
-                                gestureHudIsBoost = false
-                                gestureHudIcon = Icons.Default.WbSunny
-                            } else if (!isLeft && settings.volumeGestureEnabled) {
-                                audioManager?.let { am ->
-                                    val maxVol = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC).coerceAtLeast(1)
-                                    val delta = -(dragAmount.y / (size.height * 0.75f)) * 1.25f
-                                    currentEffectiveVol = (currentEffectiveVol + delta).coerceIn(0f, 2.0f)
+                            totalDragDelta += dragAmount
 
-                                    if (currentEffectiveVol <= 1.0f) {
-                                        if (state.playback.volume > 1.0f) {
-                                            vm.player.setVolume(1.0f)
-                                        }
-                                        val targetDeviceVol = (currentEffectiveVol * maxVol).roundToInt().coerceIn(0, maxVol)
-                                        am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, targetDeviceVol, 0)
-                                        val volPercent = (currentEffectiveVol * 100f).roundToInt()
-                                        gestureHudText = "Volume $volPercent%"
-                                        gestureHudProgress = currentEffectiveVol
-                                        gestureHudIsBoost = false
-                                        gestureHudIcon = if (targetDeviceVol == 0) {
-                                            Icons.AutoMirrored.Filled.VolumeOff
-                                        } else {
-                                            Icons.AutoMirrored.Filled.VolumeUp
+                            // Classify once after touch-slop (~14dp)
+                            if (dragMode == DragClassifierMode.NONE) {
+                                val slopPx = 14.dp.toPx()
+                                if (totalDragDelta.getDistance() >= slopPx) {
+                                    if (Math.abs(totalDragDelta.x) > Math.abs(totalDragDelta.y)) {
+                                        if (currentDurationMs > 0L) {
+                                            dragMode = DragClassifierMode.HORIZONTAL_SEEK
+                                            controlsVisible = true
                                         }
                                     } else {
-                                        am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, maxVol, 0)
-                                        vm.player.setVolume(currentEffectiveVol)
-                                        val volPercent = (currentEffectiveVol * 100f).roundToInt()
-                                        gestureHudText = "Volume $volPercent% (Boost)"
-                                        gestureHudProgress = (currentEffectiveVol - 1.0f).coerceIn(0f, 1f)
-                                        gestureHudIsBoost = true
-                                        gestureHudIcon = Icons.AutoMirrored.Filled.VolumeUp
+                                        dragMode = DragClassifierMode.VERTICAL
+                                    }
+                                } else {
+                                    return@detectDragGestures
+                                }
+                            }
+
+                            change.consume()
+
+                            if (dragMode == DragClassifierMode.HORIZONTAL_SEEK) {
+                                controlsVisible = true
+                                // Lower-medium sensitivity:
+                                // Base span = 120s, scaled moderately with duration: clamp(duration / 3.5, 90s, 300s)
+                                val maxSwipeSpan = (currentDurationMs / 3.5f).coerceIn(90_000f, 300_000f)
+                                val deltaX = change.position.x - startTouch.x
+                                val targetMs = (originPositionMs + (deltaX / size.width) * maxSwipeSpan)
+                                    .toLong()
+                                    .coerceIn(0L, currentDurationMs)
+
+                                scrubState = ScrubState(targetMs, ScrubSource.SWIPE)
+
+                                val deltaMs = targetMs - originPositionMs
+                                val deltaSec = (deltaMs / 1000L).toInt()
+                                val sign = if (deltaSec >= 0) "+" else "-"
+                                val absDeltaFormatted = formatDuration(Math.abs(deltaMs))
+                                val targetFormatted = formatDuration(targetMs)
+
+                                gestureHudText = "$sign$absDeltaFormatted → $targetFormatted"
+                                gestureHudProgress = if (currentDurationMs > 0L) targetMs.toFloat() / currentDurationMs.toFloat() else 0f
+                                gestureHudIcon = if (deltaMs >= 0) Icons.Default.FastForward else Icons.Default.FastRewind
+                                gestureHudIsBoost = false
+                            } else if (dragMode == DragClassifierMode.VERTICAL) {
+                                val isLeft = startTouch.x < size.width / 2
+                                if (isLeft && settings.brightnessGestureEnabled) {
+                                    val currentBrightness = activity?.window?.attributes?.screenBrightness?.takeIf { it >= 0f } ?: 0.5f
+                                    val newBrightness = (currentBrightness - (dragAmount.y / size.height) * 1.5f).coerceIn(0.01f, 1f)
+                                    activity?.window?.attributes = activity.window.attributes.apply { screenBrightness = newBrightness }
+                                    gestureHudText = "Brightness ${(newBrightness * 100).toInt()}%"
+                                    gestureHudProgress = newBrightness
+                                    gestureHudIsBoost = false
+                                    gestureHudIcon = Icons.Default.WbSunny
+                                } else if (!isLeft && settings.volumeGestureEnabled) {
+                                    audioManager?.let { am ->
+                                        val maxVol = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+                                        val delta = -(dragAmount.y / (size.height * 0.75f)) * 1.25f
+                                        currentEffectiveVol = (currentEffectiveVol + delta).coerceIn(0f, 2.0f)
+
+                                        if (currentEffectiveVol <= 1.0f) {
+                                            if (state.playback.volume > 1.0f) {
+                                                player.setVolume(1.0f)
+                                            }
+                                            val targetDeviceVol = (currentEffectiveVol * maxVol).roundToInt().coerceIn(0, maxVol)
+                                            am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, targetDeviceVol, 0)
+                                            val volPercent = (currentEffectiveVol * 100f).roundToInt()
+                                            gestureHudText = "Volume $volPercent%"
+                                            gestureHudProgress = currentEffectiveVol
+                                            gestureHudIsBoost = false
+                                            gestureHudIcon = if (targetDeviceVol == 0) {
+                                                Icons.AutoMirrored.Filled.VolumeOff
+                                            } else {
+                                                Icons.AutoMirrored.Filled.VolumeUp
+                                            }
+                                        } else {
+                                            am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, maxVol, 0)
+                                            player.setVolume(currentEffectiveVol)
+                                            val volPercent = (currentEffectiveVol * 100f).roundToInt()
+                                            gestureHudText = "Volume $volPercent% (Boost)"
+                                            gestureHudProgress = (currentEffectiveVol - 1.0f).coerceIn(0f, 1f)
+                                            gestureHudIsBoost = true
+                                            gestureHudIcon = Icons.AutoMirrored.Filled.VolumeUp
+                                        }
                                     }
                                 }
                             }
@@ -910,6 +983,23 @@ fun PlayerScreen(
                             onUserInteraction()
                             vm.playQueueItem(queue.currentIndex + 1)
                         },
+                        scrubState = scrubState,
+                        onScrubStart = {
+                            onUserInteraction()
+                            val cur = (scrubState?.targetMs ?: vm.player.playbackPosition.value.currentPositionMs).coerceAtLeast(0L)
+                            scrubState = ScrubState(cur, ScrubSource.SLIDER)
+                        },
+                        onScrubChange = { targetMs ->
+                            onUserInteraction()
+                            scrubState = ScrubState(targetMs, ScrubSource.SLIDER)
+                        },
+                        onScrubEnd = {
+                            onUserInteraction()
+                            scrubState?.let { s ->
+                                vm.player.seekTo(s.targetMs)
+                            }
+                            scrubState = null
+                        },
                         onInteraction = onUserInteraction
                     )
                 }
@@ -952,6 +1042,10 @@ private fun PlayerControlsOverlay(
     player: PlayerManager,
     isVeryCompact: Boolean = false,
     isCompact: Boolean = false,
+    scrubState: ScrubState? = null,
+    onScrubStart: () -> Unit = {},
+    onScrubChange: (Long) -> Unit = {},
+    onScrubEnd: () -> Unit = {},
     onClose: () -> Unit,
     onOpenSheet: (PlayerSheet) -> Unit,
     onLock: () -> Unit,
@@ -1268,14 +1362,26 @@ private fun PlayerControlsOverlay(
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
             ) {
+                // Seekbar Preview Thumbnail Storyboard Popup
+                SeekbarPreviewPopup(
+                    scrubState = scrubState,
+                    video = state.currentVideo,
+                    durationMs = player.playbackPosition.value.durationMs,
+                    isVeryCompact = isVeryCompact,
+                    isCompact = isCompact,
+                    modifier = Modifier.padding(bottom = 6.dp)
+                )
+
                 // Bottom Progress Bar and Clean Action Buttons (isolated timeline scrubber)
                 PlayerTimelineSection(
                     playbackPositionFlow = player.playbackPosition,
+                    scrubState = scrubState,
+                    onScrubStart = onScrubStart,
+                    onScrubChange = onScrubChange,
+                    onScrubEnd = onScrubEnd,
+                    chapters = state.chapters,
                     timeTextSize = timelineTextSize,
-                    onSeek = {
-                        onInteraction()
-                        player.seekTo(it)
-                    }
+                    onInteraction = onInteraction
                 )
 
                 Spacer(Modifier.height(timelineSpacing))
@@ -2075,15 +2181,146 @@ fun FloatingNextEpisodePill(
 }
 
 @Composable
+fun SeekbarPreviewPopup(
+    scrubState: ScrubState?,
+    video: Video?,
+    durationMs: Long,
+    isVeryCompact: Boolean = false,
+    isCompact: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    val previewLoader = rememberSeekPreviewLoader()
+    var previewBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+
+    LaunchedEffect(video?.id, scrubState?.targetMs) {
+        if (scrubState == null || video == null || durationMs <= 0L) {
+            previewBitmap = null
+            return@LaunchedEffect
+        }
+        val target = scrubState.targetMs
+        val cached = previewLoader.getFromCache(video.id, target)
+        if (cached != null) {
+            previewBitmap = cached
+        } else {
+            delay(80L) // Debounce settled drag
+            val uri = android.net.Uri.parse(video.uri)
+            val bmp = previewLoader.loadPreview(video.id, uri, target, durationMs)
+            previewBitmap = bmp
+            if (bmp != null) {
+                previewLoader.prefetchAdjacent(video.id, uri, target, durationMs)
+            }
+        }
+    }
+
+    AnimatedVisibility(
+        visible = scrubState != null && durationMs > 0L,
+        enter = fadeIn(tween(120)) + scaleIn(initialScale = 0.85f, animationSpec = spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMedium)),
+        exit = fadeOut(tween(120)) + scaleOut(targetScale = 0.85f, animationSpec = tween(120)),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val totalWidth = maxWidth
+            val popupWidth = if (isVeryCompact) 120.dp else if (isCompact) 145.dp else 170.dp
+            val popupHeight = if (isVeryCompact) 70.dp else if (isCompact) 85.dp else 100.dp
+
+            val scrubFrac = if (durationMs > 0L && scrubState != null) {
+                (scrubState.targetMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
+            } else 0f
+
+            // Calculate x offset centered around the thumb, clamped to container edges
+            val targetOffset = totalWidth * scrubFrac - (popupWidth / 2)
+            val minOffset = 4.dp
+            val maxOffset = (totalWidth - popupWidth - 4.dp).coerceAtLeast(minOffset)
+            val clampedOffset = targetOffset.coerceIn(minOffset, maxOffset)
+
+            Box(
+                modifier = Modifier
+                    .offset(x = clampedOffset)
+                    .width(popupWidth)
+                    .height(popupHeight)
+                    .clip(RoundedCornerShape(12.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(12.dp))
+                    .background(Color(0xE6121622))
+            ) {
+                // Extracted Frame or Placeholder
+                if (previewBitmap != null) {
+                    androidx.compose.foundation.Image(
+                        bitmap = previewBitmap!!.asImageBitmap(),
+                        contentDescription = "Seek Preview",
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color(0xFF181E2C)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            color = ExcavPalette.Blue,
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
+                // Bottom time badge overlay
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter)
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Color.Transparent, Color(0xCC000000), Color(0xF2000000))
+                            )
+                        )
+                        .padding(horizontal = 6.dp, vertical = 3.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = formatDuration(scrubState?.targetMs ?: 0L),
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = if (isVeryCompact) 10.sp else 11.5.sp
+                        )
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun PlayerTimelineSection(
     playbackPositionFlow: StateFlow<PlaybackPosition>,
-    onSeek: (Long) -> Unit,
+    scrubState: ScrubState? = null,
+    onScrubStart: () -> Unit = {},
+    onScrubChange: (Long) -> Unit = {},
+    onScrubEnd: () -> Unit = {},
+    chapters: List<MediaChapter> = emptyList(),
     timeTextSize: androidx.compose.ui.unit.TextUnit = 14.sp,
+    onInteraction: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val posState by playbackPositionFlow.collectAsStateWithLifecycle()
     val duration = posState.durationMs.coerceAtLeast(0L)
-    val position = posState.currentPositionMs.coerceIn(0L, duration.coerceAtLeast(1L))
+    val displayPos = (scrubState?.targetMs ?: posState.currentPositionMs).coerceIn(0L, duration.coerceAtLeast(1L))
+    val bufferedFrac = if (duration > 0L) (posState.bufferedPositionMs.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else 0f
+
+    var isRemainingTime by rememberSaveable { mutableStateOf(false) }
+
+    val chapterFractions = remember(chapters, duration) {
+        if (duration <= 0L) emptyList()
+        else {
+            chapters
+                .filter { it.startTimeMs >= 0L && it.endTimeMs > it.startTimeMs }
+                .sortedBy { it.startTimeMs }
+                .map { (it.startTimeMs.toFloat() / duration.toFloat()).coerceIn(0f, 1f) }
+                .distinctBy { (it * 100).toInt() } // Density guard: at least ~1% apart
+        }
+    }
 
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
@@ -2094,9 +2331,13 @@ fun PlayerTimelineSection(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = formatDuration(position),
+                text = if (isRemainingTime) "-${formatDuration((duration - displayPos).coerceAtLeast(0L))}" else formatDuration(displayPos),
                 color = Color.White,
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, fontSize = timeTextSize)
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, fontSize = timeTextSize),
+                modifier = Modifier.clickable {
+                    isRemainingTime = !isRemainingTime
+                    onInteraction()
+                }
             )
             Text(
                 text = formatDuration(duration),
@@ -2108,8 +2349,12 @@ fun PlayerTimelineSection(
         Spacer(Modifier.height(4.dp))
 
         ExcavSleekSlider(
-            value = position.toFloat(),
-            onValueChange = { onSeek(it.toLong()) },
+            value = displayPos.toFloat(),
+            onValueChange = { onScrubChange(it.toLong()) },
+            onValueChangeStarted = onScrubStart,
+            onValueChangeFinished = onScrubEnd,
+            bufferedFraction = bufferedFrac,
+            chapterFractions = chapterFractions,
             valueRange = 0f..duration.toFloat().coerceAtLeast(1f),
             modifier = Modifier.fillMaxWidth()
         )

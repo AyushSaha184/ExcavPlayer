@@ -49,6 +49,9 @@ class MainActivity : ComponentActivity() {
     lateinit var thumbnailLoader: ThumbnailLoader
 
     @Inject
+    lateinit var seekPreviewLoader: com.excavplayer.media.thumbnail.SeekPreviewLoader
+
+    @Inject
     lateinit var logger: AppLogger
 
     private val requestPermissionsLauncher = registerForActivityResult(
@@ -83,7 +86,10 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             ExcavTheme {
-                androidx.compose.runtime.CompositionLocalProvider(com.excavplayer.ui.components.LocalThumbnailLoader provides thumbnailLoader) {
+                androidx.compose.runtime.CompositionLocalProvider(
+                    com.excavplayer.ui.components.LocalThumbnailLoader provides thumbnailLoader,
+                    com.excavplayer.ui.components.LocalSeekPreviewLoader provides seekPreviewLoader
+                ) {
                     ExcavApp(viewModel) {
                         subtitlePicker.launch(arrayOf("text/*", "application/x-subrip", "application/octet-stream"))
                     }
