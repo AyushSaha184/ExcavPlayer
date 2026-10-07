@@ -289,14 +289,8 @@ private fun computeFolderVideosMap(videos: List<Video>): Map<String, List<Video>
         if (v.folderName.isNotEmpty()) {
             map.getOrPut(v.folderName.lowercase()) { mutableListOf() }.add(v)
         }
-        // Also map intermediate folder paths so subfolders aggregate descendant videos
-        var parent = norm.substringBeforeLast('/', "")
-        while (parent.isNotBlank() && parent != "/storage/emulated" && parent != "/storage" && parent.length > 1) {
-            map.getOrPut(parent) { mutableListOf() }.add(v)
-            parent = parent.substringBeforeLast('/', "")
-        }
     }
-    return map.mapValues { (_, list) -> list.distinctBy { it.id }.sortedWith(NaturalVideoComparator) }
+    return map.mapValues { (_, list) -> list.sortedWith(NaturalVideoComparator) }
 }
 
 @HiltViewModel

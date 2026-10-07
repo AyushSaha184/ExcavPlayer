@@ -594,16 +594,6 @@ fun PlayerScreen(
                         setApplyEmbeddedStyles(false)
                         setApplyEmbeddedFontSizes(false)
                         setBottomPaddingFraction(0.08f)
-                        setStyle(
-                            androidx.media3.ui.CaptionStyleCompat(
-                                android.graphics.Color.WHITE,
-                                android.graphics.Color.TRANSPARENT,
-                                android.graphics.Color.TRANSPARENT,
-                                androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_OUTLINE,
-                                android.graphics.Color.BLACK,
-                                null
-                            )
-                        )
                     }
                 }
             },
@@ -612,16 +602,6 @@ fun PlayerScreen(
                 playerView.resizeMode = resizeMode
                 playerView.subtitleView?.apply {
                     setBottomPaddingFraction(0.08f)
-                    setStyle(
-                        androidx.media3.ui.CaptionStyleCompat(
-                            android.graphics.Color.WHITE,
-                            android.graphics.Color.TRANSPARENT,
-                            android.graphics.Color.TRANSPARENT,
-                            androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_OUTLINE,
-                            android.graphics.Color.BLACK,
-                            null
-                        )
-                    )
                 }
 
                 // Display Refresh Rate Optimization (Judder-Free Playback)
@@ -1766,9 +1746,7 @@ private fun SubtitleSheet(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(max = 420.dp)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 14.dp)
     ) {
         Text(
             text = "Subtitles",
@@ -1780,30 +1758,38 @@ private fun SubtitleSheet(
             modifier = Modifier.padding(bottom = 8.dp)
         )
 
-        // Off option
-        SubtitleRadioRow(
-            title = "Off",
-            isSelected = state.playback.selectedSubtitleTrackId == null,
-            onClick = { player.selectSubtitleTrack(null) }
-        )
+        // Track list takes only required height when short, scrolls when long
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f, fill = false)
+                .verticalScroll(rememberScrollState())
+        ) {
+            // Off option
+            SubtitleRadioRow(
+                title = "Off",
+                isSelected = state.playback.selectedSubtitleTrackId == null,
+                onClick = { player.selectSubtitleTrack(null) }
+            )
 
-        // Embedded and Loaded Subtitles
-        if (state.availableSubtitleTracks.isNotEmpty()) {
-            state.availableSubtitleTracks.forEach { track ->
-                val label = track.language?.let { "$it (Embedded)" } ?: track.label
-                SubtitleRadioRow(
-                    title = label,
-                    isSelected = track.isSelected,
-                    onClick = { player.selectSubtitleTrack(track.id) }
+            // Embedded and Loaded Subtitles
+            if (state.availableSubtitleTracks.isNotEmpty()) {
+                state.availableSubtitleTracks.forEach { track ->
+                    val label = track.language?.let { "$it (Embedded)" } ?: track.label
+                    SubtitleRadioRow(
+                        title = label,
+                        isSelected = track.isSelected,
+                        onClick = { player.selectSubtitleTrack(track.id) }
+                    )
+                }
+            } else {
+                Text(
+                    text = "No embedded subtitles found",
+                    color = ExcavPalette.TextMuted,
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp)
                 )
             }
-        } else {
-            Text(
-                text = "No embedded subtitles found",
-                color = ExcavPalette.TextMuted,
-                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp)
-            )
         }
 
         Spacer(Modifier.height(10.dp))
@@ -1834,8 +1820,6 @@ private fun SubtitleSheet(
                 )
             }
         }
-
-        Spacer(Modifier.height(8.dp))
     }
 }
 

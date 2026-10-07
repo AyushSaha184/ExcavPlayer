@@ -30,7 +30,7 @@ android {
         applicationId = "com.excavplayer"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
+        versionCode = 3
         versionName = appVersion
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

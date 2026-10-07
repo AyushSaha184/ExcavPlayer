@@ -355,15 +355,15 @@ fun Modifier.darkUltraThinBlur(
         val strokePx = strokeWidth.toPx()
         val fillBrush = Brush.verticalGradient(
             colors = listOf(
-                backgroundColor.copy(alpha = (backgroundColor.alpha * 1.05f).coerceAtMost(0.98f)),
+                backgroundColor.copy(alpha = (backgroundColor.alpha * 1.15f).coerceAtMost(0.96f)),
                 backgroundColor,
-                backgroundColor
+                backgroundColor.copy(alpha = (backgroundColor.alpha * 0.85f))
             )
         )
         val borderBrush = Brush.verticalGradient(
             colors = listOf(
                 strokeColor,
-                strokeColor.copy(alpha = (strokeColor.alpha * 0.85f))
+                strokeColor.copy(alpha = (strokeColor.alpha * 0.4f))
             )
         )
 
