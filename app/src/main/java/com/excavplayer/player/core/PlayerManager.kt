@@ -351,17 +351,19 @@ class PlayerManager @Inject constructor(
         }
         exoPlayer.play()
 
-        // Asynchronously extract container-level chapters (MKV EBML, MP4 atoms)
+        // Asynchronously extract container-level chapters (MKV EBML, MP4 atoms, sidecars)
         playerScope.launch(dispatchers.io) {
-            val containerChapters = chapterExtractor.extractFromUri(video.uri, video.durationMs)
+            val initialDur = video.durationMs.takeIf { it > 0 } ?: exoPlayer.duration.takeIf { it > 0 }
+            val containerChapters = chapterExtractor.extractFromUri(video.uri, initialDur)
             if (containerChapters.isNotEmpty() && _state.value.currentVideo?.id == video.id) {
                 _state.update { current ->
                     if (current.currentVideo?.id == video.id) {
+                        val activeDur = exoPlayer.duration.takeIf { it > 0 } ?: initialDur
                         val combined = chapterExtractor.sanitizeAndNormalize(
                             rawChapters = (current.chapters + containerChapters).map {
                                 RawChapter(it.id, it.title, it.startTimeMs, it.endTimeMs)
                             },
-                            videoDurationMs = video.durationMs
+                            videoDurationMs = activeDur
                         )
                         current.copy(chapters = combined)
                     } else current
@@ -763,7 +765,19 @@ class PlayerManager @Inject constructor(
                 applyDialogueBooster(currentSettings.dialogueBoostEnabled)
                 applyLoudnessEnhancer(_state.value.playback.volume)
                 applyDisplayRefreshRateOptimization(currentSettings.matchDisplayRefreshRate)
+
+                val readyDur = exoPlayer.duration.takeIf { it > 0 }
+                if (readyDur != null && _state.value.chapters.isNotEmpty()) {
+                    _state.update { current ->
+                        val reNormalized = chapterExtractor.sanitizeAndNormalize(
+                            rawChapters = current.chapters.map { RawChapter(it.id, it.title, it.startTimeMs, it.endTimeMs) },
+                            videoDurationMs = readyDur
+                        )
+                        current.copy(chapters = reNormalized)
+                    }
+                }
             }
+
 
             if (playbackState == Player.STATE_ENDED) {
                 becomingNoisyReceiver.unregister()

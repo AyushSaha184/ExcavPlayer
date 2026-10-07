@@ -130,12 +130,148 @@ class ChapterExtractor @Inject constructor(
     }
 
     /**
-     * Extracts chapters directly from the media container (MKV Matroska EBML or MP4/MOV atoms).
+     * Extracts chapters directly from a random-access seekable source (FileChannel or memory).
+     */
+    fun extractFromSeekable(source: SeekableSource, videoDurationMs: Long? = null): List<MediaChapter> {
+        val rawChapters = mutableListOf<RawChapter>()
+        try {
+            source.position = 0L
+            val magic = ByteArray(12)
+            val read = source.read(magic, 0, 12)
+            source.position = 0L
+
+            if (read >= 4 && isMatroska(magic)) {
+                rawChapters.addAll(parseEbmlSeekable(source))
+            } else if (read >= 8 && isMp4(magic)) {
+                rawChapters.addAll(parseMp4Seekable(source))
+            }
+        } catch (e: Exception) {
+            logger.d(TAG, "Seekable chapter extraction failed: ${e.message}")
+        }
+        return sanitizeAndNormalize(rawChapters, videoDurationMs)
+    }
+
+    /**
+     * Parses external sidecar chapter text in YouTube/timestamp or OGG/Vorbis format.
+     */
+    fun parseSidecarChapters(content: String, videoDurationMs: Long? = null): List<MediaChapter> {
+        val rawChapters = mutableListOf<RawChapter>()
+        val lines = content.lines().map { it.trim() }.filter { it.isNotEmpty() }
+
+        // Check if content is Vorbis comment format (e.g. CHAPTER01=00:00:00.000)
+        val isVorbis = lines.any { it.startsWith("CHAPTER", ignoreCase = true) && it.contains("=") }
+        if (isVorbis) {
+            val vorbisTimeMap = mutableMapOf<String, Long>()
+            val vorbisEndTimeMap = mutableMapOf<String, Long>()
+            val vorbisNameMap = mutableMapOf<String, String>()
+
+            for (line in lines) {
+                val eqIdx = line.indexOf('=')
+                if (eqIdx != -1) {
+                    val key = line.substring(0, eqIdx).trim()
+                    val value = line.substring(eqIdx + 1).trim()
+                    parseVorbisChapterTag(key, value, vorbisTimeMap, vorbisEndTimeMap, vorbisNameMap)
+                }
+            }
+
+            for ((chapterNum, startMs) in vorbisTimeMap) {
+                val title = vorbisNameMap[chapterNum] ?: "Chapter $chapterNum"
+                val endMs = vorbisEndTimeMap[chapterNum] ?: -1L
+                rawChapters.add(
+                    RawChapter(
+                        id = "sidecar_vorbis_$chapterNum",
+                        title = title,
+                        startTimeMs = startMs,
+                        endTimeMs = endMs
+                    )
+                )
+            }
+        } else {
+            // YouTube / timestamp lines format: e.g. "01:23 Intro" or "[01:23] - Intro"
+            val timestampRegex = Regex("""^[\[\(]?(\d{1,2}:\d{2}(?::\d{2})?(?:\.\d{1,3})?)[\]\)]?[\s\-:]+(.*)$""")
+            var index = 1
+            for (line in lines) {
+                val match = timestampRegex.find(line)
+                if (match != null) {
+                    val timeStr = match.groupValues[1]
+                    val title = match.groupValues[2].trim(' ', '-', ':')
+                    val timeMs = parseTimestampMs(timeStr)
+                    if (timeMs != null) {
+                        rawChapters.add(
+                            RawChapter(
+                                id = "sidecar_ts_${index++}",
+                                title = title,
+                                startTimeMs = timeMs
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        return sanitizeAndNormalize(rawChapters, videoDurationMs)
+    }
+
+    /**
+     * Extracts chapters from media container or external sidecar files.
      */
     suspend fun extractFromUri(uriString: String, videoDurationMs: Long? = null): List<MediaChapter> = withContext(Dispatchers.IO) {
-        val uri = runCatching { Uri.parse(uriString) }.getOrNull() ?: return@withContext emptyList()
-        val rawChapters = mutableListOf<RawChapter>()
+        val localPath = when {
+            uriString.startsWith("file://", ignoreCase = true) -> uriString.substring(7)
+            uriString.startsWith("/") -> uriString
+            else -> null
+        }
 
+        // 1. Local file path: check sidecars and random access
+        if (localPath != null) {
+            try {
+                val mediaFile = java.io.File(localPath)
+                if (mediaFile.exists()) {
+                    val parent = mediaFile.parentFile
+                    val baseName = mediaFile.nameWithoutExtension
+                    val candidateExtensions = listOf(".chapters.txt", ".chp", ".chapters.xml")
+                    for (ext in candidateExtensions) {
+                        val sidecar = java.io.File(parent, "$baseName$ext")
+                        if (sidecar.exists() && sidecar.isFile && sidecar.length() > 0) {
+                            val content = sidecar.readText(StandardCharsets.UTF_8)
+                            val sidecarChapters = parseSidecarChapters(content, videoDurationMs)
+                            if (sidecarChapters.isNotEmpty()) {
+                                logger.i(TAG, "Loaded ${sidecarChapters.size} chapters from sidecar file: ${sidecar.name}")
+                                return@withContext sidecarChapters
+                            }
+                        }
+                    }
+
+                    if (mediaFile.isFile && mediaFile.canRead()) {
+                        java.io.RandomAccessFile(mediaFile, "r").use { raf ->
+                            val chapters = extractFromSeekable(FileChannelSeekableSource(raf.channel), videoDurationMs)
+                            if (chapters.isNotEmpty()) return@withContext chapters
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                logger.d(TAG, "Local file extraction skipped: ${e.message}")
+            }
+        }
+
+        val uri = runCatching { Uri.parse(uriString) }.getOrNull() ?: return@withContext emptyList()
+
+        // 2. Content URI random-access extraction
+        try {
+            if (uri.scheme == "content") {
+                context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+                    java.io.FileInputStream(pfd.fileDescriptor).channel.use { channel ->
+                        val chapters = extractFromSeekable(FileChannelSeekableSource(channel), videoDurationMs)
+                        if (chapters.isNotEmpty()) return@withContext chapters
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            logger.d(TAG, "Content URI seekable extraction failed, falling back to streaming: ${e.message}")
+        }
+
+        // 3. Fallback to stream reading if random access was not possible
+        val rawChapters = mutableListOf<RawChapter>()
         try {
             context.contentResolver.openInputStream(uri)?.use { stream ->
                 BufferedInputStream(stream, 64 * 1024).use { bis ->
@@ -157,6 +293,8 @@ class ChapterExtractor @Inject constructor(
 
         sanitizeAndNormalize(rawChapters, videoDurationMs)
     }
+
+
 
     /**
      * Sanitizes titles and eliminates unicode replacement characters, excessive question marks,
@@ -431,6 +569,226 @@ class ChapterExtractor @Inject constructor(
         return chapters
     }
 
+    fun parseEbmlSeekable(source: SeekableSource): List<RawChapter> {
+        val chapters = mutableListOf<RawChapter>()
+        val reader = EbmlSeekableReader(source)
+
+        var seekChaptersOffset: Long? = null
+        var segmentDataStartOffset: Long = 0L
+
+        while (reader.hasRemaining()) {
+            val elementId = reader.readElementId() ?: break
+            val elementSize = reader.readElementSize() ?: break
+            val currentPos = reader.position
+
+            when (elementId) {
+                0x1A45DFA3L -> { // EBML Header - skip payload
+                    if (elementSize > 0) reader.skip(elementSize)
+                }
+                0x18538067L -> { // Segment - Master element
+                    segmentDataStartOffset = currentPos
+                    val segmentEnd = if (elementSize >= 0 && currentPos + elementSize <= source.size) {
+                        currentPos + elementSize
+                    } else source.size
+
+                    parseSegmentChildrenSeekable(reader, segmentEnd, chapters, segmentDataStartOffset) { foundOffset ->
+                        seekChaptersOffset = foundOffset
+                    }
+                    break
+                }
+                else -> {
+                    if (elementSize > 0) reader.skip(elementSize) else break
+                }
+            }
+        }
+
+        // If chapters weren't inline before clusters, but SeekHead found its offset
+        if (chapters.isEmpty() && seekChaptersOffset != null) {
+            val absoluteChaptersPos = segmentDataStartOffset + seekChaptersOffset!!
+            if (absoluteChaptersPos in 0L until (source.size - 4)) {
+                reader.position = absoluteChaptersPos
+                val id = reader.readElementId()
+                val size = reader.readElementSize()
+                if (id == 0x1043A770L && size != null) {
+                    val end = if (size >= 0 && reader.position + size <= source.size) {
+                        reader.position + size
+                    } else source.size
+                    parseChaptersMasterSeekable(reader, end, chapters)
+                }
+            }
+        }
+
+        return chapters
+    }
+
+    private fun parseSegmentChildrenSeekable(
+        reader: EbmlSeekableReader,
+        segmentEnd: Long,
+        chapters: MutableList<RawChapter>,
+        segmentDataStart: Long,
+        onSeekChaptersFound: (Long) -> Unit
+    ) {
+        while (reader.position < segmentEnd) {
+            val elementId = reader.readElementId() ?: break
+            val elementSize = reader.readElementSize() ?: break
+            val elementStart = reader.position
+
+            val end = if (elementSize >= 0 && elementStart + elementSize <= segmentEnd) {
+                elementStart + elementSize
+            } else segmentEnd
+
+            when (elementId) {
+                0x114D9B74L -> { // SeekHead
+                    parseSeekHeadSeekable(reader, end, onSeekChaptersFound)
+                    reader.position = end
+                }
+                0x1043A770L -> { // Chapters - Master Element!
+                    parseChaptersMasterSeekable(reader, end, chapters)
+                    reader.position = end
+                }
+                0x1F43B675L -> { // Cluster - Media packets
+                    // Stop or skip clusters; if we have random access, we can jump to seek position
+                    if (elementSize >= 0 && elementStart + elementSize <= segmentEnd) {
+                        reader.position = end
+                    } else {
+                        break
+                    }
+                }
+                else -> {
+                    if (elementSize >= 0) {
+                        reader.position = end
+                    } else break
+                }
+            }
+        }
+    }
+
+    private fun parseSeekHeadSeekable(
+        reader: EbmlSeekableReader,
+        seekHeadEnd: Long,
+        onSeekChaptersFound: (Long) -> Unit
+    ) {
+        while (reader.position < seekHeadEnd) {
+            val id = reader.readElementId() ?: break
+            val size = reader.readElementSize() ?: break
+            val end = if (size >= 0) (reader.position + size).coerceAtMost(seekHeadEnd) else seekHeadEnd
+
+            if (id == 0x4DBBL) { // Seek Master
+                var seekId: Long? = null
+                var seekPos: Long? = null
+                while (reader.position < end) {
+                    val subId = reader.readElementId() ?: break
+                    val subSize = reader.readElementSize() ?: break
+                    when (subId) {
+                        0x53ABL -> seekId = reader.readUint(subSize) // SeekID
+                        0x53ACL -> seekPos = reader.readUint(subSize) // SeekPosition
+                        else -> if (subSize > 0) reader.skip(subSize)
+                    }
+                }
+                if (seekId == 0x1043A770L && seekPos != null) {
+                    onSeekChaptersFound(seekPos)
+                }
+            }
+            reader.position = end
+        }
+    }
+
+    private fun parseChaptersMasterSeekable(
+        reader: EbmlSeekableReader,
+        chaptersEnd: Long,
+        chapters: MutableList<RawChapter>
+    ) {
+        while (reader.position < chaptersEnd) {
+            val id = reader.readElementId() ?: break
+            val size = reader.readElementSize() ?: break
+            val end = if (size >= 0) (reader.position + size).coerceAtMost(chaptersEnd) else chaptersEnd
+
+            if (id == 0x45B9L) { // EditionEntry Master
+                parseEditionEntrySeekable(reader, end, chapters)
+            }
+            reader.position = end
+        }
+    }
+
+    private fun parseEditionEntrySeekable(
+        reader: EbmlSeekableReader,
+        editionEnd: Long,
+        chapters: MutableList<RawChapter>
+    ) {
+        while (reader.position < editionEnd) {
+            val id = reader.readElementId() ?: break
+            val size = reader.readElementSize() ?: break
+            val end = if (size >= 0) (reader.position + size).coerceAtMost(editionEnd) else editionEnd
+
+            if (id == 0x73C4L) { // ChapterAtom Master
+                parseChapterAtomSeekable(reader, end, chapters)
+            }
+            reader.position = end
+        }
+    }
+
+    private fun parseChapterAtomSeekable(
+        reader: EbmlSeekableReader,
+        atomEnd: Long,
+        chapters: MutableList<RawChapter>
+    ) {
+        var startNs: Long? = null
+        var endNs: Long? = null
+        var title = ""
+        var uid = ""
+
+        while (reader.position < atomEnd) {
+            val id = reader.readElementId() ?: break
+            val size = reader.readElementSize() ?: break
+            val end = if (size >= 0) (reader.position + size).coerceAtMost(atomEnd) else atomEnd
+
+            when (id) {
+                0x7373L -> { // ChapterUID
+                    uid = reader.readUint(size)?.toString() ?: ""
+                }
+                0x91L -> { // ChapterTimeStart
+                    startNs = reader.readUint(size)
+                }
+                0x92L -> { // ChapterTimeEnd
+                    endNs = reader.readUint(size)
+                }
+                0x80L -> { // ChapterDisplay Master
+                    while (reader.position < end) {
+                        val dispId = reader.readElementId() ?: break
+                        val dispSize = reader.readElementSize() ?: break
+                        when (dispId) {
+                            0x85L -> { // ChapString
+                                title = reader.readUtf8String(dispSize)
+                            }
+                            else -> if (dispSize > 0) reader.skip(dispSize)
+                        }
+                    }
+                }
+                0x73C4L -> { // Nested ChapterAtom
+                    parseChapterAtomSeekable(reader, end, chapters)
+                }
+                else -> {
+                    // skip other unhandled sub-elements
+                }
+            }
+            reader.position = end
+        }
+
+        if (startNs != null) {
+            val startMs = startNs / 1_000_000L
+            val endMs = endNs?.let { it / 1_000_000L } ?: -1L
+            chapters.add(
+                RawChapter(
+                    id = if (uid.isNotBlank()) "mkv_ch_$uid" else "mkv_ch_${chapters.size}",
+                    title = title,
+                    startTimeMs = startMs,
+                    endTimeMs = endMs
+                )
+            )
+        }
+    }
+
+
     private fun parseSegmentChildren(
         reader: EbmlBufferReader,
         segmentEnd: Int,
@@ -625,6 +983,333 @@ class ChapterExtractor @Inject constructor(
 
         return parseMp4Boxes(data)
     }
+
+    fun parseMp4Seekable(source: SeekableSource): List<RawChapter> {
+        val chapters = mutableListOf<RawChapter>()
+        var offset = 0L
+
+        while (offset + 8 <= source.size) {
+            source.position = offset
+            val header = ByteArray(8)
+            val read = source.read(header, 0, 8)
+            if (read < 8) break
+
+            val boxSize32 = ((header[0].toLong() and 0xFF) shl 24) or
+                            ((header[1].toLong() and 0xFF) shl 16) or
+                            ((header[2].toLong() and 0xFF) shl 8) or
+                            (header[3].toLong() and 0xFF)
+            val boxType = String(header, 4, 4, StandardCharsets.US_ASCII)
+
+            var headerSize = 8L
+            val boxSize: Long = when (boxSize32) {
+                1L -> { // 64-bit large box size
+                    if (offset + 16 > source.size) break
+                    headerSize = 16L
+                    val ext = ByteArray(8)
+                    if (source.read(ext, 0, 8) < 8) break
+                    var size64 = 0L
+                    for (b in 0 until 8) {
+                        size64 = (size64 shl 8) or (ext[b].toLong() and 0xFF)
+                    }
+                    size64.coerceAtMost(source.size - offset)
+                }
+                0L -> source.size - offset
+                else -> boxSize32.coerceAtMost(source.size - offset)
+            }
+
+            if (boxSize < headerSize) break
+            val boxEnd = offset + boxSize
+
+            if (boxType == "moov") {
+                val payloadSize = (boxSize - headerSize).toInt().coerceAtMost(32 * 1024 * 1024)
+                if (payloadSize > 0) {
+                    val moovPayload = ByteArray(payloadSize)
+                    val bytesRead = source.read(moovPayload, 0, payloadSize)
+                    if (bytesRead > 0) {
+                        parseMoovBox(moovPayload, 0, bytesRead, chapters)
+                        if (chapters.isEmpty()) {
+                            chapters.addAll(parseMp4TextTracks(moovPayload, 0, bytesRead, source))
+                        }
+                        if (chapters.isNotEmpty()) return chapters
+                    }
+                }
+                break
+            }
+
+            offset = boxEnd
+        }
+
+        return chapters
+    }
+
+    private data class StscEntry(val firstChunk: Int, val samplesPerChunk: Int, val sampleDescIndex: Int)
+
+    private fun parseMp4TextTracks(
+        data: ByteArray,
+        startOffset: Int,
+        endOffset: Int,
+        source: SeekableSource
+    ): List<RawChapter> {
+        val chapters = mutableListOf<RawChapter>()
+        var offset = startOffset
+
+        while (offset + 8 <= endOffset) {
+            val boxSize = readBoxSize(data, offset, endOffset) ?: break
+            val boxType = String(data, offset + 4, 4, StandardCharsets.US_ASCII)
+            val boxEnd = offset + boxSize
+
+            if (boxType == "trak") {
+                val trackChapters = parseTrakForTextChapters(data, offset + 8, boxEnd, source)
+                if (trackChapters.isNotEmpty()) {
+                    chapters.addAll(trackChapters)
+                    break
+                }
+            }
+
+            offset = boxEnd
+        }
+
+        return chapters
+    }
+
+    private fun parseTrakForTextChapters(
+        data: ByteArray,
+        startOffset: Int,
+        endOffset: Int,
+        source: SeekableSource
+    ): List<RawChapter> {
+        var offset = startOffset
+        var mdiaOffset = -1
+        var mdiaEnd = -1
+
+        while (offset + 8 <= endOffset) {
+            val boxSize = readBoxSize(data, offset, endOffset) ?: break
+            val boxType = String(data, offset + 4, 4, StandardCharsets.US_ASCII)
+            val boxEnd = offset + boxSize
+
+            if (boxType == "mdia") {
+                mdiaOffset = offset + 8
+                mdiaEnd = boxEnd
+                break
+            }
+            offset = boxEnd
+        }
+
+        if (mdiaOffset == -1) return emptyList()
+
+        var isTextHandler = false
+        var timescale = 1000L
+        var minfOffset = -1
+        var minfEnd = -1
+
+        offset = mdiaOffset
+        while (offset + 8 <= mdiaEnd) {
+            val boxSize = readBoxSize(data, offset, mdiaEnd) ?: break
+            val boxType = String(data, offset + 4, 4, StandardCharsets.US_ASCII)
+            val boxEnd = offset + boxSize
+
+            when (boxType) {
+                "mdhd" -> {
+                    if (boxSize >= 28) {
+                        val version = data[offset + 8].toInt() and 0xFF
+                        val tsOffset = if (version == 1) offset + 8 + 4 + 16 else offset + 8 + 4 + 8
+                        if (tsOffset + 4 <= boxEnd) {
+                            timescale = (readInt32(data, tsOffset).toLong() and 0xFFFFFFFFL).coerceAtLeast(1L)
+                        }
+                    }
+                }
+                "hdlr" -> {
+                    if (boxSize >= 24) {
+                        val handlerType = String(data, offset + 8 + 8, 4, StandardCharsets.US_ASCII)
+                        if (handlerType == "text" || handlerType == "sbtl" || handlerType == "subp") {
+                            isTextHandler = true
+                        }
+                    }
+                }
+                "minf" -> {
+                    minfOffset = offset + 8
+                    minfEnd = boxEnd
+                }
+            }
+            offset = boxEnd
+        }
+
+        if (!isTextHandler || minfOffset == -1) return emptyList()
+
+        // Find stbl inside minf
+        var stblOffset = -1
+        var stblEnd = -1
+        offset = minfOffset
+        while (offset + 8 <= minfEnd) {
+            val boxSize = readBoxSize(data, offset, minfEnd) ?: break
+            val boxType = String(data, offset + 4, 4, StandardCharsets.US_ASCII)
+            val boxEnd = offset + boxSize
+            if (boxType == "stbl") {
+                stblOffset = offset + 8
+                stblEnd = boxEnd
+                break
+            }
+            offset = boxEnd
+        }
+
+        if (stblOffset == -1) return emptyList()
+
+        // Inside stbl, parse stts, stsc, stsz, stco / co64
+        val sampleTimesMs = mutableListOf<Long>()
+        val stscEntries = mutableListOf<StscEntry>()
+        var sampleSizes: IntArray? = null
+        val chunkOffsets = mutableListOf<Long>()
+
+        offset = stblOffset
+        while (offset + 8 <= stblEnd) {
+            val boxSize = readBoxSize(data, offset, stblEnd) ?: break
+            val boxType = String(data, offset + 4, 4, StandardCharsets.US_ASCII)
+            val boxEnd = offset + boxSize
+
+            when (boxType) {
+                "stts" -> {
+                    if (boxSize >= 16) {
+                        val entryCount = readInt32(data, offset + 8 + 4)
+                        var curPos = offset + 8 + 8
+                        var curTime = 0L
+                        for (i in 0 until entryCount) {
+                            if (curPos + 8 > boxEnd) break
+                            val count = readInt32(data, curPos)
+                            val delta = readInt32(data, curPos + 4).toLong() and 0xFFFFFFFFL
+                            curPos += 8
+                            for (c in 0 until count) {
+                                sampleTimesMs.add(curTime * 1000L / timescale)
+                                curTime += delta
+                            }
+                        }
+                    }
+                }
+                "stsc" -> {
+                    if (boxSize >= 16) {
+                        val entryCount = readInt32(data, offset + 8 + 4)
+                        var curPos = offset + 8 + 8
+                        for (i in 0 until entryCount) {
+                            if (curPos + 12 > boxEnd) break
+                            val firstChunk = readInt32(data, curPos)
+                            val samplesPerChunk = readInt32(data, curPos + 4)
+                            val sampleDescIndex = readInt32(data, curPos + 8)
+                            curPos += 12
+                            stscEntries.add(StscEntry(firstChunk, samplesPerChunk, sampleDescIndex))
+                        }
+                    }
+                }
+                "stsz" -> {
+                    if (boxSize >= 20) {
+                        val defSize = readInt32(data, offset + 8 + 4)
+                        val count = readInt32(data, offset + 8 + 8)
+                        val sizes = IntArray(count)
+                        if (defSize > 0) {
+                            sizes.fill(defSize)
+                        } else {
+                            var curPos = offset + 8 + 12
+                            for (i in 0 until count) {
+                                if (curPos + 4 > boxEnd) break
+                                sizes[i] = readInt32(data, curPos)
+                                curPos += 4
+                            }
+                        }
+                        sampleSizes = sizes
+                    }
+                }
+                "stco" -> {
+                    if (boxSize >= 16) {
+                        val entryCount = readInt32(data, offset + 8 + 4)
+                        var curPos = offset + 8 + 8
+                        for (i in 0 until entryCount) {
+                            if (curPos + 4 > boxEnd) break
+                            chunkOffsets.add(readInt32(data, curPos).toLong() and 0xFFFFFFFFL)
+                            curPos += 4
+                        }
+                    }
+                }
+                "co64" -> {
+                    if (boxSize >= 16) {
+                        val entryCount = readInt32(data, offset + 8 + 4)
+                        var curPos = offset + 8 + 8
+                        for (i in 0 until entryCount) {
+                            if (curPos + 8 > boxEnd) break
+                            chunkOffsets.add(readInt64(data, curPos))
+                            curPos += 8
+                        }
+                    }
+                }
+            }
+            offset = boxEnd
+        }
+
+        val totalSamples = sampleSizes?.size ?: sampleTimesMs.size
+        if (totalSamples == 0 || chunkOffsets.isEmpty()) return emptyList()
+
+        val sampleOffsets = LongArray(totalSamples)
+        var sampleIdx = 0
+        for (chunkIdx in chunkOffsets.indices) {
+            val chunkNum = chunkIdx + 1
+            val stsc = stscEntries.lastOrNull { chunkNum >= it.firstChunk } ?: stscEntries.firstOrNull() ?: StscEntry(1, 1, 1)
+            var currentChunkOffset = chunkOffsets[chunkIdx]
+            for (s in 0 until stsc.samplesPerChunk) {
+                if (sampleIdx >= totalSamples) break
+                sampleOffsets[sampleIdx] = currentChunkOffset
+                currentChunkOffset += (sampleSizes?.getOrNull(sampleIdx) ?: 0)
+                sampleIdx++
+            }
+        }
+
+        val chapters = mutableListOf<RawChapter>()
+        for (i in 0 until totalSamples) {
+            val sOffset = sampleOffsets[i]
+            val sSize = sampleSizes?.getOrNull(i) ?: 0
+            if (sOffset > 0 && sOffset < source.size && sSize > 0) {
+                source.position = sOffset
+                val buf = ByteArray(sSize.coerceAtMost(1024))
+                val bytesRead = source.read(buf, 0, buf.size)
+                if (bytesRead > 0) {
+                    val title = if (bytesRead >= 2) {
+                        val strLen = ((buf[0].toInt() and 0xFF) shl 8) or (buf[1].toInt() and 0xFF)
+                        if (strLen in 1..(bytesRead - 2)) {
+                            String(buf, 2, strLen, StandardCharsets.UTF_8)
+                        } else {
+                            String(buf, 0, bytesRead, StandardCharsets.UTF_8)
+                        }
+                    } else {
+                        String(buf, 0, bytesRead, StandardCharsets.UTF_8)
+                    }
+                    val startTime = sampleTimesMs.getOrElse(i) { 0L }
+                    chapters.add(
+                        RawChapter(
+                            id = "mp4_text_$i",
+                            title = title.trim(),
+                            startTimeMs = startTime
+                        )
+                    )
+                }
+            }
+        }
+
+        return chapters
+    }
+
+    private fun readInt32(data: ByteArray, offset: Int): Int {
+        if (offset + 4 > data.size) return 0
+        return ((data[offset].toInt() and 0xFF) shl 24) or
+               ((data[offset + 1].toInt() and 0xFF) shl 16) or
+               ((data[offset + 2].toInt() and 0xFF) shl 8) or
+               (data[offset + 3].toInt() and 0xFF)
+    }
+
+    private fun readInt64(data: ByteArray, offset: Int): Long {
+        if (offset + 8 > data.size) return 0L
+        var value = 0L
+        for (i in 0 until 8) {
+            value = (value shl 8) or (data[offset + i].toLong() and 0xFF)
+        }
+        return value
+    }
+
 
     fun parseMp4Boxes(data: ByteArray): List<RawChapter> {
         val chapters = mutableListOf<RawChapter>()
@@ -863,3 +1548,111 @@ class EbmlBufferReader(private val data: ByteArray) {
         }
     }
 }
+
+/**
+ * Random-access EBML variable-length integer and element reader over a SeekableSource.
+ */
+class EbmlSeekableReader(private val source: SeekableSource) {
+    var position: Long
+        get() = source.position
+        set(value) { source.position = value }
+
+    fun hasRemaining(): Boolean = source.position < source.size
+
+    fun skip(bytes: Long) {
+        source.skip(bytes)
+    }
+
+    fun readElementId(): Long? {
+        if (!hasRemaining()) return null
+        val buf = ByteArray(1)
+        if (source.read(buf, 0, 1) <= 0) return null
+        val firstByte = buf[0].toInt() and 0xFF
+        val numBytes = vintLength(firstByte) ?: return null
+        if (source.position + numBytes - 1 > source.size) return null
+
+        var id = firstByte.toLong()
+        if (numBytes > 1) {
+            val rest = ByteArray(numBytes - 1)
+            val read = source.read(rest, 0, numBytes - 1)
+            if (read != numBytes - 1) return null
+            for (i in 0 until numBytes - 1) {
+                id = (id shl 8) or (rest[i].toLong() and 0xFF)
+            }
+        }
+        return id
+    }
+
+    fun readElementSize(): Long? {
+        if (!hasRemaining()) return null
+        val buf = ByteArray(1)
+        if (source.read(buf, 0, 1) <= 0) return null
+        val firstByte = buf[0].toInt() and 0xFF
+        val numBytes = vintLength(firstByte) ?: return null
+        if (source.position + numBytes - 1 > source.size) return null
+
+        val mask = (0xFF shr numBytes)
+        var size = (firstByte and mask).toLong()
+        if (numBytes > 1) {
+            val rest = ByteArray(numBytes - 1)
+            val read = source.read(rest, 0, numBytes - 1)
+            if (read != numBytes - 1) return null
+            for (i in 0 until numBytes - 1) {
+                size = (size shl 8) or (rest[i].toLong() and 0xFF)
+            }
+        }
+
+        val isUnknown = when (numBytes) {
+            1 -> size == 0x7FL
+            2 -> size == 0x3FFFL
+            3 -> size == 0x1FFFFFL
+            4 -> size == 0x0FFFFFFFL
+            5 -> size == 0x07FFFFFFFFL
+            6 -> size == 0x03FFFFFFFFFFL
+            7 -> size == 0x01FFFFFFFFFFFFL
+            8 -> size == 0x00FFFFFFFFFFFFFFL
+            else -> false
+        }
+        return if (isUnknown) -1L else size
+    }
+
+    fun readUint(size: Long): Long? {
+        if (size <= 0 || size > 8 || source.position + size > source.size) return null
+        val len = size.toInt()
+        val buf = ByteArray(len)
+        if (source.read(buf, 0, len) != len) return null
+        var value = 0L
+        for (i in 0 until len) {
+            value = (value shl 8) or (buf[i].toLong() and 0xFF)
+        }
+        return value
+    }
+
+    fun readUtf8String(size: Long): String {
+        if (size <= 0 || source.position + size > source.size) return ""
+        val len = size.coerceAtMost(64 * 1024).toInt()
+        val buf = ByteArray(len)
+        val read = source.read(buf, 0, len)
+        if (size > len) {
+            source.skip(size - len)
+        }
+        if (read <= 0) return ""
+        return String(buf, 0, read, StandardCharsets.UTF_8)
+    }
+
+    private fun vintLength(firstByte: Int): Int? {
+        if (firstByte == 0) return null
+        return when {
+            (firstByte and 0x80) != 0 -> 1
+            (firstByte and 0x40) != 0 -> 2
+            (firstByte and 0x20) != 0 -> 3
+            (firstByte and 0x10) != 0 -> 4
+            (firstByte and 0x08) != 0 -> 5
+            (firstByte and 0x04) != 0 -> 6
+            (firstByte and 0x02) != 0 -> 7
+            (firstByte and 0x01) != 0 -> 8
+            else -> null
+        }
+    }
+}
+
