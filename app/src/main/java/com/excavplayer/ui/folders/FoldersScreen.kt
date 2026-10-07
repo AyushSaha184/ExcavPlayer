@@ -249,24 +249,46 @@ fun FoldersScreen(
                     }
                     list.sortedWith(NaturalVideoComparator)
                 }
-                val directSubfolders = remember(folders, currentNorm) {
-                    folders.mapNotNull { f ->
+                val directSubfolders = remember(folders, currentNorm, folderVideosMap, videos) {
+                    val subPathMap = mutableMapOf<String, MutableList<Video>>()
+
+                    // Group all videos under current directory by their direct child subfolder
+                    videos.forEach { v ->
+                        val vNorm = normalizePath(v.folderPath)
+                        if (vNorm.startsWith("$currentNorm/") && vNorm != currentNorm) {
+                            val relative = vNorm.removePrefix("$currentNorm/")
+                            val nextSegment = relative.substringBefore('/')
+                            val directSubPath = "$currentNorm/$nextSegment"
+                            subPathMap.getOrPut(directSubPath) { mutableListOf() }.add(v)
+                        }
+                    }
+
+                    // Also include folders from library that start with currentNorm
+                    folders.forEach { f ->
                         val fNorm = normalizePath(f.path)
                         if (fNorm.startsWith("$currentNorm/") && fNorm != currentNorm) {
                             val relative = fNorm.removePrefix("$currentNorm/")
                             val nextSegment = relative.substringBefore('/')
                             val directSubPath = "$currentNorm/$nextSegment"
-                            val isDirect = !relative.contains('/')
-                            if (isDirect) f else {
-                                Folder(
-                                    name = nextSegment,
-                                    path = directSubPath,
-                                    videoCount = 0,
-                                    totalSizeBytes = 0L
-                                )
+                            if (!subPathMap.containsKey(directSubPath)) {
+                                val fromMap = folderVideosMap[directSubPath] ?: folderVideosMap[nextSegment.lowercase()].orEmpty()
+                                subPathMap[directSubPath] = fromMap.toMutableList()
                             }
-                        } else null
-                    }.distinctBy { normalizePath(it.path) }
+                        }
+                    }
+
+                    subPathMap.map { (path, vids) ->
+                        val nextSegment = path.substringAfterLast('/')
+                        val matchingFolder = folders.find { normalizePath(it.path) == path }
+                        val count = if (vids.isNotEmpty()) vids.size else (matchingFolder?.videoCount ?: 0)
+                        val totalSize = if (vids.isNotEmpty()) vids.sumOf { it.sizeBytes } else (matchingFolder?.totalSizeBytes ?: 0L)
+                        Folder(
+                            name = nextSegment,
+                            path = path,
+                            videoCount = count,
+                            totalSizeBytes = totalSize
+                        )
+                    }.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
                 }
 
                 val folderMeta = folders.find { normalizePath(it.path) == currentNorm || it.path == currentFolder.path }
@@ -291,7 +313,14 @@ fun FoldersScreen(
 
                         gridItems(directSubfolders, key = { "sub_folder_${it.path}" }, contentType = { "folder_card" }) { subFolder ->
                             val normP = remember(subFolder.path) { normalizePath(subFolder.path) }
-                            val subFolderVids = folderVideosMap[normP] ?: folderVideosMap[subFolder.name.lowercase()].orEmpty()
+                            val subFolderVids = remember(normP, folderVideosMap, videos) {
+                                val fromMap = folderVideosMap[normP] ?: folderVideosMap[subFolder.name.lowercase()].orEmpty()
+                                if (fromMap.isNotEmpty()) fromMap
+                                else videos.filter {
+                                    val vn = normalizePath(it.folderPath)
+                                    vn == normP || vn.startsWith("$normP/")
+                                }
+                            }
                             val isFolderSelected = subFolder.path in selectedFolderPaths
 
                             FolderCard(

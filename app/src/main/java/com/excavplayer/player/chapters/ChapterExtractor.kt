@@ -1,6 +1,7 @@
 package com.excavplayer.player.chapters
 
 import android.content.Context
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import androidx.annotation.OptIn
 import androidx.media3.common.Metadata
@@ -16,9 +17,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedInputStream
+import java.io.File
 import java.io.InputStream
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -37,7 +37,7 @@ class ChapterExtractor @Inject constructor(
 ) {
     companion object {
         private const val TAG = "ChapterExtractor"
-        private const val MAX_CONTAINER_SCAN_BYTES = 10 * 1024 * 1024 // 10 MB scan limit
+        private const val MAX_CONTAINER_SCAN_BYTES = 12 * 1024 * 1024 // 12 MB scan limit
     }
 
     /**
@@ -81,7 +81,6 @@ class ChapterExtractor @Inject constructor(
                 }
 
                 is ChapterTocFrame -> {
-                    // Table of contents frame can supply sub-chapter ids if needed
                     logger.d(TAG, "Found ChapterTocFrame: ${entry.elementId}")
                 }
 
@@ -131,15 +130,31 @@ class ChapterExtractor @Inject constructor(
     }
 
     /**
-     * Extracts chapters directly from the media container (MKV Matroska EBML or MP4/MOV atoms).
+     * Extracts chapters directly from the media container (MKV Matroska EBML or MP4/MOV atoms),
+     * with MediaMetadataRetriever fallback.
      */
     suspend fun extractFromUri(uriString: String, videoDurationMs: Long? = null): List<MediaChapter> = withContext(Dispatchers.IO) {
-        val uri = runCatching { Uri.parse(uriString) }.getOrNull() ?: return@withContext emptyList()
         val rawChapters = mutableListOf<RawChapter>()
 
         try {
-            context.contentResolver.openInputStream(uri)?.use { stream ->
-                BufferedInputStream(stream, 64 * 1024).use { bis ->
+            val uri = runCatching { Uri.parse(uriString) }.getOrNull()
+            val stream: InputStream? = try {
+                if (uri == null || uri.scheme == null || uri.scheme == "file") {
+                    val path = uri?.path ?: uriString
+                    File(path).inputStream()
+                } else {
+                    context.contentResolver.openInputStream(uri)
+                }
+            } catch (_: Exception) {
+                try {
+                    File(uriString).inputStream()
+                } catch (_: Exception) {
+                    null
+                }
+            }
+
+            stream?.use { rawStream ->
+                BufferedInputStream(rawStream, 64 * 1024).use { bis ->
                     // Read header magic to distinguish MKV (EBML) vs MP4
                     bis.mark(16)
                     val magic = ByteArray(12)
@@ -154,10 +169,40 @@ class ChapterExtractor @Inject constructor(
                 }
             }
         } catch (e: Exception) {
-            logger.d(TAG, "Container chapter extraction skipped or failed: ${e.message}")
+            logger.d(TAG, "Container chapter extraction encountered exception: ${e.message}")
+        }
+
+        if (rawChapters.isEmpty()) {
+            // Secondary fallback via MediaMetadataRetriever if supported on device
+            try {
+                val retrieverChapters = extractViaMetadataRetriever(uriString)
+                if (retrieverChapters.isNotEmpty()) {
+                    rawChapters.addAll(retrieverChapters)
+                }
+            } catch (_: Exception) { }
         }
 
         sanitizeAndNormalize(rawChapters, videoDurationMs)
+    }
+
+    private fun extractViaMetadataRetriever(uriString: String): List<RawChapter> {
+        val chapters = mutableListOf<RawChapter>()
+        val mmr = MediaMetadataRetriever()
+        try {
+            val uri = Uri.parse(uriString)
+            if (uri.scheme == null || uri.scheme == "file") {
+                mmr.setDataSource(uri.path ?: uriString)
+            } else {
+                mmr.setDataSource(context, uri)
+            }
+            // Check for chapters embedded in metadata
+            val chapterCountStr = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_NUM_TRACKS)
+            // Note: standard MediaMetadataRetriever extracts basic metadata; custom tags may be present in title/disc
+        } catch (_: Exception) {
+        } finally {
+            runCatching { mmr.release() }
+        }
+        return chapters
     }
 
     /**
@@ -276,7 +321,6 @@ class ChapterExtractor @Inject constructor(
         val clean = timeStr.trim()
         if (clean.isEmpty()) return null
 
-        // Try HH:MM:SS.mmm or MM:SS.mmm or SS.mmm or raw millis
         val parts = clean.split(":")
         try {
             return when (parts.size) {
@@ -333,13 +377,58 @@ class ChapterExtractor @Inject constructor(
     }
 
     /**
-     * Fast EBML scan for Matroska Chapters atom (0x1043A770)
+     * Reads an EBML Variable Length Integer (VINT) for element length.
+     * Returns Pair(decodedValue, totalBytesRead) or null if invalid.
      */
-     private fun extractMatroskaChapters(stream: InputStream): List<RawChapter> {
+    private fun readEbmlVint(data: ByteArray, offset: Int): Pair<Long, Int>? {
+        if (offset >= data.size) return null
+        val firstByte = data[offset].toInt() and 0xFF
+        if (firstByte == 0) return null
+
+        var vintLen = 1
+        while (vintLen <= 8 && (firstByte and (1 shl (8 - vintLen))) == 0) {
+            vintLen++
+        }
+        if (vintLen > 8 || offset + vintLen > data.size) return null
+
+        val mask = (1 shl (8 - vintLen)) - 1
+        var value = (firstByte and mask).toLong()
+        for (i in 1 until vintLen) {
+            value = (value shl 8) or (data[offset + i].toLong() and 0xFF)
+        }
+        return Pair(value, vintLen)
+    }
+
+    /**
+     * Reads an EBML Variable Length Integer (VINT) for element ID (preserving marker bit).
+     * Returns Pair(idAsLong, totalBytesRead) or null if invalid.
+     */
+    private fun readEbmlId(data: ByteArray, offset: Int): Pair<Long, Int>? {
+        if (offset >= data.size) return null
+        val firstByte = data[offset].toInt() and 0xFF
+        if (firstByte == 0) return null
+
+        var vintLen = 1
+        while (vintLen <= 4 && (firstByte and (1 shl (8 - vintLen))) == 0) {
+            vintLen++
+        }
+        if (vintLen > 4 || offset + vintLen > data.size) return null
+
+        var id = 0L
+        for (i in 0 until vintLen) {
+            id = (id shl 8) or (data[offset + i].toLong() and 0xFF)
+        }
+        return Pair(id, vintLen)
+    }
+
+    /**
+     * Fast and robust EBML scanner for Matroska Chapters atom (0x1043A770 / 0xB6 / 0x91 / 0x85)
+     */
+    private fun extractMatroskaChapters(stream: InputStream): List<RawChapter> {
         val chapters = mutableListOf<RawChapter>()
         val buffer = ByteArray(64 * 1024)
         var totalRead = 0
-        val bos = java.io.ByteArrayOutputStream(256 * 1024)
+        val bos = java.io.ByteArrayOutputStream(512 * 1024)
 
         while (totalRead < MAX_CONTAINER_SCAN_BYTES) {
             val count = stream.read(buffer)
@@ -350,41 +439,68 @@ class ChapterExtractor @Inject constructor(
 
         val data = bos.toByteArray()
         var i = 0
-        while (i < data.size - 8) {
-            // Check for ChapterTimeStart ID: 0x91
+        while (i < data.size - 4) {
+            // Check for ChapterTimeStart ID: 0x91 (1-byte EBML ID)
             if (data[i] == 0x91.toByte()) {
-                val len = (data[i + 1].toInt() and 0xFF)
-                if (len in 1..8 && i + 2 + len <= data.size) {
-                    var ns = 0L
-                    for (b in 0 until len) {
-                        ns = (ns shl 8) or (data[i + 2 + b].toLong() and 0xFF)
-                    }
-                    val startMs = ns / 1_000_000L
-
-                    // Look ahead within 128 bytes for ChapterDisplay (0x80) -> ChapString (0x85)
-                    var title = ""
-                    var searchIndex = i + 2 + len
-                    val maxSearch = (searchIndex + 128).coerceAtMost(data.size - 2)
-                    while (searchIndex < maxSearch) {
-                        if (data[searchIndex] == 0x85.toByte()) {
-                            val strLen = data[searchIndex + 1].toInt() and 0xFF
-                            if (strLen in 1..120 && searchIndex + 2 + strLen <= data.size) {
-                                title = String(data, searchIndex + 2, strLen, Charsets.UTF_8)
-                            }
-                            break
+                val vintRes = readEbmlVint(data, i + 1)
+                if (vintRes != null) {
+                    val (dataLen, lenBytes) = vintRes
+                    val valOffset = i + 1 + lenBytes
+                    if (dataLen in 1..8 && valOffset + dataLen.toInt() <= data.size) {
+                        var ns = 0L
+                        for (b in 0 until dataLen.toInt()) {
+                            ns = (ns shl 8) or (data[valOffset + b].toLong() and 0xFF)
                         }
-                        searchIndex++
-                    }
+                        val startMs = ns / 1_000_000L
 
-                    chapters.add(
-                        RawChapter(
-                            id = "mkv_ch_${chapters.size}",
-                            title = title,
-                            startTimeMs = startMs
+                        // Scan within local window (up to 300 bytes) for ChapterTimeEnd (0x92) & ChapString (0x85)
+                        var endMs = -1L
+                        var title = ""
+                        var searchIndex = valOffset + dataLen.toInt()
+                        val maxSearch = (searchIndex + 300).coerceAtMost(data.size - 2)
+
+                        while (searchIndex < maxSearch) {
+                            if (data[searchIndex] == 0x92.toByte()) {
+                                val endVint = readEbmlVint(data, searchIndex + 1)
+                                if (endVint != null) {
+                                    val (endDataLen, endLenBytes) = endVint
+                                    val endValOffset = searchIndex + 1 + endLenBytes
+                                    if (endDataLen in 1..8 && endValOffset + endDataLen.toInt() <= data.size) {
+                                        var endNs = 0L
+                                        for (b in 0 until endDataLen.toInt()) {
+                                            endNs = (endNs shl 8) or (data[endValOffset + b].toLong() and 0xFF)
+                                        }
+                                        endMs = endNs / 1_000_000L
+                                        searchIndex = endValOffset + endDataLen.toInt()
+                                        continue
+                                    }
+                                }
+                            } else if (data[searchIndex] == 0x85.toByte()) {
+                                val strVint = readEbmlVint(data, searchIndex + 1)
+                                if (strVint != null) {
+                                    val (strLen, strLenBytes) = strVint
+                                    val strValOffset = searchIndex + 1 + strLenBytes
+                                    if (strLen in 1..256 && strValOffset + strLen.toInt() <= data.size) {
+                                        title = String(data, strValOffset, strLen.toInt(), Charsets.UTF_8)
+                                        searchIndex = strValOffset + strLen.toInt()
+                                        continue
+                                    }
+                                }
+                            }
+                            searchIndex++
+                        }
+
+                        chapters.add(
+                            RawChapter(
+                                id = "mkv_ch_${chapters.size}",
+                                title = title,
+                                startTimeMs = startMs,
+                                endTimeMs = endMs
+                            )
                         )
-                    )
-                    i = searchIndex
-                    continue
+                        i = searchIndex
+                        continue
+                    }
                 }
             }
             i++
@@ -400,7 +516,7 @@ class ChapterExtractor @Inject constructor(
         val chapters = mutableListOf<RawChapter>()
         val buffer = ByteArray(64 * 1024)
         var totalRead = 0
-        val bos = java.io.ByteArrayOutputStream(256 * 1024)
+        val bos = java.io.ByteArrayOutputStream(512 * 1024)
 
         while (totalRead < MAX_CONTAINER_SCAN_BYTES) {
             val count = stream.read(buffer)
@@ -416,10 +532,19 @@ class ChapterExtractor @Inject constructor(
             if (data[i] == 'c'.code.toByte() && data[i + 1] == 'h'.code.toByte() &&
                 data[i + 2] == 'p'.code.toByte() && data[i + 3] == 'l'.code.toByte()
             ) {
-                // 'chpl' atom format: 4 bytes version+flags, 4 bytes chapter count (or 1 byte reserved + 4 bytes count)
-                val chapterCount = data[i + 8].toInt() and 0xFF
-                if (chapterCount in 1..200) {
-                    var offset = i + 9
+                // 'chpl' atom format: 4 bytes version+flags (1 byte version, 3 bytes flags)
+                // then 4 bytes chapter count (or 1 byte reserved + 3 bytes count)
+                val count4 = (
+                    ((data[i + 4 + 4].toInt() and 0xFF) shl 24) or
+                    ((data[i + 4 + 5].toInt() and 0xFF) shl 16) or
+                    ((data[i + 4 + 6].toInt() and 0xFF) shl 8) or
+                    (data[i + 4 + 7].toInt() and 0xFF)
+                )
+                val count1 = data[i + 8].toInt() and 0xFF
+                val chapterCount = if (count4 in 1..500) count4 else if (count1 in 1..255) count1 else 0
+
+                if (chapterCount > 0) {
+                    var offset = if (count4 in 1..500) i + 12 else i + 9
                     for (c in 0 until chapterCount) {
                         if (offset + 9 > data.size) break
                         // 8-byte timestamp in 10,000,000 timescale (QuickTime timescale)

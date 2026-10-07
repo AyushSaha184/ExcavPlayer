@@ -78,11 +78,12 @@ class MainActivity : ComponentActivity() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == Intent.ACTION_SCREEN_OFF) {
                 val state = playerManager.state.value
-                if (!state.isBackgroundAudio) {
-                    logger.i("MainActivity", "Screen turned off while background audio is disabled -> pausing playback")
+                val stopOnScreenOff = viewModel.userSettings.value.stopOnScreenOff
+                if (!state.isBackgroundAudio && stopOnScreenOff) {
+                    logger.i("MainActivity", "Screen turned off while background audio is disabled and stopOnScreenOff is enabled -> pausing playback")
                     playerManager.pause()
                 } else {
-                    logger.i("MainActivity", "Screen turned off but background audio is active -> continuing playback")
+                    logger.i("MainActivity", "Screen turned off (isBackgroundAudio=${state.isBackgroundAudio}, stopOnScreenOff=$stopOnScreenOff) -> continuing playback")
                 }
             }
         }

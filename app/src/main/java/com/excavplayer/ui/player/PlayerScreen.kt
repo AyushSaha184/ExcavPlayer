@@ -594,6 +594,16 @@ fun PlayerScreen(
                         setApplyEmbeddedStyles(false)
                         setApplyEmbeddedFontSizes(false)
                         setBottomPaddingFraction(0.08f)
+                        setStyle(
+                            androidx.media3.ui.CaptionStyleCompat(
+                                android.graphics.Color.WHITE,
+                                android.graphics.Color.TRANSPARENT,
+                                android.graphics.Color.TRANSPARENT,
+                                androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_OUTLINE,
+                                android.graphics.Color.BLACK,
+                                null
+                            )
+                        )
                     }
                 }
             },
@@ -602,6 +612,16 @@ fun PlayerScreen(
                 playerView.resizeMode = resizeMode
                 playerView.subtitleView?.apply {
                     setBottomPaddingFraction(0.08f)
+                    setStyle(
+                        androidx.media3.ui.CaptionStyleCompat(
+                            android.graphics.Color.WHITE,
+                            android.graphics.Color.TRANSPARENT,
+                            android.graphics.Color.TRANSPARENT,
+                            androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_OUTLINE,
+                            android.graphics.Color.BLACK,
+                            null
+                        )
+                    )
                 }
 
                 // Display Refresh Rate Optimization (Judder-Free Playback)
