@@ -31,8 +31,25 @@ import com.excavplayer.update.GitHubAsset
 import com.excavplayer.update.UpdateState
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
+import android.content.ContentResolver
+import android.content.Context
+import android.content.IntentSender
+import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
+import com.excavplayer.domain.model.MediaSourceType
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
 import java.io.File
 import javax.inject.Inject
+
+sealed interface DeleteRequestEvent {
+    data class MediaStoreDelete(
+        val intentSender: IntentSender,
+        val videoIds: List<String>
+    ) : DeleteRequestEvent
+}
 
 data class UserMessage(
     val id: Long = System.currentTimeMillis(),
@@ -278,6 +295,7 @@ private fun computeFolderVideosMap(videos: List<Video>): Map<String, List<Video>
 
 @HiltViewModel
 class ExcavViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val library: VideoLibrary,
     private val playlistManager: PlaylistManager,
     private val settingsManager: SettingsManager,
@@ -290,6 +308,9 @@ class ExcavViewModel @Inject constructor(
     companion object {
         private const val TAG = "ExcavViewModel"
     }
+
+    private val _deleteRequestEvents = Channel<DeleteRequestEvent>(Channel.BUFFERED)
+    val deleteRequestEvents = _deleteRequestEvents.receiveAsFlow()
 
     private val query = MutableStateFlow("")
     private val selectedFolder = MutableStateFlow<Folder?>(null)
@@ -503,14 +524,7 @@ class ExcavViewModel @Inject constructor(
     }
 
     fun deleteVideo(video: Video) {
-        viewModelScope.launch {
-            logger.i(TAG, "deleteVideo: ${video.id}")
-            when (val res = library.deleteVideo(video.id)) {
-                is ExcavResult.Success -> showMessage("Video deleted")
-                is ExcavResult.Error -> showMessage("Failed to delete video: ${res.message ?: "Unknown error"}", isError = true)
-                else -> Unit
-            }
-        }
+        deleteVideos(listOf(video))
     }
 
     fun createPlaylist(title: String) {
@@ -552,16 +566,67 @@ class ExcavViewModel @Inject constructor(
         viewModelScope.launch {
             if (videos.isEmpty()) return@launch
             logger.i(TAG, "deleteVideos: ${videos.size} items")
-            var successCount = 0
-            for (vid in videos) {
-                if (library.deleteVideo(vid.id) is ExcavResult.Success) {
-                    successCount++
+
+            val mediaStoreUris = mutableListOf<Uri>()
+            val mediaStoreIds = mutableListOf<String>()
+            val directVideos = mutableListOf<Video>()
+
+            for (v in videos) {
+                val uri = Uri.parse(v.uri)
+                val isMediaStore = uri.scheme == ContentResolver.SCHEME_CONTENT &&
+                    v.sourceType != MediaSourceType.LOCAL_DOCUMENT &&
+                    v.sourceType != MediaSourceType.LOCAL_TREE
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && isMediaStore) {
+                    mediaStoreUris.add(uri)
+                    mediaStoreIds.add(v.id)
+                } else {
+                    directVideos.add(v)
                 }
             }
-            if (successCount == videos.size) {
-                showMessage("${videos.size} ${if (videos.size == 1) "video" else "videos"} deleted")
-            } else {
-                showMessage("Deleted $successCount of ${videos.size} videos")
+
+            var directSuccess = 0
+            for (vid in directVideos) {
+                when (library.deleteVideo(vid.id)) {
+                    is ExcavResult.Success -> directSuccess++
+                    else -> Unit
+                }
+            }
+
+            if (mediaStoreUris.isNotEmpty()) {
+                try {
+                    val pendingIntent = MediaStore.createDeleteRequest(context.contentResolver, mediaStoreUris)
+                    _deleteRequestEvents.send(
+                        DeleteRequestEvent.MediaStoreDelete(
+                            pendingIntent.intentSender,
+                            mediaStoreIds
+                        )
+                    )
+                } catch (e: Exception) {
+                    logger.e(TAG, "Failed to create MediaStore delete request", e)
+                    showMessage("Failed to request deletion: ${e.message}", isError = true)
+                }
+            } else if (directVideos.isNotEmpty()) {
+                if (directSuccess == directVideos.size) {
+                    showMessage("${directVideos.size} ${if (directVideos.size == 1) "video" else "videos"} deleted")
+                } else {
+                    showMessage("Deleted $directSuccess of ${directVideos.size} videos")
+                }
+            }
+        }
+    }
+
+    fun onDeleteConfirmed(videoIds: List<String>) {
+        viewModelScope.launch {
+            logger.i(TAG, "onDeleteConfirmed for ${videoIds.size} videos")
+            when (val res = library.deleteVideosAfterConfirmation(videoIds)) {
+                is ExcavResult.Success -> {
+                    showMessage("${videoIds.size} ${if (videoIds.size == 1) "video" else "videos"} deleted")
+                }
+                is ExcavResult.Error -> {
+                    showMessage("Failed to update library after deletion: ${res.message}", isError = true)
+                }
+                else -> Unit
             }
         }
     }
@@ -570,38 +635,16 @@ class ExcavViewModel @Inject constructor(
         viewModelScope.launch {
             if (folders.isEmpty()) return@launch
             logger.i(TAG, "deleteFolders: ${folders.size} folders")
-            var totalVidsDeleted = 0
-            var diskDeleteFailures = 0
+            val allVids = mutableListOf<Video>()
             for (f in folders) {
                 val normP = normalizeFolderPath(f.path)
                 val vids = folderVideosMap[normP] ?: folderVideosMap[f.name.lowercase()].orEmpty()
-                for (vid in vids) {
-                    if (library.deleteVideo(vid.id) is ExcavResult.Success) {
-                        totalVidsDeleted++
-                    }
-                }
-                try {
-                    val dir = java.io.File(f.path)
-                    if (dir.exists() && dir.isDirectory) {
-                        val deleted = dir.deleteRecursively()
-                        if (!deleted) {
-                            diskDeleteFailures++
-                            logger.w(TAG, "deleteRecursively returned false for: ${f.path}")
-                        }
-                    }
-                } catch (e: SecurityException) {
-                    diskDeleteFailures++
-                    logger.w(TAG, "SecurityException deleting folder on disk: ${f.path}", e)
-                } catch (e: Exception) {
-                    diskDeleteFailures++
-                    logger.w(TAG, "Failed to delete folder on disk: ${f.path}", e)
-                }
+                allVids.addAll(vids)
             }
-            library.refresh()
-            if (diskDeleteFailures > 0) {
-                showMessage("${folders.size} ${if (folders.size == 1) "folder" else "folders"} removed from library")
+            if (allVids.isNotEmpty()) {
+                deleteVideos(allVids)
             } else {
-                showMessage("${folders.size} ${if (folders.size == 1) "folder" else "folders"} deleted")
+                showMessage("No videos to delete in selected folders")
             }
         }
     }

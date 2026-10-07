@@ -111,7 +111,7 @@ interface VideoDao {
         INNER JOIN playback_states p ON v.id = p.video_id
         LEFT JOIN favorites f ON v.id = f.video_id
         LEFT JOIN dismissed_continue_watching d ON v.id = d.video_id
-        WHERE p.current_position_ms > 5000 
+        WHERE p.current_position_ms >= 20000 
           AND p.duration_ms > 0
           AND (CAST(p.current_position_ms AS REAL) / CAST(p.duration_ms AS REAL)) < :threshold
           AND v.availability = 'AVAILABLE'

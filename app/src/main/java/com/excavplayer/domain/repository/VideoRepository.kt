@@ -17,6 +17,7 @@ interface VideoRepository {
     fun searchVideos(query: String): Flow<List<Video>>
     suspend fun renameVideo(videoId: String, newName: String): ExcavResult<Unit>
     suspend fun deleteVideo(videoId: String): ExcavResult<Unit>
+    suspend fun deleteVideosAfterConfirmation(videoIds: List<String>): ExcavResult<Unit>
     suspend fun updateAvailability(videoId: String, availability: MediaAvailability)
     suspend fun syncWithMediaStore(): ExcavResult<Int>
 }

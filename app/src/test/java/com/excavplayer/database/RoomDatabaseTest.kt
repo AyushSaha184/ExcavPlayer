@@ -86,7 +86,7 @@ class RoomDatabaseTest {
     fun `continue watching query excludes completed and unstarted videos`() = runBlocking {
         val v1 = createVideoEntity("v1") // In progress (20%)
         val v2 = createVideoEntity("v2") // Completed (98%)
-        val v3 = createVideoEntity("v3") // Barely started (< 5 sec)
+        val v3 = createVideoEntity("v3") // Barely started (< 20 sec)
         videoDao.insertVideos(listOf(v1, v2, v3))
 
         playbackDao.upsertPlaybackState(

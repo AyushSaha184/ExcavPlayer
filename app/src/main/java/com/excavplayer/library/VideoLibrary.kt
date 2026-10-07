@@ -55,6 +55,11 @@ class VideoLibrary @Inject constructor(
         return videoRepository.deleteVideo(videoId)
     }
 
+    suspend fun deleteVideosAfterConfirmation(videoIds: List<String>): ExcavResult<Unit> {
+        logger.i(TAG, "Cleaning up confirmed deleted videos: $videoIds")
+        return videoRepository.deleteVideosAfterConfirmation(videoIds)
+    }
+
     suspend fun toggleFavorite(videoId: String) {
         logger.i(TAG, "Toggling favorite status for: $videoId")
         favoritesRepository.toggleFavorite(videoId)

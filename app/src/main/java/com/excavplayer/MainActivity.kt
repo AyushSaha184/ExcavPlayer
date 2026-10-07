@@ -15,8 +15,15 @@ import androidx.activity.viewModels
 import com.excavplayer.ui.ExcavViewModel
 import com.excavplayer.ui.navigation.ExcavApp
 import com.excavplayer.ui.theme.ExcavTheme
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
+import android.os.PowerManager
+import androidx.activity.result.IntentSenderRequest
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.excavplayer.core.logging.AppLogger
 import com.excavplayer.data.database.mapper.toDomain
 import com.excavplayer.domain.model.PlayerCommand
@@ -25,7 +32,9 @@ import com.excavplayer.media.source.SafDataSource
 import com.excavplayer.media.thumbnail.ThumbnailLoader
 import com.excavplayer.player.core.PlayerManager
 import com.excavplayer.player.playback.PipHelper
+import com.excavplayer.ui.DeleteRequestEvent
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -53,6 +62,31 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var logger: AppLogger
+
+    private var pendingDeleteIds: List<String> = emptyList()
+
+    private val deleteMediaLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            viewModel.onDeleteConfirmed(pendingDeleteIds)
+        }
+        pendingDeleteIds = emptyList()
+    }
+
+    private val screenOffReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == Intent.ACTION_SCREEN_OFF) {
+                val state = playerManager.state.value
+                if (!state.isBackgroundAudio) {
+                    logger.i("MainActivity", "Screen turned off while background audio is disabled -> pausing playback")
+                    playerManager.pause()
+                } else {
+                    logger.i("MainActivity", "Screen turned off but background audio is active -> continuing playback")
+                }
+            }
+        }
+    }
 
     private val requestPermissionsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -83,6 +117,57 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        if (savedInstanceState != null) {
+            pendingDeleteIds = savedInstanceState.getStringArrayList("KEY_PENDING_DELETE_IDS")?.toList() ?: emptyList()
+        }
+
+        try {
+            ContextCompat.registerReceiver(
+                this,
+                screenOffReceiver,
+                IntentFilter(Intent.ACTION_SCREEN_OFF),
+                ContextCompat.RECEIVER_NOT_EXPORTED
+            )
+        } catch (e: Exception) {
+            logger.w("MainActivity", "Failed to register screenOffReceiver: ${e.message}")
+        }
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.deleteRequestEvents.collect { event ->
+                    when (event) {
+                        is DeleteRequestEvent.MediaStoreDelete -> {
+                            pendingDeleteIds = event.videoIds
+                            deleteMediaLauncher.launch(
+                                IntentSenderRequest.Builder(event.intentSender).build()
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                combine(
+                    viewModel.isPlayerOpen,
+                    playerManager.state
+                ) { isPlayerOpen, playerState ->
+                    Pair(isPlayerOpen, playerState)
+                }.collect { (isPlayerOpen, playerState) ->
+                    val shouldAutoPip = isPlayerOpen &&
+                            playerState.currentVideo != null &&
+                            playerState.playback.isPlaying
+                    pipHelper.updateAutoPipParams(
+                        activity = this@MainActivity,
+                        video = playerState.currentVideo,
+                        isPlaying = playerState.playback.isPlaying,
+                        autoEnter = shouldAutoPip
+                    )
+                }
+            }
+        }
 
         setContent {
             ExcavTheme {
@@ -172,14 +257,34 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         super.onStop()
         val state = playerManager.state.value
+        val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+        val isScreenOff = powerManager?.isInteractive == false
         val isPip = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             isInPictureInPictureMode || state.isInPictureInPicture
         } else {
             state.isInPictureInPicture
         }
 
-        if (!isPip && !state.isBackgroundAudio) {
+        // If screen turned off (in normal or PiP mode), pause unless background audio is enabled
+        if (isScreenOff) {
+            if (!state.isBackgroundAudio) {
+                playerManager.pause()
+            }
+        } else if (!isPip && !state.isBackgroundAudio) {
+            // Screen is still on, app sent to background without PiP
             playerManager.pause()
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        if (pendingDeleteIds.isNotEmpty()) {
+            outState.putStringArrayList("KEY_PENDING_DELETE_IDS", ArrayList(pendingDeleteIds))
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        runCatching { unregisterReceiver(screenOffReceiver) }
     }
 }

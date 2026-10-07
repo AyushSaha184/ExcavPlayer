@@ -33,6 +33,7 @@ import com.excavplayer.domain.model.Video
 import com.excavplayer.domain.repository.PlaybackRepository
 import com.excavplayer.domain.repository.SettingsRepository
 import com.excavplayer.player.chapters.ChapterExtractor
+import com.excavplayer.player.chapters.RawChapter
 import com.excavplayer.player.playback.PlaybackPersistenceManager
 import com.excavplayer.player.queue.PlaybackQueue
 import com.excavplayer.player.tracks.TrackManager
@@ -259,16 +260,12 @@ class PlayerManager @Inject constructor(
         try {
             val builder = exoPlayer.trackSelectionParameters.buildUpon()
             val audioLangs = getLanguageCodes(settings.preferredAudioLanguage)
-            if (audioLangs.isNotEmpty()) {
-                builder.setPreferredAudioLanguages(*audioLangs.toTypedArray())
-            }
+            builder.setPreferredAudioLanguages(*audioLangs.toTypedArray())
             if (settings.subtitlesEnabled && !settings.preferredSubtitleLanguage.isNullOrBlank()) {
                 val textLangs = getLanguageCodes(settings.preferredSubtitleLanguage)
-                if (textLangs.isNotEmpty()) {
-                    builder.setPreferredTextLanguages(*textLangs.toTypedArray())
-                }
+                builder.setPreferredTextLanguages(*textLangs.toTypedArray())
                 builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-            } else if (!settings.subtitlesEnabled || userDisabledSubtitlesForSession) {
+            } else {
                 builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
             }
             exoPlayer.trackSelectionParameters = builder.build()
@@ -307,8 +304,6 @@ class PlayerManager @Inject constructor(
         currentSettings = settings
         userDisabledSubtitlesForSession = false
         pausedByHeadset = false
-        applyTrackSelectionPreferences(settings)
-
         val rawPos = if (!settings.autoResume) {
             0L
         } else {
@@ -349,14 +344,48 @@ class PlayerManager @Inject constructor(
 
         exoPlayer.setPlaybackParameters(PlaybackParameters(settings.defaultPlaybackSpeed))
         exoPlayer.setMediaItem(mediaItem)
+        exoPlayer.prepare()
+        applyTrackSelectionPreferences(settings)
         if (resumePos > 0) {
             exoPlayer.seekTo(resumePos)
         }
-        exoPlayer.prepare()
         exoPlayer.play()
 
+        // Asynchronously extract container-level chapters (MKV EBML, MP4 atoms)
+        playerScope.launch(dispatchers.io) {
+            val containerChapters = chapterExtractor.extractFromUri(video.uri, video.durationMs)
+            if (containerChapters.isNotEmpty() && _state.value.currentVideo?.id == video.id) {
+                _state.update { current ->
+                    if (current.currentVideo?.id == video.id) {
+                        val combined = chapterExtractor.sanitizeAndNormalize(
+                            rawChapters = (current.chapters + containerChapters).map {
+                                RawChapter(it.id, it.title, it.startTimeMs, it.endTimeMs)
+                            },
+                            videoDurationMs = video.durationMs
+                        )
+                        current.copy(chapters = combined)
+                    } else current
+                }
+            }
+        }
+
         becomingNoisyReceiver.register()
-        persistenceManager.startPeriodicSave(playerScope, { _state.value.playback }, { _state.value.currentVideo })
+        persistenceManager.startPeriodicSave(playerScope, { getLivePlaybackState() }, { _state.value.currentVideo })
+    }
+
+    private fun getLivePlaybackState(): PlaybackState {
+        val pos = try { exoPlayer.currentPosition.coerceAtLeast(0L) } catch (_: Exception) { 0L }
+        val dur = try { exoPlayer.duration.coerceAtLeast(0L) } catch (_: Exception) { 0L }
+        val buf = try { exoPlayer.bufferedPosition.coerceAtLeast(0L) } catch (_: Exception) { 0L }
+        val currentPos = if (pos > 0) pos else _playbackPosition.value.currentPositionMs
+        val duration = if (dur > 0) dur else _playbackPosition.value.durationMs
+        val buffered = if (buf > 0) buf else _playbackPosition.value.bufferedPositionMs
+
+        return _state.value.playback.copy(
+            currentPositionMs = currentPos,
+            durationMs = duration,
+            bufferedPositionMs = buffered
+        )
     }
 
     private fun buildMediaItem(video: Video, externalSubtitles: List<MediaItem.SubtitleConfiguration> = emptyList()): MediaItem {
@@ -377,8 +406,9 @@ class PlayerManager @Inject constructor(
         pausedByHeadset = false
         exoPlayer.pause()
         persistenceManager.stopPeriodicSave()
+        val livePlayback = getLivePlaybackState()
         playerScope.launch {
-            persistenceManager.saveImmediate(_state.value.playback, _state.value.currentVideo)
+            persistenceManager.saveImmediate(livePlayback, _state.value.currentVideo)
         }
     }
 
@@ -398,7 +428,7 @@ class PlayerManager @Inject constructor(
         }
         exoPlayer.play()
         becomingNoisyReceiver.register()
-        persistenceManager.startPeriodicSave(playerScope, { _state.value.playback }, { _state.value.currentVideo })
+        persistenceManager.startPeriodicSave(playerScope, { getLivePlaybackState() }, { _state.value.currentVideo })
     }
 
     override fun seekTo(positionMs: Long) {
@@ -652,10 +682,10 @@ class PlayerManager @Inject constructor(
         persistenceManager.stopPeriodicSave()
         releaseLoudnessEnhancer()
         releaseEqualizer()
-        val currentPlayState = _state.value.playback
+        val livePlayback = getLivePlaybackState()
         val currentVid = _state.value.currentVideo
         playerScope.launch {
-            persistenceManager.saveImmediate(currentPlayState, currentVid)
+            persistenceManager.saveImmediate(livePlayback, currentVid)
         }
         try {
             exoPlayer.stop()
@@ -672,8 +702,10 @@ class PlayerManager @Inject constructor(
         persistenceManager.stopPeriodicSave()
         releaseLoudnessEnhancer()
         releaseEqualizer()
+        val livePlayback = getLivePlaybackState()
+        val currentVid = _state.value.currentVideo
         playerScope.launch {
-            persistenceManager.saveImmediate(_state.value.playback, _state.value.currentVideo)
+            persistenceManager.saveImmediate(livePlayback, currentVid)
             exoPlayer.release()
             playerScope.cancel()
         }
@@ -736,8 +768,9 @@ class PlayerManager @Inject constructor(
             if (playbackState == Player.STATE_ENDED) {
                 becomingNoisyReceiver.unregister()
                 persistenceManager.stopPeriodicSave()
+                val livePlayback = getLivePlaybackState()
                 playerScope.launch {
-                    persistenceManager.saveImmediate(_state.value.playback, _state.value.currentVideo)
+                    persistenceManager.saveImmediate(livePlayback, _state.value.currentVideo)
 
                     // Autoplay next in queue if available
                     val settings = settingsRepository.userSettings.first()
@@ -763,23 +796,15 @@ class PlayerManager @Inject constructor(
             if (isPlaying) {
                 persistenceManager.startPeriodicSave(
                     playerScope,
-                    {
-                        _state.value.playback.copy(
-                            currentPositionMs = _playbackPosition.value.currentPositionMs,
-                            durationMs = _playbackPosition.value.durationMs,
-                            bufferedPositionMs = _playbackPosition.value.bufferedPositionMs
-                        )
-                    },
+                    { getLivePlaybackState() },
                     { _state.value.currentVideo }
                 )
             } else {
                 persistenceManager.stopPeriodicSave()
+                val livePlayback = getLivePlaybackState()
                 playerScope.launch {
                     persistenceManager.saveImmediate(
-                        _state.value.playback.copy(
-                            currentPositionMs = _playbackPosition.value.currentPositionMs,
-                            durationMs = _playbackPosition.value.durationMs
-                        ),
+                        livePlayback,
                         _state.value.currentVideo
                     )
                 }
@@ -796,11 +821,20 @@ class PlayerManager @Inject constructor(
             var selectedSubs = subs.find { it.isSelected }?.id
 
             // Match preferred audio language if configured
-            currentSettings.preferredAudioLanguage?.let { preferredLang ->
-                val matchingAudio = audio.find { track ->
-                    matchesLanguage(track.language, track.label, preferredLang)
+            val preferredAudioLanguage = currentSettings.preferredAudioLanguage
+            if (!preferredAudioLanguage.isNullOrBlank()) {
+                val matchingAudio = audio.firstOrNull { track ->
+                    matchesLanguage(
+                        language = track.language,
+                        label = track.label,
+                        preferred = preferredAudioLanguage
+                    )
                 }
                 if (matchingAudio != null && matchingAudio.id != selectedAudio) {
+                    logger.i(
+                        TAG,
+                        "Selecting preferred audio: $preferredAudioLanguage -> ${matchingAudio.label} (${matchingAudio.language})"
+                    )
                     trackManager.selectTrack(exoPlayer, C.TRACK_TYPE_AUDIO, matchingAudio.id)
                     selectedAudio = matchingAudio.id
                 }
@@ -827,11 +861,14 @@ class PlayerManager @Inject constructor(
                 }
             }
 
+            val finalAudio = audio.map { it.copy(isSelected = it.id == selectedAudio) }
+            val finalSubs = subs.map { it.copy(isSelected = it.id == selectedSubs) }
+
             _state.update {
                 it.copy(
-                    availableAudioTracks = audio,
+                    availableAudioTracks = finalAudio,
                     availableVideoTracks = video,
-                    availableSubtitleTracks = subs,
+                    availableSubtitleTracks = finalSubs,
                     playback = it.playback.copy(
                         selectedAudioTrackId = selectedAudio,
                         selectedVideoTrackId = selectedVideo,
@@ -844,10 +881,16 @@ class PlayerManager @Inject constructor(
 
 
         override fun onMetadata(metadata: Metadata) {
-            val extracted = chapterExtractor.extractFromMetadata(metadata)
+            val dur = exoPlayer.duration.takeIf { it > 0 } ?: _state.value.currentVideo?.durationMs
+            val extracted = chapterExtractor.extractFromMetadata(metadata, dur)
             if (extracted.isNotEmpty()) {
                 _state.update { current ->
-                    val combined = (current.chapters + extracted).distinctBy { it.startTimeMs }.sortedBy { it.startTimeMs }
+                    val combined = chapterExtractor.sanitizeAndNormalize(
+                        rawChapters = (current.chapters + extracted).map {
+                            RawChapter(it.id, it.title, it.startTimeMs, it.endTimeMs)
+                        },
+                        videoDurationMs = dur
+                    )
                     current.copy(chapters = combined)
                 }
             }
@@ -929,8 +972,9 @@ class PlayerManager @Inject constructor(
             _state.update { it.copy(error = mappedError) }
             becomingNoisyReceiver.unregister()
             persistenceManager.stopPeriodicSave()
+            val livePlayback = getLivePlaybackState()
             playerScope.launch {
-                persistenceManager.saveImmediate(_state.value.playback, _state.value.currentVideo)
+                persistenceManager.saveImmediate(livePlayback, _state.value.currentVideo)
             }
         }
     }

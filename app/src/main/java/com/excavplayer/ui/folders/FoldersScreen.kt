@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.excavplayer.domain.model.Folder
+import com.excavplayer.domain.model.NaturalVideoComparator
 import com.excavplayer.domain.model.Playlist
 import com.excavplayer.domain.model.Video
 import com.excavplayer.ui.components.*
@@ -229,21 +230,25 @@ fun FoldersScreen(
                     }
                 }
             } else {
-                // Selected Folder View: Display Videos & Subfolders directly in this directory
+                // Selected Folder View: Display direct subfolders and individual videos in this directory
                 val hazeState = LocalHazeState.current
                 val currentNorm = remember(currentFolder.path) { normalizePath(currentFolder.path) }
-                val fallbackVids = remember(currentFolder, folderVideosMap, videos) {
-                    val fromMap = folderVideosMap[currentNorm] ?: folderVideosMap[currentFolder.name.lowercase()].orEmpty()
-                    if (fromMap.isNotEmpty()) {
-                        fromMap
+                val directVideos = remember(currentFolder, folderVideos, folderVideosMap, videos) {
+                    val list = if (folderVideos.isNotEmpty()) {
+                        folderVideos
                     } else {
-                        videos.filter {
-                            val vNorm = normalizePath(it.folderPath)
-                            vNorm == currentNorm || it.folderPath.equals(currentFolder.path, ignoreCase = true) || it.folderName.equals(currentFolder.name, ignoreCase = true)
+                        val fromMap = folderVideosMap[currentNorm] ?: folderVideosMap[currentFolder.name.lowercase()].orEmpty()
+                        if (fromMap.isNotEmpty()) {
+                            fromMap
+                        } else {
+                            videos.filter {
+                                val vNorm = normalizePath(it.folderPath)
+                                vNorm == currentNorm || it.folderPath.equals(currentFolder.path, ignoreCase = true)
+                            }
                         }
                     }
+                    list.sortedWith(NaturalVideoComparator)
                 }
-                val effectiveVideos = if (folderVideos.isNotEmpty()) folderVideos else fallbackVids
                 val directSubfolders = remember(folders, currentNorm) {
                     folders.mapNotNull { f ->
                         val fNorm = normalizePath(f.path)
@@ -316,31 +321,29 @@ fun FoldersScreen(
                             )
                         }
 
-                        if (effectiveVideos.isNotEmpty()) {
+                        if (directVideos.isNotEmpty()) {
                             item(span = { GridItemSpan(maxLineSpan) }, contentType = "videos_header") {
                                 SectionTitle(stringResource(R.string.videos))
                             }
                         }
                     }
 
-                    if (effectiveVideos.isEmpty() && directSubfolders.isEmpty()) {
-                        if (expectedCount == 0) {
-                            item(span = { GridItemSpan(maxLineSpan) }) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(top = 60.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    EmptyState(
-                                        icon = Icons.Default.FolderOff,
-                                        label = stringResource(R.string.empty_folder)
-                                    )
-                                }
+                    if (directVideos.isEmpty() && directSubfolders.isEmpty()) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 60.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                EmptyState(
+                                    icon = Icons.Default.FolderOff,
+                                    label = stringResource(R.string.empty_folder)
+                                )
                             }
                         }
                     } else {
-                        gridItems(effectiveVideos, key = { "video_${it.id}" }, span = { GridItemSpan(maxLineSpan) }, contentType = { "video_row" }) { video ->
+                        gridItems(directVideos, key = { "video_${it.id}" }, span = { GridItemSpan(maxLineSpan) }, contentType = { "video_row" }) { video ->
                             val isVideoSelected = video.id in selectedVideoIds
                             ListVideoRow(
                                 video = video,
@@ -354,7 +357,7 @@ fun FoldersScreen(
                                             selectedVideoIds + video.id
                                         }
                                     } else {
-                                        onPlay(video, effectiveVideos)
+                                        onPlay(video, directVideos)
                                     }
                                 },
                                 onLongClick = {

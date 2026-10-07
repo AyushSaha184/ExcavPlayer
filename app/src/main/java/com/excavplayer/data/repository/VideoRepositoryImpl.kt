@@ -116,13 +116,9 @@ class VideoRepositoryImpl @Inject constructor(
     override suspend fun deleteVideo(videoId: String): ExcavResult<Unit> = withContext(dispatchers.io) {
         try {
             val video = videoDao.getVideoById(videoId)
-            if (video == null) {
-                return@withContext ExcavResult.Error(IllegalArgumentException("Video with ID $videoId not found"))
-            }
+                ?: return@withContext ExcavResult.Error(IllegalArgumentException("Video with ID $videoId not found"))
 
             val uri = Uri.parse(video.video.uri)
-            var storageDeleted = false
-            val deletedPaths = mutableListOf<String>()
 
             // 1. SAF document or tree URI deletion
             if (DocumentsContract.isDocumentUri(context, uri) ||
@@ -130,126 +126,43 @@ class VideoRepositoryImpl @Inject constructor(
                 video.video.sourceType == MediaSourceType.LOCAL_TREE.name
             ) {
                 runCatching {
-                    storageDeleted = DocumentsContract.deleteDocument(context.contentResolver, uri)
-                    if (storageDeleted) {
-                        logger.i(TAG, "Deleted SAF document via DocumentsContract: $uri")
-                    }
-                }.onFailure { e ->
-                    logger.w(TAG, "DocumentsContract deleteDocument failed for $uri: ${e.message}")
+                    DocumentsContract.deleteDocument(context.contentResolver, uri)
                 }
-            }
-
-            // 2. Gather all direct file path candidates
-            val directFiles = mutableSetOf<File>()
-            if (uri.scheme == "file" && !uri.path.isNullOrBlank()) {
-                directFiles.add(File(uri.path!!))
-            }
-            if (video.video.folderPath.isNotBlank() && video.video.displayName.isNotBlank()) {
-                directFiles.add(File(video.video.folderPath, video.video.displayName))
-            }
-            if (video.video.relativePath.isNotBlank() && video.video.displayName.isNotBlank()) {
-                val cleanRel = video.video.relativePath.trim().trim('/')
-                directFiles.add(File("/storage/emulated/0/$cleanRel", video.video.displayName))
-            }
-
-            // Resolve DATA column from MediaStore if content URI
-            if (uri.scheme == ContentResolver.SCHEME_CONTENT) {
+            } else if (uri.scheme == ContentResolver.SCHEME_CONTENT) {
+                // MediaStore deletion (Android 10 / direct when permitted)
                 runCatching {
-                    @Suppress("DEPRECATION")
-                    val projection = arrayOf(MediaStore.Video.Media.DATA)
-                    context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
-                        if (cursor.moveToFirst()) {
-                            val dataIdx = cursor.getColumnIndex(MediaStore.Video.Media.DATA)
-                            if (dataIdx != -1 && !cursor.isNull(dataIdx)) {
-                                val filePath = cursor.getString(dataIdx)
-                                if (!filePath.isNullOrBlank()) {
-                                    directFiles.add(File(filePath))
-                                }
-                            }
-                        }
-                    }
-                }.onFailure { e ->
-                    logger.w(TAG, "Query DATA column failed for $uri: ${e.message}")
+                    context.contentResolver.delete(uri, null, null)
+                }
+            } else if (uri.scheme == "file" && !uri.path.isNullOrBlank()) {
+                val f = File(uri.path!!)
+                if (f.exists()) {
+                    f.delete()
                 }
             }
 
-            // Attempt direct File deletion on all candidate paths
-            for (targetFile in directFiles) {
-                if (targetFile.exists()) {
-                    runCatching {
-                        if (targetFile.delete()) {
-                            storageDeleted = true
-                            deletedPaths.add(targetFile.absolutePath)
-                            logger.i(TAG, "Deleted physical file from disk: ${targetFile.absolutePath}")
-                        }
-                    }.onFailure { e ->
-                        logger.w(TAG, "Direct File.delete() failed for ${targetFile.absolutePath}: ${e.message}")
-                    }
-                }
-            }
-
-            // 3. Delete via ContentResolver for MediaStore content URIs
-            if (uri.scheme == ContentResolver.SCHEME_CONTENT) {
-                runCatching {
-                    val rows = context.contentResolver.delete(uri, null, null)
-                    if (rows > 0) {
-                        storageDeleted = true
-                        logger.i(TAG, "Deleted MediaStore content URI: $uri (rows=$rows)")
-                    }
-                }.onFailure { e ->
-                    logger.w(TAG, "ContentResolver delete failed for URI $uri: ${e.message}")
-                }
-
-                if (videoId.startsWith("ms_")) {
-                    val msId = videoId.removePrefix("ms_")
-                    runCatching {
-                        val rows = context.contentResolver.delete(
-                            MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-                            "${MediaStore.Video.Media._ID} = ?",
-                            arrayOf(msId)
-                        )
-                        if (rows > 0) {
-                            storageDeleted = true
-                            logger.i(TAG, "Deleted MediaStore row for ID $msId (rows=$rows)")
-                        }
-                    }.onFailure { e ->
-                        logger.w(TAG, "ContentResolver delete by ID failed for $msId: ${e.message}")
-                    }
-                }
-            }
-
-            // 4. Trigger MediaScanner to remove deleted paths from MediaStore index immediately
-            if (deletedPaths.isNotEmpty()) {
-                runCatching {
-                    android.media.MediaScannerConnection.scanFile(
-                        context,
-                        deletedPaths.toTypedArray(),
-                        null,
-                        null
-                    )
-                }
-            }
-
-            // 5. Evict from thumbnail caches
-            runCatching {
-                thumbnailLoader.evictThumbnail(video.video.uri)
-            }
-
-            // 6. Check if file still exists on disk
-            val stillExists = directFiles.any { it.exists() }
-            if (stillExists && !storageDeleted) {
-                logger.w(TAG, "File could not be deleted from physical storage: ${video.video.displayName}")
-                return@withContext ExcavResult.Error(
-                    java.io.IOException("Could not delete video file from device storage. Please check storage permissions.")
-                )
-            }
-
-            // 7. Remove from local Room database
+            thumbnailLoader.evictThumbnail(video.video.uri)
             videoDao.deleteVideo(videoId)
-            logger.i(TAG, "Deleted video from repository & storage: $videoId (storageDeleted=$storageDeleted)")
+            logger.i(TAG, "Deleted video: $videoId")
             ExcavResult.Success(Unit)
         } catch (e: Exception) {
             logger.e(TAG, "Failed to delete video $videoId", e)
+            ExcavResult.Error(e)
+        }
+    }
+
+    override suspend fun deleteVideosAfterConfirmation(videoIds: List<String>): ExcavResult<Unit> = withContext(dispatchers.io) {
+        try {
+            for (id in videoIds) {
+                val video = videoDao.getVideoById(id)
+                if (video != null) {
+                    thumbnailLoader.evictThumbnail(video.video.uri)
+                }
+            }
+            videoDao.deleteVideos(videoIds)
+            logger.i(TAG, "Cleaned up ${videoIds.size} videos from database after confirmation")
+            ExcavResult.Success(Unit)
+        } catch (e: Exception) {
+            logger.e(TAG, "Failed to clean up videos after confirmation", e)
             ExcavResult.Error(e)
         }
     }

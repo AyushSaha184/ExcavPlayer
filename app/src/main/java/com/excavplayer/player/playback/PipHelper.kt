@@ -56,8 +56,24 @@ class PipHelper @Inject constructor(
         }
     }
 
+    fun updateAutoPipParams(activity: Activity, video: Video?, isPlaying: Boolean, autoEnter: Boolean) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                val params = buildPipParams(activity, video, isPlaying, autoEnter = autoEnter)
+                activity.setPictureInPictureParams(params)
+            } catch (e: Exception) {
+                logger.w(TAG, "Failed to update PictureInPictureParams: ${e.message}")
+            }
+        }
+    }
+
     @RequiresApi(Build.VERSION_CODES.O)
-    fun buildPipParams(activity: Activity, video: Video?, isPlaying: Boolean): PictureInPictureParams {
+    fun buildPipParams(
+        activity: Activity,
+        video: Video?,
+        isPlaying: Boolean,
+        autoEnter: Boolean = false
+    ): PictureInPictureParams {
         val builder = PictureInPictureParams.Builder()
 
         // Calculate aspect ratio clamped to Android's allowed range (0.418 to 2.39)
@@ -124,7 +140,7 @@ class PipHelper @Inject constructor(
         builder.setActions(actions)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            builder.setAutoEnterEnabled(true)
+            builder.setAutoEnterEnabled(autoEnter)
             builder.setSeamlessResizeEnabled(true)
         }
 

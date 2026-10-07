@@ -70,7 +70,6 @@ class PlaybackPersistenceManager @Inject constructor(
             else -> 60_000L
         }
         val isCompleted = duration > 0 && (
-            currentPos < 3_000L ||
             remainingMs <= thresholdMs ||
             (currentPos.toFloat() / duration.toFloat()) >= settings.resumeThresholdPercent
         )

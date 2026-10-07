@@ -88,7 +88,7 @@ class SettingsRepositoryImpl @Inject constructor(
                 autoplayNextVideo = preferences[KEY_AUTOPLAY_NEXT] ?: true,
                 subtitlesEnabled = preferences[KEY_SUBTITLES_ENABLED] ?: true,
                 preferredSubtitleLanguage = preferences[KEY_PREFERRED_SUBTITLE_LANG] ?: "English",
-                preferredAudioLanguage = preferences[KEY_PREFERRED_AUDIO_LANG],
+                preferredAudioLanguage = preferences[KEY_PREFERRED_AUDIO_LANG] ?: "English",
                 gestureControlsEnabled = preferences[KEY_GESTURE_CONTROLS] ?: true,
                 brightnessGestureEnabled = preferences[KEY_BRIGHTNESS_GESTURE] ?: true,
                 volumeGestureEnabled = preferences[KEY_VOLUME_GESTURE] ?: true,

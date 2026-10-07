@@ -314,6 +314,7 @@ fun PlayerScreen(
                     PlayerView(ctx).apply {
                         this.player = vm.player.exoPlayer
                         useController = false
+                        keepScreenOn = state.playback.isPlaying
                         layoutParams = FrameLayout.LayoutParams(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                             ViewGroup.LayoutParams.MATCH_PARENT
@@ -325,6 +326,7 @@ fun PlayerScreen(
                 },
                 update = { playerView ->
                     playerView.player = vm.player.exoPlayer
+                    playerView.keepScreenOn = state.playback.isPlaying
                 },
                 modifier = Modifier.fillMaxSize()
             )
@@ -579,6 +581,7 @@ fun PlayerScreen(
                 PlayerView(ctx).apply {
                     this.player = vm.player.exoPlayer
                     useController = false
+                    keepScreenOn = state.playback.isPlaying
                     layoutParams = FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
@@ -595,6 +598,7 @@ fun PlayerScreen(
                 }
             },
             update = { playerView ->
+                playerView.keepScreenOn = state.playback.isPlaying
                 playerView.resizeMode = resizeMode
                 playerView.subtitleView?.apply {
                     setBottomPaddingFraction(0.08f)
@@ -1611,6 +1615,7 @@ private fun SheetContainer(
                     }
                 )
                 .heightIn(max = (maxSheetHeight * 0.85f).coerceAtLeast(180.dp))
+                .clip(RoundedCornerShape(22.dp))
                 .darkUltraThinBlur(
                     shape = RoundedCornerShape(22.dp),
                     backgroundColor = Color(0xF20E121B),
@@ -1729,7 +1734,7 @@ private fun ChaptersSheet(
 }
 
 // -----------------------------------------------------------------------------------------
-// Subtitles Sheet (Track Selection, External Subtitles & Delay)
+// Subtitles Sheet (Track Selection & External Subtitles)
 // -----------------------------------------------------------------------------------------
 @Composable
 private fun SubtitleSheet(
@@ -1810,33 +1815,7 @@ private fun SubtitleSheet(
             }
         }
 
-        Spacer(Modifier.height(14.dp))
-
-        // Section: Subtitle Delay
-        Text(
-            text = "Subtitle Delay",
-            color = ExcavPalette.Text,
-            style = MaterialTheme.typography.titleSmall.copy(
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp
-            )
-        )
-        Spacer(Modifier.height(6.dp))
-
-        ExcavSleekSlider(
-            value = state.subtitleDelayMs.toFloat(),
-            onValueChange = { rawVal ->
-                val snapped = if (kotlin.math.abs(rawVal) < 200f) 0L else rawVal.toLong()
-                player.setSubtitleDelay(snapped)
-            },
-            valueRange = -5000f..5000f,
-            showZeroMarker = true,
-            startLabel = "-5000 ms",
-            centerLabel = if (state.subtitleDelayMs > 0) "+${state.subtitleDelayMs} ms" else "${state.subtitleDelayMs} ms",
-            endLabel = "+5000 ms"
-        )
-
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(8.dp))
     }
 }
 
