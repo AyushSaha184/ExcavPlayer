@@ -52,6 +52,7 @@ import com.excavplayer.R
 import com.excavplayer.ui.ExcavViewModel
 import com.excavplayer.ui.components.*
 import com.excavplayer.ui.favorites.FavoritesScreen
+import com.excavplayer.domain.model.Folder
 import com.excavplayer.ui.folders.*
 import com.excavplayer.ui.home.HomeScreen
 import com.excavplayer.ui.player.PlayerScreen
@@ -84,6 +85,9 @@ fun ExcavApp(
                 val matched = library.folders.find { it.path == lastPath }
                 if (matched != null) {
                     vm.openFolder(matched)
+                } else {
+                    val name = lastPath.trimEnd('/').substringAfterLast('/')
+                    vm.openFolder(Folder(name = name, path = lastPath, videoCount = 0, totalSizeBytes = 0L))
                 }
             }
             restoredFolder = true

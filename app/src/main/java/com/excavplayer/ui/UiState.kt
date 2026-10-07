@@ -636,13 +636,23 @@ class ExcavViewModel @Inject constructor(
             if (folders.isEmpty()) return@launch
             logger.i(TAG, "deleteFolders: ${folders.size} folders")
             val allVids = mutableListOf<Video>()
+            val allLibraryVideos = libraryState.value.videos
             for (f in folders) {
                 val normP = normalizeFolderPath(f.path)
-                val vids = folderVideosMap[normP] ?: folderVideosMap[f.name.lowercase()].orEmpty()
-                allVids.addAll(vids)
+                val matching = allLibraryVideos.filter {
+                    val vNorm = normalizeFolderPath(it.folderPath)
+                    vNorm == normP || vNorm.startsWith("$normP/")
+                }
+                if (matching.isNotEmpty()) {
+                    allVids.addAll(matching)
+                } else {
+                    val fallback = folderVideosMap[normP] ?: folderVideosMap[f.name.lowercase()].orEmpty()
+                    allVids.addAll(fallback)
+                }
             }
-            if (allVids.isNotEmpty()) {
-                deleteVideos(allVids)
+            val distinctVids = allVids.distinctBy { it.id }
+            if (distinctVids.isNotEmpty()) {
+                deleteVideos(distinctVids)
             } else {
                 showMessage("No videos to delete in selected folders")
             }
