@@ -45,6 +45,11 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 import java.io.File
 import javax.inject.Inject
+import kotlinx.coroutines.flow.update
+import com.excavplayer.subtitles.SubtitleHelper
+import com.excavplayer.subtitles.SubtitleSearchResult
+import com.excavplayer.subtitles.SubtitleLanguage
+import com.excavplayer.subtitles.SubtitleSource
 
 sealed interface DeleteRequestEvent {
     data class MediaStoreDelete(
@@ -251,34 +256,6 @@ private fun computeVideoGroups(videos: List<Video>, folders: List<Folder>): List
         }
     }
 
-    // Pass 2: Remaining videos grouped by dedicated non-generic folders
-    val remainingVideos = videos.filter { it.id !in groupedVideoIds }
-    val folderBuckets = mutableMapOf<String, MutableList<Video>>()
-    for (video in remainingVideos) {
-        val folderName = video.folderName.trim()
-        val cleanNorm = folderName.lowercase()
-        if (folderName.isNotEmpty() && !GENERIC_FOLDER_NAMES.contains(cleanNorm)) {
-            val folderKey = video.folderPath.ifEmpty { folderName }
-            folderBuckets.getOrPut(folderKey) { mutableListOf() }.add(video)
-        }
-    }
-
-    for ((folderPath, vids) in folderBuckets) {
-        if (vids.size >= 2) {
-            val folderName = vids.firstOrNull()?.folderName ?: "Videos"
-            val sortedVideos = vids.distinctBy { it.id }.sortedWith(NaturalVideoComparator)
-            groups.add(
-                VideoGroup(
-                    id = "folder_$folderPath",
-                    name = cleanSeriesTitle(folderName),
-                    path = folderPath,
-                    videos = sortedVideos
-                )
-            )
-            vids.forEach { groupedVideoIds.add(it.id) }
-        }
-    }
-
     return groups.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
 }
 
@@ -295,6 +272,16 @@ private fun computeFolderVideosMap(videos: List<Video>): Map<String, List<Video>
     return map.mapValues { (_, list) -> list.sortedWith(NaturalVideoComparator) }
 }
 
+data class OnlineSubtitleUiState(
+    val query: String = "",
+    val isSearching: Boolean = false,
+    val searchResults: List<SubtitleSearchResult> = emptyList(),
+    val downloadingIds: Set<String> = emptySet(),
+    val downloadedMap: Map<String, File> = emptyMap(),
+    val appliedSubtitleId: String? = null,
+    val errorMessage: String? = null
+)
+
 @HiltViewModel
 class ExcavViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -304,6 +291,7 @@ class ExcavViewModel @Inject constructor(
     val player: PlayerManager,
     val queue: PlaybackQueue,
     val updateManager: AppUpdateManager,
+    val subtitleHelper: SubtitleHelper,
     private val logger: AppLogger
 ) : ViewModel() {
 
@@ -993,5 +981,121 @@ class ExcavViewModel @Inject constructor(
 
     fun installApk(file: File) {
         updateManager.installApk(file)
+    }
+
+    // -------------------------------------------------------------------------------------
+    // Online Subtitles
+    // -------------------------------------------------------------------------------------
+    private val _onlineSubtitleState = MutableStateFlow(OnlineSubtitleUiState())
+    val onlineSubtitleState: StateFlow<OnlineSubtitleUiState> = _onlineSubtitleState.asStateFlow()
+
+    fun updateSubtitleQuery(query: String) {
+        _onlineSubtitleState.update { it.copy(query = query) }
+    }
+
+    fun searchOnlineSubtitles(queryOverride: String? = null) {
+        val q = (queryOverride ?: _onlineSubtitleState.value.query).trim()
+        if (q.isBlank()) return
+
+        val preferredLang = userSettings.value.preferredSubtitleLanguage
+        val langCode = if (preferredLang.isNullOrBlank() || preferredLang.equals("auto", ignoreCase = true) || preferredLang.equals("auto (default)", ignoreCase = true)) {
+            "en"
+        } else {
+            preferredLang.trim().lowercase()
+        }
+
+        viewModelScope.launch {
+            _onlineSubtitleState.update { it.copy(isSearching = true, errorMessage = null) }
+            try {
+                val results = subtitleHelper.searchOnlineSubtitles(
+                    query = q,
+                    languageCode = langCode,
+                    source = SubtitleSource.ALL
+                )
+                _onlineSubtitleState.update {
+                    it.copy(
+                        isSearching = false,
+                        searchResults = results,
+                        errorMessage = if (results.isEmpty()) "No subtitles found for \"$q\"" else null
+                    )
+                }
+            } catch (e: Exception) {
+                logger.e(TAG, "Subtitle search failed: ${e.message}", e)
+                _onlineSubtitleState.update {
+                    it.copy(
+                        isSearching = false,
+                        errorMessage = e.message ?: "Failed to search subtitles"
+                    )
+                }
+            }
+        }
+    }
+
+    fun downloadAndApplySubtitle(result: SubtitleSearchResult, videoTitle: String) {
+        viewModelScope.launch {
+            _onlineSubtitleState.update {
+                it.copy(downloadingIds = it.downloadingIds + result.id, errorMessage = null)
+            }
+            try {
+                val dlResult = subtitleHelper.downloadAndSaveSubtitle(result, videoTitle)
+                val file = dlResult.getOrThrow()
+                val updatedMap = _onlineSubtitleState.value.downloadedMap + (result.id to file)
+
+                val shouldApplyImmediately = _onlineSubtitleState.value.appliedSubtitleId == null
+
+                if (shouldApplyImmediately) {
+                    val uri = Uri.fromFile(file).toString()
+                    val mimeType = subtitleHelper.inferMimeTypeFromUri(Uri.fromFile(file))
+                    val label = if (result.fileName.isNotBlank()) {
+                        result.fileName.substringBeforeLast('.')
+                    } else {
+                        "${result.language} (${result.source})"
+                    }
+                    player.addExternalSubtitle(uri, label, mimeType)
+
+                    _onlineSubtitleState.update {
+                        it.copy(
+                            downloadingIds = it.downloadingIds - result.id,
+                            downloadedMap = updatedMap,
+                            appliedSubtitleId = result.id
+                        )
+                    }
+                    showMessage("Subtitle applied: $label")
+                } else {
+                    _onlineSubtitleState.update {
+                        it.copy(
+                            downloadingIds = it.downloadingIds - result.id,
+                            downloadedMap = updatedMap
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                logger.e(TAG, "Subtitle download failed: ${e.message}", e)
+                _onlineSubtitleState.update {
+                    it.copy(
+                        downloadingIds = it.downloadingIds - result.id,
+                        errorMessage = "Download failed: ${e.message}"
+                    )
+                }
+            }
+        }
+    }
+
+    fun applyDownloadedResult(result: SubtitleSearchResult) {
+        val file = _onlineSubtitleState.value.downloadedMap[result.id] ?: return
+        val uri = Uri.fromFile(file).toString()
+        val mimeType = subtitleHelper.inferMimeTypeFromUri(Uri.fromFile(file))
+        val label = if (result.fileName.isNotBlank()) {
+            result.fileName.substringBeforeLast('.')
+        } else {
+            "${result.language} (${result.source})"
+        }
+        player.addExternalSubtitle(uri, label, mimeType)
+        _onlineSubtitleState.update { it.copy(appliedSubtitleId = result.id) }
+        showMessage("Subtitle applied: $label")
+    }
+
+    fun setSubtitleDelay(delayMs: Long) {
+        player.setSubtitleDelay(delayMs)
     }
 }

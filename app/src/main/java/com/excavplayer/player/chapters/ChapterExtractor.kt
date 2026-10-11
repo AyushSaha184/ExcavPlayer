@@ -249,7 +249,7 @@ class ChapterExtractor @Inject constructor(
                         }
                     }
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 logger.d(TAG, "Local file extraction skipped: ${e.message}")
             }
         }
@@ -257,6 +257,14 @@ class ChapterExtractor @Inject constructor(
         val uri = runCatching { Uri.parse(uriString) }.getOrNull() ?: return@withContext emptyList()
 
         // 2. Content URI random-access extraction
+        val auth = uri.authority
+        val isMediaProvider = auth == "media" || auth?.contains("media", ignoreCase = true) == true || auth?.contains("providers", ignoreCase = true) == true
+        if (uri.scheme == "content" && !isMediaProvider) {
+            // Do not open secondary streams on external third-party one-shot ContentProviders (e.g. WhatsApp, FileProvider)
+            // to avoid stream contention or closing pipes used by ExoPlayer.
+            return@withContext emptyList()
+        }
+
         try {
             if (uri.scheme == "content") {
                 context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
@@ -266,7 +274,7 @@ class ChapterExtractor @Inject constructor(
                     }
                 }
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             logger.d(TAG, "Content URI seekable extraction failed, falling back to streaming: ${e.message}")
         }
 
@@ -287,7 +295,7 @@ class ChapterExtractor @Inject constructor(
                     }
                 }
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             logger.d(TAG, "Container chapter extraction skipped or failed: ${e.message}")
         }
 

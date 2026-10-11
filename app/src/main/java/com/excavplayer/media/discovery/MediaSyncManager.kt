@@ -72,47 +72,35 @@ class MediaSyncManager @Inject constructor(
                 _syncStatus.value = SyncStatus.Syncing(totalCount)
             }
 
-            // Detect deleted / missing videos from MediaStore (exclude filesystem & SAF videos)
+            // Detect deleted / missing videos from MediaStore (exclude SAF videos)
             val removedIds = existingIds.filter { id ->
-                !id.startsWith("fs_") && !id.startsWith("saf_") && !discoveredIds.contains(id)
+                !id.startsWith("saf_") && !discoveredIds.contains(id)
             }
 
             if (removedIds.isNotEmpty()) {
-                logger.i(TAG, "Deleting ${removedIds.size} missing MediaStore videos from database")
+                logger.i(TAG, "Deleting ${removedIds.size} missing MediaStore/legacy videos from database")
                 videoDao.deleteVideos(removedIds)
             }
 
-            // 2. Recursive storage file scan for unindexed, hidden, or deep video files (on manual refresh or initial empty DB)
-            val unindexedCount: Int
+            // Clean up any legacy filesystem videos from the database
+            val existingFsVideos = videoDao.getAllFsVideos()
+            if (existingFsVideos.isNotEmpty()) {
+                logger.i(TAG, "Purging ${existingFsVideos.size} legacy filesystem videos from database")
+                videoDao.deleteVideos(existingFsVideos.map { it.id })
+            }
+
+            // 2. Storage file scan: discover unindexed videos and request MediaScanner to index them into MediaStore
+            var unindexedScanned = 0
             if (force || existingIds.isEmpty()) {
                 val existingKeys = videoDao.getAllVideoKeys().toHashSet()
                 val unindexedVideos = storageFileScanner.scanForUnindexedVideos(existingKeys)
-                unindexedCount = unindexedVideos.size
-                if (unindexedVideos.isNotEmpty()) {
-                    videoDao.insertVideos(unindexedVideos)
-                    totalCount += unindexedVideos.size
-                    _syncStatus.value = SyncStatus.Syncing(totalCount)
-                }
-            } else {
-                unindexedCount = 0
+                unindexedScanned = unindexedVideos.size
+                // Note: scanForUnindexedVideos already calls MediaScannerConnection.scanFile.
+                // We do NOT insert raw file:/// URIs into Room, allowing MediaStore to index them cleanly.
             }
 
-            // 3. Clean up deleted filesystem videos
-            if (force || existingIds.isEmpty()) {
-                val existingFsVideos = videoDao.getAllFsVideos()
-                val staleFsIds = existingFsVideos.filter {
-                    val path = Uri.parse(it.uri).path
-                    path == null || !File(path).exists()
-                }.map { it.id }
-
-                if (staleFsIds.isNotEmpty()) {
-                    logger.i(TAG, "Deleting ${staleFsIds.size} stale filesystem videos from database")
-                    videoDao.deleteVideos(staleFsIds)
-                }
-            }
-
-            _syncStatus.value = SyncStatus.Success(totalScanned = totalCount, updatedCount = discoveredIds.size + unindexedCount)
-            logger.i(TAG, "Sync complete: $totalCount items discovered ($unindexedCount via filesystem scan)")
+            _syncStatus.value = SyncStatus.Success(totalScanned = totalCount, updatedCount = discoveredIds.size)
+            logger.i(TAG, "Sync complete: $totalCount items discovered ($unindexedScanned sent to MediaScanner)")
             ExcavResult.Success(totalCount)
         } catch (e: Exception) {
             logger.e(TAG, "Error synchronizing media library", e)

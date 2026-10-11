@@ -244,4 +244,58 @@ class MediaStoreDataSource @Inject constructor(
 
         return videos
     }
+
+    suspend fun queryVideoById(mediaStoreId: Long): VideoEntity? = withContext(dispatchers.io) {
+        val uri = ContentUris.withAppendedId(VIDEO_COLLECTION_URI, mediaStoreId)
+        val projection = getProjection()
+        try {
+            contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+                parseCursorBatch(cursor).firstOrNull()
+            }
+        } catch (e: Exception) {
+            logger.w(TAG, "Failed to query video by ID $mediaStoreId: ${e.message}")
+            null
+        }
+    }
+
+    suspend fun queryVideoByDisplayName(displayName: String, sizeBytes: Long? = null): VideoEntity? = withContext(dispatchers.io) {
+        val projection = getProjection()
+        val selection = if (sizeBytes != null && sizeBytes > 0L) {
+            "${MediaStore.Video.Media.DISPLAY_NAME} = ? AND ${MediaStore.Video.Media.SIZE} = ?"
+        } else {
+            "${MediaStore.Video.Media.DISPLAY_NAME} = ?"
+        }
+        val selectionArgs = if (sizeBytes != null && sizeBytes > 0L) {
+            arrayOf(displayName, sizeBytes.toString())
+        } else {
+            arrayOf(displayName)
+        }
+        try {
+            contentResolver.query(VIDEO_COLLECTION_URI, projection, selection, selectionArgs, null)?.use { cursor ->
+                parseCursorBatch(cursor).firstOrNull()
+            }
+        } catch (e: Exception) {
+            logger.w(TAG, "Failed to query video by displayName $displayName: ${e.message}")
+            null
+        }
+    }
+
+    suspend fun scanAndIndexFile(filePath: String): VideoEntity? = withContext(dispatchers.io) {
+        val scannedUri = kotlinx.coroutines.suspendCancellableCoroutine<Uri?> { cont ->
+            android.media.MediaScannerConnection.scanFile(context, arrayOf(filePath), null) { _, uri ->
+                if (cont.isActive) cont.resumeWith(Result.success(uri))
+            }
+        }
+        if (scannedUri != null) {
+            val id = runCatching { ContentUris.parseId(scannedUri) }.getOrNull()
+            if (id != null) {
+                queryVideoById(id)
+            } else {
+                null
+            }
+        } else {
+            null
+        }
+    }
 }
+

@@ -52,6 +52,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.excavplayer.data.database.dao.SubtitlePreferenceDao
+import com.excavplayer.data.database.entity.SubtitlePreferenceEntity
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -62,6 +65,7 @@ class PlayerManager @Inject constructor(
     private val playbackRepository: PlaybackRepository,
     private val settingsRepository: SettingsRepository,
     private val persistenceManager: PlaybackPersistenceManager,
+    private val subtitlePreferenceDao: SubtitlePreferenceDao,
     val queue: PlaybackQueue,
     private val chapterExtractor: ChapterExtractor,
     private val seekPreviewLoader: SeekPreviewLoader,
@@ -151,6 +155,7 @@ class PlayerManager @Inject constructor(
 
     private var currentSettings = UserSettings()
     private var userDisabledSubtitlesForSession = false
+    private val activeExternalSubtitles = mutableListOf<MediaItem.SubtitleConfiguration>()
 
     override val exoPlayer: ExoPlayer by lazy {
         val mediaCodecSelector = MediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
@@ -185,9 +190,14 @@ class PlayerManager @Inject constructor(
             .setUsage(C.USAGE_MEDIA)
             .build()
 
+        val offsetSubtitleParserFactory = OffsetSubtitleParserFactory {
+            _state.value.subtitleDelayMs * 1000L
+        }
         val extractorsFactory = DefaultExtractorsFactory()
             .setConstantBitrateSeekingEnabled(true)
+            .setSubtitleParserFactory(offsetSubtitleParserFactory)
         val mediaSourceFactory = DefaultMediaSourceFactory(context, extractorsFactory)
+            .setSubtitleParserFactory(offsetSubtitleParserFactory)
 
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
@@ -318,6 +328,7 @@ class PlayerManager @Inject constructor(
         val settings = settingsRepository.userSettings.first()
         currentSettings = settings
         userDisabledSubtitlesForSession = false
+        activeExternalSubtitles.clear()
         pausedByHeadset = false
         val rawPos = if (!settings.autoResume) {
             0L
@@ -340,7 +351,54 @@ class PlayerManager @Inject constructor(
         )
         val resumePos = if (isCompleted) 0L else rawPos
 
-        val mediaItem = buildMediaItem(video)
+        val savedSubPref = runCatching { subtitlePreferenceDao.getPreferences(video.id) }.getOrNull()
+        val initialDelay = savedSubPref?.subtitleDelayMs ?: 0L
+
+        if (savedSubPref?.externalSubtitleUri != null) {
+            val uriStr = savedSubPref.externalSubtitleUri
+            val subUri = Uri.parse(uriStr)
+            var exists = false
+            try {
+                if (subUri.scheme == "file" || subUri.scheme == null) {
+                    val f = File(subUri.path ?: uriStr)
+                    exists = f.exists() && f.length() > 0
+                } else {
+                    context.contentResolver.openInputStream(subUri)?.use { exists = true }
+                }
+            } catch (_: Exception) {
+                exists = false
+            }
+
+            if (exists) {
+                val cleanName = subUri.lastPathSegment?.substringAfterLast('/')?.substringAfterLast(':').orEmpty()
+                val ext = cleanName.substringAfterLast('.', "").lowercase()
+                val mimeType = when (ext) {
+                    "srt" -> androidx.media3.common.MimeTypes.APPLICATION_SUBRIP
+                    "vtt" -> androidx.media3.common.MimeTypes.TEXT_VTT
+                    "ssa", "ass" -> androidx.media3.common.MimeTypes.TEXT_SSA
+                    "ttml", "xml" -> androidx.media3.common.MimeTypes.APPLICATION_TTML
+                    else -> androidx.media3.common.MimeTypes.APPLICATION_SUBRIP
+                }
+                val label = if (cleanName.isNotBlank()) cleanName.substringBeforeLast('.') else "External Subtitle"
+                val subConfig = MediaItem.SubtitleConfiguration.Builder(subUri)
+                    .setMimeType(mimeType)
+                    .setLabel(label)
+                    .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                    .build()
+                activeExternalSubtitles.add(subConfig)
+            } else {
+                // If deleted from storage, silently update database without throwing any warnings
+                playerScope.launch {
+                    try {
+                        subtitlePreferenceDao.upsertPreferences(
+                            savedSubPref.copy(externalSubtitleUri = null)
+                        )
+                    } catch (_: Exception) {}
+                }
+            }
+        }
+
+        val mediaItem = buildMediaItem(video, activeExternalSubtitles.toList())
         persistenceManager.onSessionStarted()
 
         _state.update {
@@ -349,6 +407,7 @@ class PlayerManager @Inject constructor(
                 error = null,
                 isBackgroundAudio = false,
                 chapters = emptyList(),
+                subtitleDelayMs = initialDelay,
                 playback = it.playback.copy(
                     videoId = video.id,
                     playbackSpeed = settings.defaultPlaybackSpeed,
@@ -406,14 +465,76 @@ class PlayerManager @Inject constructor(
     }
 
     private fun buildMediaItem(video: Video, externalSubtitles: List<MediaItem.SubtitleConfiguration> = emptyList()): MediaItem {
-        val uri = if (video.uri.startsWith("/")) {
+        var uri = if (video.uri.startsWith("/")) {
             Uri.fromFile(java.io.File(video.uri))
         } else {
             Uri.parse(video.uri)
         }
+
+        if (uri.scheme == "file" || (uri.scheme == null && uri.path?.startsWith("/") == true)) {
+            val path = uri.path ?: video.uri.removePrefix("file://")
+            val decodedPath = Uri.decode(path)
+            val file = java.io.File(decodedPath)
+            if (file.exists()) {
+                try {
+                    val projection = arrayOf(
+                        android.provider.MediaStore.Video.Media._ID,
+                        android.provider.MediaStore.Video.Media.SIZE
+                    )
+                    val selection = "${android.provider.MediaStore.Video.Media.DISPLAY_NAME} = ?"
+                    val selectionArgs = arrayOf(file.name)
+                    context.contentResolver.query(
+                        android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                        projection,
+                        selection,
+                        selectionArgs,
+                        null
+                    )?.use { cursor ->
+                        val idCol = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Video.Media._ID)
+                        val sizeCol = cursor.getColumnIndex(android.provider.MediaStore.Video.Media.SIZE)
+                        var resolvedId: Long? = null
+                        while (cursor.moveToNext()) {
+                            val candidateId = cursor.getLong(idCol)
+                            val candidateSize = if (sizeCol != -1) cursor.getLong(sizeCol) else -1L
+                            if (file.length() > 0 && candidateSize == file.length()) {
+                                resolvedId = candidateId
+                                break
+                            } else if (resolvedId == null) {
+                                resolvedId = candidateId
+                            }
+                        }
+                        if (resolvedId != null) {
+                            uri = android.content.ContentUris.withAppendedId(
+                                android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                                resolvedId
+                            )
+                        }
+                    }
+                } catch (_: Throwable) {}
+            }
+        } else if (android.provider.DocumentsContract.isDocumentUri(context, uri)) {
+            try {
+                val authority = uri.authority
+                if (authority == "com.android.providers.media.documents") {
+                    val docId = android.provider.DocumentsContract.getDocumentId(uri)
+                    val id = docId.substringAfter("video:").toLongOrNull() ?: docId.toLongOrNull()
+                    if (id != null) {
+                        uri = android.content.ContentUris.withAppendedId(
+                            android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                            id
+                        )
+                    }
+                }
+            } catch (_: Throwable) {}
+        }
+
         val builder = MediaItem.Builder()
             .setMediaId(video.id)
             .setUri(uri)
+
+        if (video.mimeType.isNotBlank() && video.mimeType != "video/*" && video.mimeType != "*/*") {
+            builder.setMimeType(video.mimeType)
+        }
 
         if (externalSubtitles.isNotEmpty()) {
             builder.setSubtitleConfigurations(externalSubtitles)
@@ -442,7 +563,7 @@ class PlayerManager @Inject constructor(
             _state.value.playback.playbackStatus == PlaybackStatus.ENDED
         ) {
             if (exoPlayer.currentMediaItem == null && curVid != null) {
-                exoPlayer.setMediaItem(buildMediaItem(curVid))
+                exoPlayer.setMediaItem(buildMediaItem(curVid, activeExternalSubtitles.toList()))
             }
             exoPlayer.seekTo(0)
             exoPlayer.prepare()
@@ -660,6 +781,26 @@ class PlayerManager @Inject constructor(
 
     override fun setSubtitleDelay(delayMs: Long) {
         _state.update { it.copy(subtitleDelayMs = delayMs) }
+        val currentVid = _state.value.currentVideo ?: return
+        playerScope.launch {
+            try {
+                val existing = subtitlePreferenceDao.getPreferences(currentVid.id)
+                val entity = existing?.copy(subtitleDelayMs = delayMs)
+                    ?: SubtitlePreferenceEntity(
+                        videoId = currentVid.id,
+                        preferredSubtitleTrackId = _state.value.playback.selectedSubtitleTrackId,
+                        subtitleDelayMs = delayMs,
+                        externalSubtitleUri = null
+                    )
+                subtitlePreferenceDao.upsertPreferences(entity)
+            } catch (e: Exception) {
+                logger.w(TAG, "Failed to persist subtitle delay: ${e.message}")
+            }
+        }
+        if (exoPlayer.playbackState == Player.STATE_READY) {
+            val pos = exoPlayer.currentPosition
+            exoPlayer.seekTo(pos)
+        }
     }
 
     override fun addExternalSubtitle(uri: String, label: String, mimeType: String) {
@@ -670,11 +811,30 @@ class PlayerManager @Inject constructor(
             .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
             .build()
 
+        activeExternalSubtitles.removeAll { it.uri.toString() == uri }
+        activeExternalSubtitles.add(subConfig)
+
         val currentPos = exoPlayer.currentPosition
-        val newItem = buildMediaItem(currentVideo, listOf(subConfig))
+        val newItem = buildMediaItem(currentVideo, activeExternalSubtitles.toList())
         exoPlayer.setMediaItem(newItem)
         exoPlayer.seekTo(currentPos)
         exoPlayer.prepare()
+
+        playerScope.launch {
+            try {
+                val existing = subtitlePreferenceDao.getPreferences(currentVideo.id)
+                val entity = existing?.copy(externalSubtitleUri = uri)
+                    ?: SubtitlePreferenceEntity(
+                        videoId = currentVideo.id,
+                        preferredSubtitleTrackId = null,
+                        subtitleDelayMs = _state.value.subtitleDelayMs,
+                        externalSubtitleUri = uri
+                    )
+                subtitlePreferenceDao.upsertPreferences(entity)
+            } catch (e: Exception) {
+                logger.w(TAG, "Failed to persist external subtitle preference: ${e.message}")
+            }
+        }
     }
 
     override fun startBackgroundPlay() {

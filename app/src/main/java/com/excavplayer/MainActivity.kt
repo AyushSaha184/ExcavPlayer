@@ -96,7 +96,8 @@ class MainActivity : ComponentActivity() {
         val granted = permissions.entries.all { it.value }
         if (granted) {
             logger.i("MainActivity", "Permissions granted, triggering media sync")
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !android.os.Environment.isExternalStorageManager()) {
+            val isExternalLaunch = intent?.action == Intent.ACTION_VIEW || intent?.action == Intent.ACTION_SEND
+            if (!isExternalLaunch && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !android.os.Environment.isExternalStorageManager()) {
                 try {
                     val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
                         data = Uri.parse("package:$packageName")
@@ -108,6 +109,9 @@ class MainActivity : ComponentActivity() {
                         manageAllFilesLauncher.launch(intent)
                     } catch (_: Exception) {}
                 }
+            }
+            if (isExternalLaunch) {
+                handleIncomingIntent(intent)
             }
             lifecycleScope.launch { videoLibrary.refresh() }
         } else {
@@ -129,11 +133,21 @@ class MainActivity : ComponentActivity() {
         try {
             contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         } catch (_: Throwable) {}
+        val cleanName = uri.lastPathSegment?.substringAfterLast('/')?.substringAfterLast(':').orEmpty()
+        val ext = cleanName.substringAfterLast('.', "").lowercase()
+        val mimeType = when (ext) {
+            "srt" -> androidx.media3.common.MimeTypes.APPLICATION_SUBRIP
+            "vtt" -> androidx.media3.common.MimeTypes.TEXT_VTT
+            "ssa", "ass" -> androidx.media3.common.MimeTypes.TEXT_SSA
+            "ttml", "xml" -> androidx.media3.common.MimeTypes.APPLICATION_TTML
+            else -> contentResolver.getType(uri) ?: androidx.media3.common.MimeTypes.APPLICATION_SUBRIP
+        }
+        val label = if (cleanName.isNotBlank()) cleanName.substringBeforeLast('.') else "External Subtitle"
         playerManager.dispatch(
             PlayerCommand.AddExternalSubtitle(
                 uri = uri.toString(),
-                label = uri.lastPathSegment.orEmpty(),
-                mimeType = contentResolver.getType(uri) ?: "text/plain"
+                label = label,
+                mimeType = mimeType
             )
         )
     }
@@ -234,6 +248,12 @@ class MainActivity : ComponentActivity() {
                 ?: return
 
             logger.i("MainActivity", "Handling external VIEW/SEND intent for: $dataUri")
+
+            // Grant temporary read URI permission across the application components
+            try {
+                grantUriPermission(packageName, dataUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            } catch (_: Throwable) {}
+
             lifecycleScope.launch {
                 try {
                     val entity = safDataSource.registerDocumentUri(dataUri)
@@ -255,7 +275,9 @@ class MainActivity : ComponentActivity() {
                             relativePath = "",
                             sourceType = com.excavplayer.domain.model.MediaSourceType.LOCAL_DOCUMENT,
                             availability = com.excavplayer.domain.model.MediaAvailability.AVAILABLE
-                        )
+                        ).also { fallbackVideo ->
+                            runCatching { safDataSource.ensureVideoSaved(fallbackVideo) }
+                        }
                     }
                     viewModel.play(video)
                     viewModel.setPlayerOpen(true)

@@ -1,11 +1,13 @@
 package com.excavplayer.media.source
 
 import android.content.ContentResolver
+import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.database.Cursor
 import android.net.Uri
 import android.provider.DocumentsContract
+import android.provider.MediaStore
 import android.provider.OpenableColumns
 import com.excavplayer.core.coroutine.DispatcherProvider
 import com.excavplayer.core.logging.AppLogger
@@ -13,8 +15,11 @@ import com.excavplayer.data.database.dao.MediaSourceDao
 import com.excavplayer.data.database.dao.VideoDao
 import com.excavplayer.data.database.entity.MediaSourceEntity
 import com.excavplayer.data.database.entity.VideoEntity
+import com.excavplayer.data.database.mapper.toEntity
+import com.excavplayer.data.media.MediaStoreDataSource
 import com.excavplayer.domain.model.MediaAvailability
 import com.excavplayer.domain.model.MediaSourceType
+import com.excavplayer.domain.model.Video
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.withContext
 import java.util.UUID
@@ -26,6 +31,7 @@ class SafDataSource @Inject constructor(
     @ApplicationContext private val context: Context,
     private val mediaSourceDao: MediaSourceDao,
     private val videoDao: VideoDao,
+    private val mediaStoreDataSource: MediaStoreDataSource,
     private val dispatchers: DispatcherProvider,
     private val logger: AppLogger
 ) {
@@ -35,53 +41,103 @@ class SafDataSource @Inject constructor(
 
     private val contentResolver: ContentResolver get() = context.contentResolver
 
+    suspend fun ensureVideoSaved(video: Video) = withContext(dispatchers.io) {
+        runCatching {
+            videoDao.insertVideo(video.toEntity())
+        }
+    }
+
     suspend fun registerDocumentUri(uri: Uri): VideoEntity? = withContext(dispatchers.io) {
         try {
             val uriStr = uri.toString()
+
+            // 0. Check if this exact URI already exists in database
             videoDao.getVideoByUri(uriStr)?.let { existing ->
-                logger.i(TAG, "Video with URI $uri already exists in library with ID ${existing.id}")
+                logger.i(TAG, "Video with URI $uriStr already exists in library with ID ${existing.id}")
                 return@withContext existing
             }
 
+            // 1. If it's a native MediaStore URI (e.g. content://media/external/video/media/12345)
+            if (uri.scheme == "content" && (uri.authority == "media" || uri.authority?.startsWith("com.android.providers.media") == true && !DocumentsContract.isDocumentUri(context, uri))) {
+                val mediaStoreId = runCatching { ContentUris.parseId(uri) }.getOrNull()
+                if (mediaStoreId != null) {
+                    videoDao.getVideoById("ms_$mediaStoreId")?.video?.let { return@withContext it }
+                    val entity = mediaStoreDataSource.queryVideoById(mediaStoreId)
+                    if (entity != null) {
+                        videoDao.insertVideo(entity)
+                        logger.i(TAG, "Resolved native MediaStore URI $uri to video: ${entity.displayName}")
+                        return@withContext entity
+                    }
+                }
+            }
+
+            // 2. If it's a DocumentsContract document URI from a file manager or system picker
+            if (DocumentsContract.isDocumentUri(context, uri)) {
+                val authority = uri.authority
+                if (authority == "com.android.providers.media.documents") {
+                    val docId = DocumentsContract.getDocumentId(uri)
+                    val id = docId.substringAfter("video:").toLongOrNull() ?: docId.toLongOrNull()
+                    if (id != null) {
+                        videoDao.getVideoById("ms_$id")?.video?.let { return@withContext it }
+                        val mediaStoreUri = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id).toString()
+                        videoDao.getVideoByUri(mediaStoreUri)?.let { return@withContext it }
+                        val entity = mediaStoreDataSource.queryVideoById(id)
+                        if (entity != null) {
+                            videoDao.insertVideo(entity)
+                            logger.i(TAG, "Resolved document URI $uri to MediaStore video: ${entity.displayName}")
+                            return@withContext entity
+                        }
+                    }
+                } else if (authority == "com.android.externalstorage.documents") {
+                    val docId = DocumentsContract.getDocumentId(uri)
+                    if (docId.startsWith("primary:")) {
+                        val relPath = docId.substringAfter("primary:")
+                        val file = java.io.File(android.os.Environment.getExternalStorageDirectory(), relPath)
+                        if (file.exists()) {
+                            mediaStoreDataSource.queryVideoByDisplayName(file.name, file.length())?.let { entity ->
+                                videoDao.insertVideo(entity)
+                                logger.i(TAG, "Resolved external storage doc URI $uri to MediaStore video: ${entity.displayName}")
+                                return@withContext entity
+                            }
+                            mediaStoreDataSource.scanAndIndexFile(file.absolutePath)?.let { entity ->
+                                videoDao.insertVideo(entity)
+                                logger.i(TAG, "Scanned and indexed external storage doc $uri to MediaStore video: ${entity.displayName}")
+                                return@withContext entity
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 3. If it's a file path or file:// URI
             if (uri.scheme == "file" || (uri.scheme == null && uri.path?.startsWith("/") == true)) {
                 val filePath = uri.path ?: uriStr.removePrefix("file://")
                 val decodedPath = Uri.decode(filePath)
                 val canonicalFile = java.io.File(decodedPath)
-                val fileUri = Uri.fromFile(canonicalFile).toString()
-                videoDao.getVideoByUri(fileUri)?.let { existing ->
-                    logger.i(TAG, "File video with URI $fileUri already exists with ID ${existing.id}")
-                    return@withContext existing
+                val fileUriStr = Uri.fromFile(canonicalFile).toString()
+
+                videoDao.getVideoByUri(fileUriStr)?.let { return@withContext it }
+
+                if (canonicalFile.exists()) {
+                    mediaStoreDataSource.queryVideoByDisplayName(canonicalFile.name, canonicalFile.length())?.let { entity ->
+                        videoDao.insertVideo(entity)
+                        logger.i(TAG, "Resolved file URI $fileUriStr to MediaStore video: ${entity.displayName}")
+                        return@withContext entity
+                    }
+                    mediaStoreDataSource.scanAndIndexFile(canonicalFile.absolutePath)?.let { entity ->
+                        videoDao.insertVideo(entity)
+                        logger.i(TAG, "Scanned and indexed file $fileUriStr to MediaStore video: ${entity.displayName}")
+                        return@withContext entity
+                    }
                 }
             }
 
-            takePersistablePermission(uri)
-
+            // 4. For any other content URI (e.g. from 3rd party apps, WhatsApp, FileProvider)
             var displayName = "External_Video"
             var sizeBytes = 0L
             var mimeType = "video/*"
 
-            if (uri.scheme == "file" || (uri.scheme == null && uri.path?.startsWith("/") == true)) {
-                val filePath = uri.path ?: uri.toString().removePrefix("file://")
-                val decodedPath = Uri.decode(filePath)
-                val file = java.io.File(decodedPath)
-                if (file.exists() && file.isFile) {
-                    displayName = file.name
-                    sizeBytes = file.length()
-                    val ext = file.extension.lowercase()
-                    mimeType = when (ext) {
-                        "mkv" -> "video/x-matroska"
-                        "mp4", "m4v" -> "video/mp4"
-                        "webm" -> "video/webm"
-                        "avi" -> "video/x-msvideo"
-                        "mov" -> "video/quicktime"
-                        "flv" -> "video/x-flv"
-                        "ts" -> "video/mp2t"
-                        else -> "video/*"
-                    }
-                } else {
-                    displayName = uri.lastPathSegment?.let { Uri.decode(it) } ?: "External_Video"
-                }
-            } else {
+            if (uri.scheme == "content") {
                 try {
                     contentResolver.query(uri, null, null, null, null)?.use { cursor ->
                         if (cursor.moveToFirst()) {
@@ -101,18 +157,32 @@ class SafDataSource @Inject constructor(
                 try {
                     contentResolver.getType(uri)?.let { mimeType = it }
                 } catch (_: Throwable) {}
+
                 if (displayName == "External_Video") {
                     displayName = uri.lastPathSegment?.substringAfterLast('/')?.let { Uri.decode(it) } ?: "External_Video"
                 }
+
+                // Check if this video is already indexed in MediaStore by displayName and size
+                if (displayName.isNotBlank() && displayName != "External_Video") {
+                    mediaStoreDataSource.queryVideoByDisplayName(displayName, sizeBytes.takeIf { it > 0 })?.let { entity ->
+                        videoDao.insertVideo(entity)
+                        logger.i(TAG, "Matched content URI $uri to existing MediaStore video: ${entity.displayName}")
+                        return@withContext entity
+                    }
+                }
+            } else {
+                displayName = uri.lastPathSegment?.substringAfterLast('/')?.let { Uri.decode(it) } ?: "External_Video"
             }
 
-            val stableId = "saf_doc_${UUID.nameUUIDFromBytes(uri.toString().toByteArray())}"
+            takePersistablePermission(uri)
+
+            val stableId = "saf_doc_${UUID.nameUUIDFromBytes(uriStr.toByteArray())}"
             val sourceId = "src_doc_${stableId}"
 
             runCatching {
                 val sourceEntity = MediaSourceEntity(
                     id = sourceId,
-                    uri = uri.toString(),
+                    uri = uriStr,
                     type = MediaSourceType.LOCAL_DOCUMENT.name,
                     name = displayName,
                     isAccessible = true,
@@ -123,7 +193,7 @@ class SafDataSource @Inject constructor(
 
             val videoEntity = VideoEntity(
                 id = stableId,
-                uri = uri.toString(),
+                uri = uriStr,
                 displayName = displayName,
                 mimeType = mimeType,
                 durationMs = 0L, // Duration will be detected when player prepares
@@ -142,13 +212,12 @@ class SafDataSource @Inject constructor(
 
             val inserted = runCatching { videoDao.insertVideo(videoEntity) }
             if (inserted.isFailure) {
-                // If unique constraint failed on URI, return the existing row for this URI
-                val existing = videoDao.getVideoByUri(uri.toString())
+                val existing = videoDao.getVideoByUri(uriStr)
                 if (existing != null) {
                     return@withContext existing
                 }
             }
-            logger.i(TAG, "Registered SAF/External document: $displayName ($uri)")
+            logger.i(TAG, "Registered SAF/External document: $displayName ($uriStr)")
             videoEntity
         } catch (e: Throwable) {
             logger.e(TAG, "Failed to register document URI: $uri", e)

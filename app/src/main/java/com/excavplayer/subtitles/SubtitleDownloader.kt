@@ -24,7 +24,7 @@ class SubtitleDownloader @Inject constructor(
 ) {
     companion object {
         private const val TAG = "SubtitleDownloader"
-        private const val SUBTITLES_DIR_NAME = "EscavPlayer/subtitles"
+        private const val SUBTITLES_DIR_NAME = "EscavPlayer"
         private val ZIP_HEADER = byteArrayOf(0x50, 0x4B, 0x03, 0x04)
     }
 

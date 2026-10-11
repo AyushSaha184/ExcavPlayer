@@ -41,11 +41,20 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.Layout
+import com.excavplayer.subtitles.SubtitleLanguage
+import com.excavplayer.subtitles.SubtitleSearchResult
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -74,6 +83,7 @@ import kotlinx.coroutines.flow.StateFlow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Shape
 import com.excavplayer.ui.components.darkUltraThinBlur
@@ -840,8 +850,8 @@ fun PlayerScreen(
 
         // Locked HUD Button (matches bottom-left lock button position)
         if (isLocked && !isPip) {
-            val lockBtnSize = ((if (isVeryCompact) 32.dp else if (isCompact) 38.dp else 44.dp) * splitScale).coerceIn(24.dp, 44.dp)
-            val lockIconSize = ((if (isVeryCompact) 16.dp else if (isCompact) 19.dp else 22.dp) * splitScale).coerceIn(12.dp, 22.dp)
+            val lockBtnSize = ((if (isVeryCompact) 28.dp else if (isCompact) 34.dp else 42.dp) * splitScale).coerceIn(22.dp, 42.dp)
+            val lockIconSize = (lockBtnSize * 0.52f).coerceIn(12.dp, 22.dp)
             val lockPadH = ((if (isVeryCompact) 8.dp else 16.dp) * splitScale).coerceIn(4.dp, 16.dp)
             val lockPadV = ((if (isVeryCompact) 4.dp else 10.dp) * splitScale).coerceIn(2.dp, 10.dp)
 
@@ -855,7 +865,8 @@ fun PlayerScreen(
                 exit = fadeOut()
             ) {
                 CompositionLocalProvider(
-                    LocalRippleConfiguration provides null
+                    LocalRippleConfiguration provides null,
+                    LocalMinimumInteractiveComponentSize provides Dp.Unspecified
                 ) {
                     IconButton(
                         onClick = {
@@ -1046,31 +1057,32 @@ private fun PlayerControlsOverlay(
     onInteraction: () -> Unit = {}
 ) {
     CompositionLocalProvider(
-        LocalRippleConfiguration provides null
+        LocalRippleConfiguration provides null,
+        LocalMinimumInteractiveComponentSize provides Dp.Unspecified
     ) {
-        val topBtnSize = ((if (isVeryCompact) 32.dp else if (isCompact) 38.dp else 44.dp) * splitScale).coerceIn(24.dp, 44.dp)
-        val topIconSize = ((if (isVeryCompact) 16.dp else if (isCompact) 19.dp else 22.dp) * splitScale).coerceIn(12.dp, 22.dp)
+        val topBtnSize = ((if (isVeryCompact) 28.dp else if (isCompact) 34.dp else 42.dp) * splitScale).coerceIn(20.dp, 42.dp)
+        val topIconSize = (topBtnSize * 0.52f).coerceIn(11.dp, 22.dp)
         val titleFontSize = if (isVeryCompact) 11.sp else if (isCompact) 13.sp else 16.sp
         val topSpacing = ((if (isVeryCompact) 6.dp else if (isCompact) 10.dp else 16.dp) * splitScale).coerceIn(4.dp, 16.dp)
-        val topBtnSpacing = ((if (isVeryCompact) 4.dp else if (isCompact) 6.dp else 10.dp) * splitScale).coerceIn(2.dp, 10.dp)
+        val topBtnSpacing = ((if (isVeryCompact) 3.dp else if (isCompact) 6.dp else 10.dp) * splitScale).coerceIn(2.dp, 10.dp)
 
-        val centerPlaySize = ((if (isVeryCompact) 44.dp else if (isCompact) 56.dp else 68.dp) * splitScale).coerceIn(36.dp, 68.dp)
-        val centerPlayIconSize = ((if (isVeryCompact) 24.dp else if (isCompact) 30.dp else 38.dp) * splitScale).coerceIn(18.dp, 38.dp)
-        val centerSkipSize = ((if (isVeryCompact) 34.dp else if (isCompact) 42.dp else 52.dp) * splitScale).coerceIn(28.dp, 52.dp)
-        val centerSkipIconSize = ((if (isVeryCompact) 18.dp else if (isCompact) 22.dp else 28.dp) * splitScale).coerceIn(14.dp, 28.dp)
-        val centerSpacing = ((if (isVeryCompact) 14.dp else if (isCompact) 20.dp else 28.dp) * splitScale).coerceIn(8.dp, 28.dp)
+        val centerPlaySize = ((if (isVeryCompact) 42.dp else if (isCompact) 54.dp else 66.dp) * splitScale).coerceIn(32.dp, 66.dp)
+        val centerPlayIconSize = (centerPlaySize * 0.55f).coerceIn(18.dp, 36.dp)
+        val centerSkipSize = ((if (isVeryCompact) 32.dp else if (isCompact) 40.dp else 50.dp) * splitScale).coerceIn(24.dp, 50.dp)
+        val centerSkipIconSize = (centerSkipSize * 0.55f).coerceIn(13.dp, 26.dp)
+        val centerSpacing = ((if (isVeryCompact) 12.dp else if (isCompact) 18.dp else 28.dp) * splitScale).coerceIn(8.dp, 28.dp)
 
-        val bottomPillBtnSize = ((if (isVeryCompact) 28.dp else if (isCompact) 34.dp else 40.dp) * splitScale).coerceIn(24.dp, 40.dp)
-        val bottomPillIconSize = ((if (isVeryCompact) 14.dp else if (isCompact) 18.dp else 22.dp) * splitScale).coerceIn(12.dp, 22.dp)
-        val bottomPillPaddingH = ((if (isVeryCompact) 4.dp else if (isCompact) 6.dp else 8.dp) * splitScale).coerceIn(3.dp, 8.dp)
-        val bottomPillPaddingV = ((if (isVeryCompact) 2.dp else if (isCompact) 3.dp else 4.dp) * splitScale).coerceIn(2.dp, 4.dp)
-        val bottomPillSpacing = ((if (isVeryCompact) 2.dp else 4.dp) * splitScale).coerceIn(1.dp, 4.dp)
+        val bottomPillBtnSize = ((if (isVeryCompact) 24.dp else if (isCompact) 30.dp else 38.dp) * splitScale).coerceIn(18.dp, 38.dp)
+        val bottomPillIconSize = (bottomPillBtnSize * 0.55f).coerceIn(10.dp, 21.dp)
+        val bottomPillPaddingH = ((if (isVeryCompact) 3.dp else if (isCompact) 5.dp else 8.dp) * splitScale).coerceIn(2.dp, 8.dp)
+        val bottomPillPaddingV = ((if (isVeryCompact) 2.dp else if (isCompact) 3.dp else 4.dp) * splitScale).coerceIn(1.dp, 4.dp)
+        val bottomPillSpacing = ((if (isVeryCompact) 1.dp else 3.dp) * splitScale).coerceIn(0.5.dp, 4.dp)
         val speedTextSize = if (isVeryCompact) 10.sp else if (isCompact) 11.5.sp else 13.sp
-        val speedPaddingH = ((if (isVeryCompact) 6.dp else if (isCompact) 9.dp else 12.dp) * splitScale).coerceIn(4.dp, 12.dp)
-        val speedPaddingV = ((if (isVeryCompact) 4.dp else if (isCompact) 6.dp else 8.dp) * splitScale).coerceIn(2.dp, 8.dp)
+        val speedPaddingH = ((if (isVeryCompact) 4.dp else if (isCompact) 8.dp else 12.dp) * splitScale).coerceIn(3.dp, 12.dp)
+        val speedPaddingV = ((if (isVeryCompact) 2.dp else if (isCompact) 4.dp else 8.dp) * splitScale).coerceIn(1.dp, 8.dp)
         val timelineTextSize = if (isVeryCompact) 10.5.sp else if (isCompact) 12.sp else 14.sp
         val timelineSpacing = ((if (isVeryCompact) 4.dp else if (isCompact) 8.dp else 14.dp) * splitScale).coerceIn(3.dp, 14.dp)
-        val outerPaddingH = ((if (isVeryCompact) 8.dp else if (isCompact) 12.dp else 16.dp) * splitScale).coerceIn(6.dp, 16.dp)
+        val outerPaddingH = ((if (isVeryCompact) 6.dp else if (isCompact) 10.dp else 16.dp) * splitScale).coerceIn(4.dp, 16.dp)
         val outerPaddingV = ((if (isVeryCompact) 4.dp else if (isCompact) 8.dp else 10.dp) * splitScale).coerceIn(3.dp, 10.dp)
 
         Box(
@@ -1511,13 +1523,13 @@ private fun SheetContainer(
                 .widthIn(
                     min = 280.dp,
                     max = when (sheet) {
-                        PlayerSheet.SUBTITLES -> 360.dp
+                        PlayerSheet.SUBTITLES -> 400.dp
                         PlayerSheet.CHAPTERS -> 380.dp
                         PlayerSheet.AUDIO -> 340.dp
                         PlayerSheet.SPEED -> 320.dp
                     }
                 )
-                .heightIn(max = (maxSheetHeight * 0.85f).coerceAtLeast(180.dp))
+                .heightIn(max = (maxSheetHeight * 0.88f).coerceAtLeast(200.dp))
                 .clip(RoundedCornerShape(22.dp))
                 .darkUltraThinBlur(
                     shape = RoundedCornerShape(22.dp),
@@ -1534,6 +1546,7 @@ private fun SheetContainer(
                     PlayerSheet.SUBTITLES -> SubtitleSheet(
                         state = state,
                         player = vm.player,
+                        vm = vm,
                         onPickSubtitle = onPickSubtitle,
                         onDismiss = onDismiss
                     )
@@ -1637,31 +1650,180 @@ private fun ChaptersSheet(
 }
 
 // -----------------------------------------------------------------------------------------
-// Subtitles Sheet (Track Selection & External Subtitles)
+// Subtitles Sheet (Track Selection & Online Subtitles)
 // -----------------------------------------------------------------------------------------
+private enum class SubtitleTab { TRACKS, ONLINE }
+
+@Composable
+private fun SubtitlesPillTabBar(
+    selectedTab: SubtitleTab,
+    onTabSelected: (SubtitleTab) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val tabs = remember { listOf(SubtitleTab.TRACKS to "Tracks", SubtitleTab.ONLINE to "Online Sub") }
+    val selectedIndex = if (selectedTab == SubtitleTab.TRACKS) 0 else 1
+
+    val targetOffsetFraction by animateFloatAsState(
+        targetValue = selectedIndex.toFloat(),
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "pillOffset"
+    )
+
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(Color.White.copy(alpha = 0.08f))
+            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
+            .padding(3.dp)
+    ) {
+        Layout(
+            content = {
+                // Animated Highlight Pill Background
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(17.dp))
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(ExcavPalette.Primary, ExcavPalette.Primary.copy(alpha = 0.85f))
+                            )
+                        )
+                )
+                // Tabs
+                tabs.forEach { (tab, label) ->
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(17.dp))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { onTabSelected(tab) }
+                            .padding(horizontal = 12.dp, vertical = 5.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = label,
+                            color = if (selectedTab == tab) Color.White else ExcavPalette.TextMuted,
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontWeight = if (selectedTab == tab) FontWeight.Bold else FontWeight.Medium,
+                                fontSize = 12.sp
+                            )
+                        )
+                    }
+                }
+            }
+        ) { measurables, constraints ->
+            val indicatorMeasurable = measurables[0]
+            val tabMeasurables = measurables.drop(1)
+
+            val tabPlaceables = tabMeasurables.map { it.measure(constraints) }
+            val totalWidth = tabPlaceables.sumOf { it.width }
+            val maxHeight = tabPlaceables.maxOfOrNull { it.height } ?: 0
+
+            val w0 = tabPlaceables.getOrNull(0)?.width ?: 0
+            val w1 = tabPlaceables.getOrNull(1)?.width ?: 0
+            val animatedWidth = (w0 + (w1 - w0) * targetOffsetFraction).toInt()
+
+            val indicatorPlaceable = indicatorMeasurable.measure(
+                constraints.copy(
+                    minWidth = animatedWidth,
+                    maxWidth = animatedWidth,
+                    minHeight = maxHeight,
+                    maxHeight = maxHeight
+                )
+            )
+
+            layout(totalWidth, maxHeight) {
+                val animatedX = (0f + w0.toFloat() * targetOffsetFraction).toInt()
+                indicatorPlaceable.placeRelative(animatedX, 0)
+
+                var currentLeft = 0
+                tabPlaceables.forEach { placeable ->
+                    placeable.placeRelative(currentLeft, 0)
+                    currentLeft += placeable.width
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun SubtitleSheet(
     state: PlayerState,
     player: PlayerManager,
+    vm: ExcavViewModel,
     onPickSubtitle: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    var selectedTab by rememberSaveable { mutableStateOf(SubtitleTab.TRACKS) }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 14.dp)
     ) {
-        Text(
-            text = "Subtitles",
-            color = ExcavPalette.Text,
-            style = MaterialTheme.typography.titleMedium.copy(
-                fontWeight = FontWeight.Bold,
-                fontSize = 16.sp
-            ),
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
+        // Header with Title and Animated Pill Tab Bar beside each other
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Subtitles",
+                color = ExcavPalette.Text,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+            )
+            SubtitlesPillTabBar(
+                selectedTab = selectedTab,
+                onTabSelected = { selectedTab = it }
+            )
+        }
 
-        // Track list takes only required height when short, scrolls when long
+        // Animated Page Transition
+        AnimatedContent(
+            targetState = selectedTab,
+            transitionSpec = {
+                if (targetState == SubtitleTab.ONLINE) {
+                    (slideInHorizontally { width -> width / 3 } + fadeIn(animationSpec = tween(200))) togetherWith
+                    (slideOutHorizontally { width -> -width / 3 } + fadeOut(animationSpec = tween(200)))
+                } else {
+                    (slideInHorizontally { width -> -width / 3 } + fadeIn(animationSpec = tween(200))) togetherWith
+                    (slideOutHorizontally { width -> width / 3 } + fadeOut(animationSpec = tween(200)))
+                }
+            },
+            label = "subtitleTabTransition"
+        ) { tab ->
+            when (tab) {
+                SubtitleTab.TRACKS -> TracksTabContent(
+                    state = state,
+                    player = player,
+                    vm = vm,
+                    onPickSubtitle = onPickSubtitle
+                )
+                SubtitleTab.ONLINE -> OnlineSubTabContent(
+                    state = state,
+                    vm = vm
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TracksTabContent(
+    state: PlayerState,
+    player: PlayerManager,
+    vm: ExcavViewModel,
+    onPickSubtitle: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1695,7 +1857,169 @@ private fun SubtitleSheet(
             }
         }
 
+        // -------------------------------------------------------------------------
+        // Subtitle Delay Control (Player Seekbar Style, Range: -5.0s .. +5.0s)
+        // -------------------------------------------------------------------------
         Spacer(Modifier.height(10.dp))
+        HorizontalDivider(color = ExcavPalette.Line.copy(alpha = 0.5f), thickness = 0.8.dp)
+        Spacer(Modifier.height(8.dp))
+
+        val currentDelaySec = remember(state.subtitleDelayMs) {
+            (state.subtitleDelayMs / 100.0).roundToInt() / 10.0
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            // Header Row: Label & Value / Reset
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Subtitle Delay",
+                    color = ExcavPalette.TextMuted,
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                )
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val delayFormatted = if (currentDelaySec > 0) "+${"%.1f".format(currentDelaySec)}s"
+                        else if (currentDelaySec < 0) "${"%.1f".format(currentDelaySec)}s"
+                        else "0.0s"
+
+                    Text(
+                        text = delayFormatted,
+                        color = if (currentDelaySec != 0.0) ExcavPalette.Primary else ExcavPalette.Text,
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                    )
+
+                    if (state.subtitleDelayMs != 0L) {
+                        Text(
+                            text = "Reset",
+                            color = ExcavPalette.Primary,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 11.sp
+                            ),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { vm.setSubtitleDelay(0L) }
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+            }
+
+            // Player seekbar style Slider (-5.0s .. +5.0s)
+            Slider(
+                value = (state.subtitleDelayMs / 1000f).coerceIn(-5.0f, 5.0f),
+                onValueChange = { newVal ->
+                    val roundedMs = ((newVal * 10).roundToInt() * 100L).coerceIn(-5000L, 5000L)
+                    vm.setSubtitleDelay(roundedMs)
+                },
+                valueRange = -5.0f..5.0f,
+                colors = SliderDefaults.colors(
+                    thumbColor = Color.White,
+                    activeTrackColor = ExcavPalette.Primary,
+                    inactiveTrackColor = Color.White.copy(alpha = 0.15f)
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(26.dp)
+            )
+
+            // Range markers (-5s, 0s, +5s)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "-5s",
+                    color = ExcavPalette.TextMuted.copy(alpha = 0.6f),
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp)
+                )
+                Text(
+                    text = "0s",
+                    color = ExcavPalette.TextMuted.copy(alpha = 0.6f),
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp)
+                )
+                Text(
+                    text = "+5s",
+                    color = ExcavPalette.TextMuted.copy(alpha = 0.6f),
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp)
+                )
+            }
+
+            // Centered -0.1s and +0.1s adjustment buttons
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp, bottom = 4.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .border(1.dp, ExcavPalette.Line, RoundedCornerShape(12.dp))
+                        .clickable {
+                            val newMs = (state.subtitleDelayMs - 100L).coerceAtLeast(-5000L)
+                            vm.setSubtitleDelay(newMs)
+                        },
+                    color = ExcavPalette.SurfaceCard
+                ) {
+                    Text(
+                        text = "-0.1s",
+                        color = ExcavPalette.Text,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 12.sp
+                        ),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                    )
+                }
+
+                Spacer(Modifier.width(16.dp))
+
+                Surface(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .border(1.dp, ExcavPalette.Line, RoundedCornerShape(12.dp))
+                        .clickable {
+                            val newMs = (state.subtitleDelayMs + 100L).coerceAtMost(5000L)
+                            vm.setSubtitleDelay(newMs)
+                        },
+                    color = ExcavPalette.SurfaceCard
+                ) {
+                    Text(
+                        text = "+0.1s",
+                        color = ExcavPalette.Text,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 12.sp
+                        ),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
 
         // Action Button: Add subtitles (centered, sized to text only)
         Box(
@@ -1709,15 +2033,334 @@ private fun SubtitleSheet(
                     .clickable(onClick = onPickSubtitle),
                 color = ExcavPalette.SurfaceCard
             ) {
-                Text(
-                    text = "Add subtitles",
-                    color = ExcavPalette.Text,
-                    style = MaterialTheme.typography.labelMedium.copy(
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 13.sp
-                    ),
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = null,
+                        tint = ExcavPalette.Text,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "Add subtitles",
+                        color = ExcavPalette.Text,
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp
+                        )
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OnlineSubTabContent(
+    state: PlayerState,
+    vm: ExcavViewModel
+) {
+    val onlineState by vm.onlineSubtitleState.collectAsStateWithLifecycle()
+    val videoTitle = remember(state.currentVideo) {
+        state.currentVideo?.displayName?.substringBeforeLast('.').orEmpty()
+    }
+
+    LaunchedEffect(videoTitle) {
+        if (onlineState.query.isBlank() && videoTitle.isNotBlank()) {
+            vm.updateSubtitleQuery(videoTitle)
+            vm.searchOnlineSubtitles(videoTitle)
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = 380.dp)
+    ) {
+        // Search Input Bar (No leading icon, SVG close icon for clear, SVG search icon for action)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color.White.copy(alpha = 0.06f))
+                .border(1.dp, ExcavPalette.Line, RoundedCornerShape(14.dp))
+                .padding(horizontal = 12.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            BasicTextField(
+                value = onlineState.query,
+                onValueChange = { vm.updateSubtitleQuery(it) },
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                    color = Color.White,
+                    fontSize = 13.sp
+                ),
+                cursorBrush = SolidColor(ExcavPalette.Primary),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { vm.searchOnlineSubtitles() }),
+                modifier = Modifier.weight(1f),
+                decorationBox = { innerTextField ->
+                    if (onlineState.query.isEmpty()) {
+                        Text(
+                            text = "Search subtitles...",
+                            color = ExcavPalette.TextMuted.copy(alpha = 0.6f),
+                            fontSize = 13.sp
+                        )
+                    }
+                    innerTextField()
+                }
+            )
+            if (onlineState.query.isNotEmpty()) {
+                IconButton(
+                    onClick = { vm.updateSubtitleQuery("") },
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Clear",
+                        tint = ExcavPalette.TextMuted,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+            IconButton(
+                onClick = { vm.searchOnlineSubtitles() },
+                modifier = Modifier.size(30.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = "Search",
+                    tint = ExcavPalette.Primary,
+                    modifier = Modifier.size(18.dp)
                 )
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        // Content Area: Pure Loading Animation, Error, Results, or Empty
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f, fill = false),
+            contentAlignment = Alignment.Center
+        ) {
+            when {
+                onlineState.isSearching -> {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(26.dp),
+                            color = ExcavPalette.Primary,
+                            strokeWidth = 2.5.dp
+                        )
+                    }
+                }
+                onlineState.errorMessage != null && onlineState.searchResults.isEmpty() -> {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = onlineState.errorMessage.orEmpty(),
+                            color = ExcavPalette.TextMuted,
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                            textAlign = TextAlign.Center
+                        )
+                        Surface(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { vm.searchOnlineSubtitles() },
+                            color = Color.White.copy(alpha = 0.08f)
+                        ) {
+                            Text(
+                                text = "Retry",
+                                color = ExcavPalette.Primary,
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+                }
+                onlineState.searchResults.isNotEmpty() -> {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 280.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(onlineState.searchResults, key = { "${it.source}_${it.id}" }) { result ->
+                            val isDownloading = result.id in onlineState.downloadingIds
+                            val isDownloaded = result.id in onlineState.downloadedMap
+                            val isApplied = onlineState.appliedSubtitleId == result.id
+
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable(enabled = !isDownloading) {
+                                        if (isDownloaded && !isApplied) {
+                                            vm.applyDownloadedResult(result)
+                                        } else if (!isDownloaded) {
+                                            vm.downloadAndApplySubtitle(result, videoTitle)
+                                        }
+                                    },
+                                color = if (isApplied) ExcavPalette.Primary.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.04f),
+                                border = if (isApplied) BorderStroke(1.dp, ExcavPalette.Primary.copy(alpha = 0.4f)) else null,
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                                    ) {
+                                        Text(
+                                            text = result.title.ifBlank { result.fileName },
+                                            color = ExcavPalette.Text,
+                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                                fontWeight = FontWeight.Medium,
+                                                fontSize = 12.sp
+                                            ),
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            // Language badge
+                                            Surface(
+                                                color = ExcavPalette.Primary.copy(alpha = 0.2f),
+                                                shape = RoundedCornerShape(4.dp)
+                                            ) {
+                                                Text(
+                                                    text = result.language.uppercase(),
+                                                    color = ExcavPalette.Primary,
+                                                    style = MaterialTheme.typography.labelSmall.copy(
+                                                        fontSize = 9.sp,
+                                                        fontWeight = FontWeight.Bold
+                                                    ),
+                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                                )
+                                            }
+                                            // Source badge
+                                            Surface(
+                                                color = Color.White.copy(alpha = 0.08f),
+                                                shape = RoundedCornerShape(4.dp)
+                                            ) {
+                                                Text(
+                                                    text = result.source,
+                                                    color = ExcavPalette.TextMuted,
+                                                    style = MaterialTheme.typography.labelSmall.copy(
+                                                        fontSize = 9.sp
+                                                    ),
+                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                                )
+                                            }
+                                            if (result.hearingImpaired) {
+                                                Text(
+                                                    text = "CC",
+                                                    color = ExcavPalette.TextMuted,
+                                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(Modifier.width(8.dp))
+
+                                    // Action Area: Spinner -> "Applied" -> "Apply" -> Download Icon
+                                    Box(
+                                        modifier = Modifier.padding(end = 2.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (isDownloading) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(18.dp),
+                                                color = ExcavPalette.Primary,
+                                                strokeWidth = 2.dp
+                                            )
+                                        } else if (isApplied) {
+                                            Surface(
+                                                color = ExcavPalette.Primary.copy(alpha = 0.2f),
+                                                shape = RoundedCornerShape(8.dp)
+                                            ) {
+                                                Text(
+                                                    text = "Applied",
+                                                    color = ExcavPalette.Primary,
+                                                    style = MaterialTheme.typography.labelSmall.copy(
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 11.sp
+                                                    ),
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                )
+                                            }
+                                        } else if (isDownloaded) {
+                                            Surface(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .border(1.dp, ExcavPalette.Primary, RoundedCornerShape(8.dp))
+                                                    .clickable { vm.applyDownloadedResult(result) },
+                                                color = ExcavPalette.Primary.copy(alpha = 0.12f)
+                                            ) {
+                                                Text(
+                                                    text = "Apply",
+                                                    color = ExcavPalette.Primary,
+                                                    style = MaterialTheme.typography.labelSmall.copy(
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 11.sp
+                                                    ),
+                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                                )
+                                            }
+                                        } else {
+                                            IconButton(
+                                                onClick = { vm.downloadAndApplySubtitle(result, videoTitle) },
+                                                modifier = Modifier.size(32.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Download,
+                                                    contentDescription = "Download",
+                                                    tint = ExcavPalette.Primary,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                else -> {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Search for online subtitles above",
+                            color = ExcavPalette.TextMuted,
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp)
+                        )
+                    }
+                }
             }
         }
     }
