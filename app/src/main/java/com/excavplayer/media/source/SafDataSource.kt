@@ -36,39 +36,90 @@ class SafDataSource @Inject constructor(
     private val contentResolver: ContentResolver get() = context.contentResolver
 
     suspend fun registerDocumentUri(uri: Uri): VideoEntity? = withContext(dispatchers.io) {
-        takePersistablePermission(uri)
-
-        var displayName = "Document_Video"
-        var sizeBytes = 0L
-        var mimeType = "video/*"
-
         try {
-            contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val nameIdx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                    val sizeIdx = cursor.getColumnIndex(OpenableColumns.SIZE)
-                    if (nameIdx != -1 && !cursor.isNull(nameIdx)) {
-                        displayName = cursor.getString(nameIdx)
-                    }
-                    if (sizeIdx != -1 && !cursor.isNull(sizeIdx)) {
-                        sizeBytes = cursor.getLong(sizeIdx)
-                    }
+            val uriStr = uri.toString()
+            videoDao.getVideoByUri(uriStr)?.let { existing ->
+                logger.i(TAG, "Video with URI $uri already exists in library with ID ${existing.id}")
+                return@withContext existing
+            }
+
+            if (uri.scheme == "file" || (uri.scheme == null && uri.path?.startsWith("/") == true)) {
+                val filePath = uri.path ?: uriStr.removePrefix("file://")
+                val decodedPath = Uri.decode(filePath)
+                val canonicalFile = java.io.File(decodedPath)
+                val fileUri = Uri.fromFile(canonicalFile).toString()
+                videoDao.getVideoByUri(fileUri)?.let { existing ->
+                    logger.i(TAG, "File video with URI $fileUri already exists with ID ${existing.id}")
+                    return@withContext existing
                 }
             }
-            contentResolver.getType(uri)?.let { mimeType = it }
+
+            takePersistablePermission(uri)
+
+            var displayName = "External_Video"
+            var sizeBytes = 0L
+            var mimeType = "video/*"
+
+            if (uri.scheme == "file" || (uri.scheme == null && uri.path?.startsWith("/") == true)) {
+                val filePath = uri.path ?: uri.toString().removePrefix("file://")
+                val decodedPath = Uri.decode(filePath)
+                val file = java.io.File(decodedPath)
+                if (file.exists() && file.isFile) {
+                    displayName = file.name
+                    sizeBytes = file.length()
+                    val ext = file.extension.lowercase()
+                    mimeType = when (ext) {
+                        "mkv" -> "video/x-matroska"
+                        "mp4", "m4v" -> "video/mp4"
+                        "webm" -> "video/webm"
+                        "avi" -> "video/x-msvideo"
+                        "mov" -> "video/quicktime"
+                        "flv" -> "video/x-flv"
+                        "ts" -> "video/mp2t"
+                        else -> "video/*"
+                    }
+                } else {
+                    displayName = uri.lastPathSegment?.let { Uri.decode(it) } ?: "External_Video"
+                }
+            } else {
+                try {
+                    contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val nameIdx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                            val sizeIdx = cursor.getColumnIndex(OpenableColumns.SIZE)
+                            if (nameIdx != -1 && !cursor.isNull(nameIdx)) {
+                                displayName = cursor.getString(nameIdx)
+                            }
+                            if (sizeIdx != -1 && !cursor.isNull(sizeIdx)) {
+                                sizeBytes = cursor.getLong(sizeIdx)
+                            }
+                        }
+                    }
+                } catch (e: Throwable) {
+                    logger.w(TAG, "Could not query contentResolver for $uri: ${e.message}")
+                }
+                try {
+                    contentResolver.getType(uri)?.let { mimeType = it }
+                } catch (_: Throwable) {}
+                if (displayName == "External_Video") {
+                    displayName = uri.lastPathSegment?.substringAfterLast('/')?.let { Uri.decode(it) } ?: "External_Video"
+                }
+            }
 
             val stableId = "saf_doc_${UUID.nameUUIDFromBytes(uri.toString().toByteArray())}"
             val sourceId = "src_doc_${stableId}"
 
-            val sourceEntity = MediaSourceEntity(
-                id = sourceId,
-                uri = uri.toString(),
-                type = MediaSourceType.LOCAL_DOCUMENT.name,
-                name = displayName,
-                isAccessible = true,
-                lastValidatedTimestamp = System.currentTimeMillis()
-            )
-            mediaSourceDao.insertSource(sourceEntity)
+            runCatching {
+                val sourceEntity = MediaSourceEntity(
+                    id = sourceId,
+                    uri = uri.toString(),
+                    type = MediaSourceType.LOCAL_DOCUMENT.name,
+                    name = displayName,
+                    isAccessible = true,
+                    lastValidatedTimestamp = System.currentTimeMillis()
+                )
+                mediaSourceDao.insertSource(sourceEntity)
+            }
 
             val videoEntity = VideoEntity(
                 id = stableId,
@@ -81,20 +132,27 @@ class SafDataSource @Inject constructor(
                 dateModifiedSeconds = System.currentTimeMillis() / 1000,
                 width = 0,
                 height = 0,
-                folderName = "SAF Files",
-                folderPath = "SAF Files",
+                folderName = "External Videos",
+                folderPath = "External Videos",
                 relativePath = "",
                 sourceType = MediaSourceType.LOCAL_DOCUMENT.name,
                 availability = MediaAvailability.AVAILABLE.name,
                 lastScannedTimestamp = System.currentTimeMillis()
             )
 
-            videoDao.insertVideo(videoEntity)
-            logger.i(TAG, "Registered SAF document: $displayName ($uri)")
+            val inserted = runCatching { videoDao.insertVideo(videoEntity) }
+            if (inserted.isFailure) {
+                // If unique constraint failed on URI, return the existing row for this URI
+                val existing = videoDao.getVideoByUri(uri.toString())
+                if (existing != null) {
+                    return@withContext existing
+                }
+            }
+            logger.i(TAG, "Registered SAF/External document: $displayName ($uri)")
             videoEntity
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             logger.e(TAG, "Failed to register document URI: $uri", e)
-            null
+            videoDao.getVideoByUri(uri.toString())
         }
     }
 
@@ -192,11 +250,12 @@ class SafDataSource @Inject constructor(
     }
 
     private fun takePersistablePermission(uri: Uri) {
+        if (uri.scheme != "content") return
         try {
             val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
             contentResolver.takePersistableUriPermission(uri, flags)
             logger.d(TAG, "Taken persistable URI permission for: $uri")
-        } catch (e: SecurityException) {
+        } catch (e: Throwable) {
             logger.w(TAG, "Could not take persistable URI permission for $uri: ${e.message}")
         }
     }

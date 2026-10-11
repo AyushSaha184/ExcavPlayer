@@ -644,7 +644,7 @@ fun VideoCard(
 ) {
     val resLabel = formatResolution(video.width, video.height)
     val animatedBlur by animateDpAsState(
-        targetValue = 0.dp,
+        targetValue = if (isSelectionMode && !isSelected) 2.dp else 0.dp,
         animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
         label = "selectionBlur"
     )
@@ -938,12 +938,12 @@ fun GroupCard(
     val cardShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 38.dp, bottomEnd = 38.dp)
     val thumbnailShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 14.dp, bottomEnd = 14.dp)
     val animatedBlur by animateDpAsState(
-        targetValue = 0.dp,
+        targetValue = if (isSelectionMode && !isSelected) 2.dp else 0.dp,
         animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
         label = "selectionBlur"
     )
     val animatedAlpha by animateFloatAsState(
-        targetValue = 1f,
+        targetValue = if (isSelectionMode && !isSelected) 0.65f else 1f,
         animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
         label = "selectionAlpha"
     )
@@ -1077,7 +1077,7 @@ fun ContinueWatchingRowCard(
     val watched = video.resumePositionMs ?: 0L
     val remaining = (video.durationMs - watched).coerceAtLeast(0L)
     val animatedBlur by animateDpAsState(
-        targetValue = 0.dp,
+        targetValue = if (isSelectionMode && !isSelected) 2.dp else 0.dp,
         animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
         label = "selectionBlur"
     )
@@ -1226,7 +1226,7 @@ fun FolderCard(
     val cardShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 38.dp, bottomEnd = 38.dp)
     val thumbnailShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 14.dp, bottomEnd = 14.dp)
     val animatedBlur by animateDpAsState(
-        targetValue = 0.dp,
+        targetValue = if (isSelectionMode && !isSelected) 2.dp else 0.dp,
         animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
         label = "selectionBlur"
     )
@@ -1541,7 +1541,7 @@ fun PlaylistGridCard(
     val cardShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 38.dp, bottomEnd = 38.dp)
     val thumbnailShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 14.dp, bottomEnd = 14.dp)
     val animatedBlur by animateDpAsState(
-        targetValue = 0.dp,
+        targetValue = if (isSelectionMode && !isSelected) 2.dp else 0.dp,
         animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
         label = "selectionBlur"
     )
@@ -1709,7 +1709,7 @@ fun ListVideoRow(
     val formatStr = video.fileFormat
     val resumePos = video.resumePositionMs ?: 0L
     val animatedBlur by animateDpAsState(
-        targetValue = 0.dp,
+        targetValue = if (isSelectionMode && !isSelected) 2.dp else 0.dp,
         animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
         label = "selectionBlur"
     )

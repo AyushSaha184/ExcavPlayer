@@ -174,7 +174,7 @@ fun PlayerScreen(
 
     // Subtle background blur when an option sheet is opened
     val sheetBlurRadius by animateDpAsState(
-        targetValue = if (activeSheet != null) 6.dp else 0.dp,
+        targetValue = if (activeSheet != null) 2.dp else 0.dp,
         animationSpec = tween(200, easing = FastOutSlowInEasing),
         label = "sheetBlurRadius"
     )
@@ -302,38 +302,6 @@ fun PlayerScreen(
 
     val isPip = (activity?.isInPictureInPictureMode == true) || state.isInPictureInPicture
 
-    if (isPip) {
-        // Pure Video Surface in Picture-in-Picture mode with default android controls
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black)
-        ) {
-            AndroidView(
-                factory = { ctx ->
-                    PlayerView(ctx).apply {
-                        this.player = vm.player.exoPlayer
-                        useController = false
-                        keepScreenOn = state.playback.isPlaying
-                        layoutParams = FrameLayout.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT
-                        )
-                        setBackgroundColor(android.graphics.Color.BLACK)
-                        setShutterBackgroundColor(android.graphics.Color.BLACK)
-                        this.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                    }
-                },
-                update = { playerView ->
-                    playerView.player = vm.player.exoPlayer
-                    playerView.keepScreenOn = state.playback.isPlaying
-                },
-                modifier = Modifier.fillMaxSize()
-            )
-        }
-        return
-    }
-
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
@@ -348,8 +316,8 @@ fun PlayerScreen(
                     }
                 }
             }
-            .pointerInput(isLocked) {
-                if (!isLocked) {
+            .pointerInput(isLocked, isPip, activeSheet) {
+                if (!isLocked && !isPip && activeSheet == null) {
                     detectTransformGestures { _, pan, zoom, _ ->
                         val newZoom = (zoomScale * zoom).coerceIn(1f, 4.5f)
                         zoomScale = newZoom
@@ -366,8 +334,8 @@ fun PlayerScreen(
                     }
                 }
             }
-            .pointerInput(isLocked, zoomScale) {
-                if (!isLocked) {
+            .pointerInput(isLocked, zoomScale, isPip, activeSheet) {
+                if (!isLocked && !isPip && activeSheet == null) {
                     detectTapGestures(
                         onTap = {
                             controlsVisible = !controlsVisible
@@ -417,7 +385,12 @@ fun PlayerScreen(
                             }
                         }
                     )
-                } else {
+                } else if (!isPip && activeSheet != null) {
+                    detectTapGestures(onTap = {
+                        onUserInteraction()
+                        activeSheet = null
+                    })
+                } else if (!isPip) {
                     detectTapGestures(onTap = {
                         controlsVisible = !controlsVisible
                         if (controlsVisible) {
@@ -426,8 +399,8 @@ fun PlayerScreen(
                     })
                 }
             }
-            .pointerInput(isLocked, settings, zoomScale) {
-                if (!isLocked && zoomScale <= 1.05f) {
+            .pointerInput(isLocked, settings, zoomScale, isPip, activeSheet) {
+                if (!isLocked && !isPip && zoomScale <= 1.05f && activeSheet == null) {
                     var dragMode = DragClassifierMode.NONE
                     var isDragEligible = false
                     var startTouch = Offset.Zero
@@ -574,6 +547,7 @@ fun PlayerScreen(
         // Split-screen responsive scale indicators
         val isVeryCompact = maxHeight < 260.dp || maxWidth < 320.dp
         val isCompact = maxHeight < 360.dp || maxWidth < 440.dp
+        val splitScale = (minOf(maxWidth / 640.dp, maxHeight / 360.dp)).coerceIn(0.55f, 1.0f)
 
         // Video Surface with Pinch-to-Zoom and Pan transformations
         AndroidView(
@@ -606,27 +580,31 @@ fun PlayerScreen(
 
                 // Display Refresh Rate Optimization (Judder-Free Playback)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    val surfaceView = playerView.videoSurfaceView as? android.view.SurfaceView
-                    activeSurfaceView = surfaceView
-                    val surface = surfaceView?.holder?.surface
-                    if (surface != null && surface.isValid) {
-                        val fps = vm.player.exoPlayer.videoFormat?.frameRate ?: 0f
-                        if (settings.matchDisplayRefreshRate && fps > 1.0f) {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                surface.setFrameRate(
-                                    fps,
-                                    android.view.Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE,
-                                    android.view.Surface.CHANGE_FRAME_RATE_ONLY_IF_SEAMLESS
-                                )
+                    try {
+                        val surfaceView = playerView.videoSurfaceView as? android.view.SurfaceView
+                        activeSurfaceView = surfaceView
+                        val surface = surfaceView?.holder?.surface
+                        if (surface != null && surface.isValid) {
+                            val fps = vm.player.exoPlayer.videoFormat?.frameRate ?: 0f
+                            if (settings.matchDisplayRefreshRate && fps > 1.0f) {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                    surface.setFrameRate(
+                                        fps,
+                                        android.view.Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE,
+                                        android.view.Surface.CHANGE_FRAME_RATE_ONLY_IF_SEAMLESS
+                                    )
+                                } else {
+                                    surface.setFrameRate(
+                                        fps,
+                                        android.view.Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE
+                                    )
+                                }
                             } else {
-                                surface.setFrameRate(
-                                    fps,
-                                    android.view.Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE
-                                )
+                                surface.setFrameRate(0f, android.view.Surface.FRAME_RATE_COMPATIBILITY_DEFAULT)
                             }
-                        } else {
-                            surface.setFrameRate(0f, android.view.Surface.FRAME_RATE_COMPATIBILITY_DEFAULT)
                         }
+                    } catch (_: Throwable) {
+                        // Ignore surface setFrameRate failures on unsupported devices/displays
                     }
                 }
             },
@@ -838,7 +816,9 @@ fun PlayerScreen(
                         if (error.isRecoverable && state.currentVideo != null) {
                             Button(
                                 onClick = {
-                                    vm.player.dispatch(PlayerCommand.Play(state.currentVideo!!))
+                                    state.currentVideo?.let { vid ->
+                                        vm.player.dispatch(PlayerCommand.Play(vid))
+                                    }
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
                                 shape = ExcavShapes.Pill
@@ -859,11 +839,11 @@ fun PlayerScreen(
         }
 
         // Locked HUD Button (matches bottom-left lock button position)
-        if (isLocked) {
-            val lockBtnSize = if (isVeryCompact) 32.dp else if (isCompact) 38.dp else 44.dp
-            val lockIconSize = if (isVeryCompact) 16.dp else if (isCompact) 19.dp else 22.dp
-            val lockPadH = if (isVeryCompact) 8.dp else 16.dp
-            val lockPadV = if (isVeryCompact) 4.dp else 10.dp
+        if (isLocked && !isPip) {
+            val lockBtnSize = ((if (isVeryCompact) 32.dp else if (isCompact) 38.dp else 44.dp) * splitScale).coerceIn(24.dp, 44.dp)
+            val lockIconSize = ((if (isVeryCompact) 16.dp else if (isCompact) 19.dp else 22.dp) * splitScale).coerceIn(12.dp, 22.dp)
+            val lockPadH = ((if (isVeryCompact) 8.dp else 16.dp) * splitScale).coerceIn(4.dp, 16.dp)
+            val lockPadV = ((if (isVeryCompact) 4.dp else 10.dp) * splitScale).coerceIn(2.dp, 10.dp)
 
             AnimatedVisibility(
                 visible = controlsVisible,
@@ -896,7 +876,7 @@ fun PlayerScreen(
                     }
                 }
             }
-        } else {
+        } else if (!isPip) {
             // Main Controls Overlay
             AnimatedVisibility(
                 visible = controlsVisible,
@@ -913,6 +893,8 @@ fun PlayerScreen(
                         player = vm.player,
                         isVeryCompact = isVeryCompact,
                         isCompact = isCompact,
+                        splitScale = splitScale,
+                        isSheetOpen = activeSheet != null,
                         onClose = {
                             if (!keepAudioOnBackground && !state.isBackgroundAudio) {
                                 vm.player.stop()
@@ -968,25 +950,30 @@ fun PlayerScreen(
                         },
                         hasPrevious = queue.currentIndex > 0,
                         onPlayPrevious = {
+                            if (activeSheet != null) return@PlayerControlsOverlay
                             onUserInteraction()
                             vm.playQueueItem(queue.currentIndex - 1)
                         },
                         hasNext = queue.currentIndex in 0 until (queue.items.size - 1),
                         onPlayNext = {
+                            if (activeSheet != null) return@PlayerControlsOverlay
                             onUserInteraction()
                             vm.playQueueItem(queue.currentIndex + 1)
                         },
                         scrubState = scrubState,
                         onScrubStart = {
+                            if (activeSheet != null) return@PlayerControlsOverlay
                             onUserInteraction()
                             val cur = (scrubState?.targetMs ?: vm.player.playbackPosition.value.currentPositionMs).coerceAtLeast(0L)
                             scrubState = ScrubState(cur, ScrubSource.SLIDER)
                         },
                         onScrubChange = { targetMs ->
+                            if (activeSheet != null) return@PlayerControlsOverlay
                             onUserInteraction()
                             scrubState = ScrubState(targetMs, ScrubSource.SLIDER)
                         },
                         onScrubEnd = {
+                            if (activeSheet != null) return@PlayerControlsOverlay
                             onUserInteraction()
                             scrubState?.let { s ->
                                 vm.player.seekTo(s.targetMs)
@@ -1001,7 +988,7 @@ fun PlayerScreen(
 
         // Active Bottom Sheet with smooth entering and exiting animation
         AnimatedVisibility(
-            visible = activeSheet != null,
+            visible = activeSheet != null && !isPip,
             enter = slideInVertically(
                 initialOffsetY = { (it * 0.40f).toInt() },
                 animationSpec = spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow)
@@ -1035,6 +1022,8 @@ private fun PlayerControlsOverlay(
     player: PlayerManager,
     isVeryCompact: Boolean = false,
     isCompact: Boolean = false,
+    splitScale: Float = 1f,
+    isSheetOpen: Boolean = false,
     scrubState: ScrubState? = null,
     onScrubStart: () -> Unit = {},
     onScrubChange: (Long) -> Unit = {},
@@ -1059,117 +1048,30 @@ private fun PlayerControlsOverlay(
     CompositionLocalProvider(
         LocalRippleConfiguration provides null
     ) {
-        val topBtnSize = when {
-            isVeryCompact -> 32.dp
-            isCompact -> 38.dp
-            else -> 44.dp
-        }
-        val topIconSize = when {
-            isVeryCompact -> 16.dp
-            isCompact -> 19.dp
-            else -> 22.dp
-        }
-        val titleFontSize = when {
-            isVeryCompact -> 12.sp
-            isCompact -> 14.sp
-            else -> 16.sp
-        }
-        val topSpacing = when {
-            isVeryCompact -> 6.dp
-            isCompact -> 10.dp
-            else -> 16.dp
-        }
-        val topBtnSpacing = when {
-            isVeryCompact -> 4.dp
-            isCompact -> 6.dp
-            else -> 10.dp
-        }
+        val topBtnSize = ((if (isVeryCompact) 32.dp else if (isCompact) 38.dp else 44.dp) * splitScale).coerceIn(24.dp, 44.dp)
+        val topIconSize = ((if (isVeryCompact) 16.dp else if (isCompact) 19.dp else 22.dp) * splitScale).coerceIn(12.dp, 22.dp)
+        val titleFontSize = if (isVeryCompact) 11.sp else if (isCompact) 13.sp else 16.sp
+        val topSpacing = ((if (isVeryCompact) 6.dp else if (isCompact) 10.dp else 16.dp) * splitScale).coerceIn(4.dp, 16.dp)
+        val topBtnSpacing = ((if (isVeryCompact) 4.dp else if (isCompact) 6.dp else 10.dp) * splitScale).coerceIn(2.dp, 10.dp)
 
-        val centerPlaySize = when {
-            isVeryCompact -> 44.dp
-            isCompact -> 56.dp
-            else -> 68.dp
-        }
-        val centerPlayIconSize = when {
-            isVeryCompact -> 24.dp
-            isCompact -> 30.dp
-            else -> 38.dp
-        }
-        val centerSkipSize = when {
-            isVeryCompact -> 34.dp
-            isCompact -> 42.dp
-            else -> 52.dp
-        }
-        val centerSkipIconSize = when {
-            isVeryCompact -> 18.dp
-            isCompact -> 22.dp
-            else -> 28.dp
-        }
-        val centerSpacing = when {
-            isVeryCompact -> 14.dp
-            isCompact -> 20.dp
-            else -> 28.dp
-        }
+        val centerPlaySize = ((if (isVeryCompact) 44.dp else if (isCompact) 56.dp else 68.dp) * splitScale).coerceIn(36.dp, 68.dp)
+        val centerPlayIconSize = ((if (isVeryCompact) 24.dp else if (isCompact) 30.dp else 38.dp) * splitScale).coerceIn(18.dp, 38.dp)
+        val centerSkipSize = ((if (isVeryCompact) 34.dp else if (isCompact) 42.dp else 52.dp) * splitScale).coerceIn(28.dp, 52.dp)
+        val centerSkipIconSize = ((if (isVeryCompact) 18.dp else if (isCompact) 22.dp else 28.dp) * splitScale).coerceIn(14.dp, 28.dp)
+        val centerSpacing = ((if (isVeryCompact) 14.dp else if (isCompact) 20.dp else 28.dp) * splitScale).coerceIn(8.dp, 28.dp)
 
-        val bottomPillBtnSize = when {
-            isVeryCompact -> 28.dp
-            isCompact -> 34.dp
-            else -> 40.dp
-        }
-        val bottomPillIconSize = when {
-            isVeryCompact -> 14.dp
-            isCompact -> 18.dp
-            else -> 22.dp
-        }
-        val bottomPillPaddingH = when {
-            isVeryCompact -> 4.dp
-            isCompact -> 6.dp
-            else -> 8.dp
-        }
-        val bottomPillPaddingV = when {
-            isVeryCompact -> 2.dp
-            isCompact -> 3.dp
-            else -> 4.dp
-        }
-        val bottomPillSpacing = when {
-            isVeryCompact -> 2.dp
-            else -> 4.dp
-        }
-        val speedTextSize = when {
-            isVeryCompact -> 10.sp
-            isCompact -> 11.5.sp
-            else -> 13.sp
-        }
-        val speedPaddingH = when {
-            isVeryCompact -> 6.dp
-            isCompact -> 9.dp
-            else -> 12.dp
-        }
-        val speedPaddingV = when {
-            isVeryCompact -> 4.dp
-            isCompact -> 6.dp
-            else -> 8.dp
-        }
-        val timelineTextSize = when {
-            isVeryCompact -> 10.5.sp
-            isCompact -> 12.sp
-            else -> 14.sp
-        }
-        val timelineSpacing = when {
-            isVeryCompact -> 4.dp
-            isCompact -> 8.dp
-            else -> 14.dp
-        }
-        val outerPaddingH = when {
-            isVeryCompact -> 8.dp
-            isCompact -> 12.dp
-            else -> 16.dp
-        }
-        val outerPaddingV = when {
-            isVeryCompact -> 4.dp
-            isCompact -> 8.dp
-            else -> 10.dp
-        }
+        val bottomPillBtnSize = ((if (isVeryCompact) 28.dp else if (isCompact) 34.dp else 40.dp) * splitScale).coerceIn(24.dp, 40.dp)
+        val bottomPillIconSize = ((if (isVeryCompact) 14.dp else if (isCompact) 18.dp else 22.dp) * splitScale).coerceIn(12.dp, 22.dp)
+        val bottomPillPaddingH = ((if (isVeryCompact) 4.dp else if (isCompact) 6.dp else 8.dp) * splitScale).coerceIn(3.dp, 8.dp)
+        val bottomPillPaddingV = ((if (isVeryCompact) 2.dp else if (isCompact) 3.dp else 4.dp) * splitScale).coerceIn(2.dp, 4.dp)
+        val bottomPillSpacing = ((if (isVeryCompact) 2.dp else 4.dp) * splitScale).coerceIn(1.dp, 4.dp)
+        val speedTextSize = if (isVeryCompact) 10.sp else if (isCompact) 11.5.sp else 13.sp
+        val speedPaddingH = ((if (isVeryCompact) 6.dp else if (isCompact) 9.dp else 12.dp) * splitScale).coerceIn(4.dp, 12.dp)
+        val speedPaddingV = ((if (isVeryCompact) 4.dp else if (isCompact) 6.dp else 8.dp) * splitScale).coerceIn(2.dp, 8.dp)
+        val timelineTextSize = if (isVeryCompact) 10.5.sp else if (isCompact) 12.sp else 14.sp
+        val timelineSpacing = ((if (isVeryCompact) 4.dp else if (isCompact) 8.dp else 14.dp) * splitScale).coerceIn(3.dp, 14.dp)
+        val outerPaddingH = ((if (isVeryCompact) 8.dp else if (isCompact) 12.dp else 16.dp) * splitScale).coerceIn(6.dp, 16.dp)
+        val outerPaddingV = ((if (isVeryCompact) 4.dp else if (isCompact) 8.dp else 10.dp) * splitScale).coerceIn(3.dp, 10.dp)
 
         Box(
             modifier = Modifier
@@ -1214,25 +1116,7 @@ private fun PlayerControlsOverlay(
                     )
                 }
 
-                Spacer(Modifier.width(topBtnSpacing))
 
-                // Dialogue Booster Button
-                IconButton(
-                    onClick = {
-                        onInteraction()
-                        onToggleDialogueBoost()
-                    },
-                    modifier = Modifier
-                        .size(topBtnSize)
-                        .playerGlass(CircleShape)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.RecordVoiceOver,
-                        contentDescription = "Dialogue Booster",
-                        tint = if (isDialogueBoostActive) Color.White else Color.White.copy(alpha = 0.35f),
-                        modifier = Modifier.size(topIconSize)
-                    )
-                }
 
                 Spacer(Modifier.width(topBtnSpacing))
 
@@ -1292,8 +1176,9 @@ private fun PlayerControlsOverlay(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(
-                    enabled = hasPrevious,
+                    enabled = hasPrevious && !isSheetOpen,
                     onClick = {
+                        if (isSheetOpen) return@IconButton
                         onInteraction()
                         onPlayPrevious()
                     },
@@ -1311,6 +1196,7 @@ private fun PlayerControlsOverlay(
 
                 IconButton(
                     onClick = {
+                        if (isSheetOpen) return@IconButton
                         onInteraction()
                         if (state.playback.isPlaying) player.pause() else player.resume()
                     },
@@ -1331,8 +1217,9 @@ private fun PlayerControlsOverlay(
                 }
 
                 IconButton(
-                    enabled = hasNext,
+                    enabled = hasNext && !isSheetOpen,
                     onClick = {
+                        if (isSheetOpen) return@IconButton
                         onInteraction()
                         onPlayNext()
                     },
@@ -1498,6 +1385,22 @@ private fun PlayerControlsOverlay(
                         horizontalArrangement = Arrangement.spacedBy(bottomPillSpacing),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // Dialogue Booster Button (Left side of playback speed)
+                        IconButton(
+                            onClick = {
+                                onInteraction()
+                                onToggleDialogueBoost()
+                            },
+                            modifier = Modifier.size(bottomPillBtnSize)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.RecordVoiceOver,
+                                contentDescription = "Dialogue Booster",
+                                tint = if (isDialogueBoostActive) Color.White else Color.White.copy(alpha = 0.35f),
+                                modifier = Modifier.size(bottomPillIconSize)
+                            )
+                        }
+
                         // Playback Speed Pill Button
                         Box(
                             modifier = Modifier
@@ -1794,29 +1697,26 @@ private fun SubtitleSheet(
 
         Spacer(Modifier.height(10.dp))
 
-        // Action Card: Add External Subtitle File (.srt, .vtt, .ass)
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .border(1.dp, ExcavPalette.Line, RoundedCornerShape(12.dp))
-                .clickable(onClick = onPickSubtitle),
-            color = ExcavPalette.SurfaceCard
+        // Action Button: Add subtitles (centered, sized to text only)
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center
         ) {
-            Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Surface(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(16.dp))
+                    .border(1.dp, ExcavPalette.Line, RoundedCornerShape(16.dp))
+                    .clickable(onClick = onPickSubtitle),
+                color = ExcavPalette.SurfaceCard
+            ) {
                 Text(
-                    text = "Add External Subtitle File",
+                    text = "Add subtitles",
                     color = ExcavPalette.Text,
-                    style = MaterialTheme.typography.titleSmall.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
-                    )
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = ".srt, .vtt, .ass",
-                    color = ExcavPalette.TextMuted,
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp)
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 13.sp
+                    ),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
             }
         }
@@ -2114,39 +2014,41 @@ fun FloatingNextEpisodePill(
         modifier = modifier
             .padding(bottom = if (isOutro) outroPad else normalPad, end = endPad)
     ) {
-        val nextVid = queue.items[queue.currentIndex + 1]
-        Surface(
-            modifier = Modifier
-                .clip(ExcavShapes.Pill)
-                .border(1.5.dp, ExcavPalette.BlueGlow, ExcavShapes.Pill)
-                .clickable {
-                    onPlayNext(queue.currentIndex + 1)
-                },
-            color = ExcavPalette.Ink.copy(alpha = 0.95f),
-            shadowElevation = 8.dp
-        ) {
-            Row(
-                modifier = Modifier.padding(
-                    horizontal = if (isVeryCompact) 8.dp else if (isCompact) 10.dp else 16.dp,
-                    vertical = if (isVeryCompact) 5.dp else if (isCompact) 6.dp else 10.dp
-                ),
-                verticalAlignment = Alignment.CenterVertically
+        val nextVid = queue.items.getOrNull(queue.currentIndex + 1)
+        if (nextVid != null) {
+            Surface(
+                modifier = Modifier
+                    .clip(ExcavShapes.Pill)
+                    .border(1.5.dp, ExcavPalette.BlueGlow, ExcavShapes.Pill)
+                    .clickable {
+                        onPlayNext(queue.currentIndex + 1)
+                    },
+                color = ExcavPalette.Ink.copy(alpha = 0.95f),
+                shadowElevation = 8.dp
             ) {
-                Icon(
-                    imageVector = Icons.Default.SkipNext,
-                    contentDescription = null,
-                    tint = ExcavPalette.Blue,
-                    modifier = Modifier.size(if (isVeryCompact) 14.dp else if (isCompact) 16.dp else 20.dp)
-                )
-                Spacer(Modifier.width(if (isVeryCompact) 4.dp else if (isCompact) 5.dp else 8.dp))
-                Text(
-                    text = "Next: ${nextVid.displayName.take(if (isVeryCompact) 10 else if (isCompact) 14 else 18)}",
-                    color = ExcavPalette.Text,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = if (isVeryCompact) 10.5.sp else if (isCompact) 11.5.sp else 13.sp
+                Row(
+                    modifier = Modifier.padding(
+                        horizontal = if (isVeryCompact) 8.dp else if (isCompact) 10.dp else 16.dp,
+                        vertical = if (isVeryCompact) 5.dp else if (isCompact) 6.dp else 10.dp
+                    ),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.SkipNext,
+                        contentDescription = null,
+                        tint = ExcavPalette.Blue,
+                        modifier = Modifier.size(if (isVeryCompact) 14.dp else if (isCompact) 16.dp else 20.dp)
                     )
-                )
+                    Spacer(Modifier.width(if (isVeryCompact) 4.dp else if (isCompact) 5.dp else 8.dp))
+                    Text(
+                        text = "Next: ${nextVid.displayName.take(if (isVeryCompact) 10 else if (isCompact) 14 else 18)}",
+                        color = ExcavPalette.Text,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = if (isVeryCompact) 10.5.sp else if (isCompact) 11.5.sp else 13.sp
+                        )
+                    )
+                }
             }
         }
     }
@@ -2214,9 +2116,10 @@ fun SeekbarPreviewPopup(
                     .background(Color(0xE6121622))
             ) {
                 // Extracted Frame or Placeholder
-                if (previewBitmap != null) {
+                val bmp = previewBitmap
+                if (bmp != null) {
                     androidx.compose.foundation.Image(
-                        bitmap = previewBitmap!!.asImageBitmap(),
+                        bitmap = bmp.asImageBitmap(),
                         contentDescription = "Seek Preview",
                         contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()

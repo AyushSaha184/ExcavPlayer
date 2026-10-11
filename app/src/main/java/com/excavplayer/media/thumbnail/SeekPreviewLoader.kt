@@ -63,8 +63,9 @@ class SeekPreviewLoader @Inject constructor(
 
     private fun getOrCreateRetriever(uri: Uri): MediaMetadataRetriever {
         val uriStr = uri.toString()
-        if (activeRetriever != null && activeUriString == uriStr) {
-            return activeRetriever!!
+        val current = activeRetriever
+        if (current != null && activeUriString == uriStr) {
+            return current
         }
 
         try {
@@ -72,7 +73,22 @@ class SeekPreviewLoader @Inject constructor(
         } catch (_: Throwable) {}
 
         val newRetriever = MediaMetadataRetriever()
-        newRetriever.setDataSource(context, uri)
+        val path = uri.path
+        if (uri.scheme == "file" && path != null) {
+            newRetriever.setDataSource(path)
+        } else if (uri.scheme == null && uriStr.startsWith("/")) {
+            newRetriever.setDataSource(uriStr)
+        } else {
+            try {
+                newRetriever.setDataSource(context, uri)
+            } catch (e: Throwable) {
+                if (path != null && java.io.File(path).exists()) {
+                    newRetriever.setDataSource(path)
+                } else {
+                    throw e
+                }
+            }
+        }
         val rotationStr = newRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)
         activeRotation = rotationStr?.toIntOrNull() ?: 0
         activeRetriever = newRetriever

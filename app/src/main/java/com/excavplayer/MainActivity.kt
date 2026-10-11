@@ -126,7 +126,9 @@ class MainActivity : ComponentActivity() {
 
     private val subtitlePicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@registerForActivityResult
-        contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        try {
+            contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        } catch (_: Throwable) {}
         playerManager.dispatch(
             PlayerCommand.AddExternalSubtitle(
                 uri = uri.toString(),
@@ -214,20 +216,51 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
         handleIncomingIntent(intent)
     }
 
     private fun handleIncomingIntent(intent: Intent?) {
-        if (intent?.action == Intent.ACTION_VIEW) {
-            val dataUri = intent.data ?: return
-            logger.i("MainActivity", "Handling external VIEW intent for: $dataUri")
+        val action = intent?.action
+        if (action == Intent.ACTION_VIEW || action == Intent.ACTION_SEND) {
+            val dataUri = intent.data
+                ?: intent.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri
+                ?: (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
+                })
+                ?: return
+
+            logger.i("MainActivity", "Handling external VIEW/SEND intent for: $dataUri")
             lifecycleScope.launch {
-                val entity = safDataSource.registerDocumentUri(dataUri)
-                if (entity != null) {
-                    val allVideos = videoLibrary.observeVideos().first()
-                    val video = allVideos.find { it.id == entity.id } ?: entity.toDomain()
+                try {
+                    val entity = safDataSource.registerDocumentUri(dataUri)
+                    val video = entity?.toDomain() ?: run {
+                        val name = dataUri.lastPathSegment?.substringAfterLast('/')?.let { Uri.decode(it) } ?: "External Video"
+                        com.excavplayer.domain.model.Video(
+                            id = "saf_doc_${java.util.UUID.nameUUIDFromBytes(dataUri.toString().toByteArray())}",
+                            uri = dataUri.toString(),
+                            displayName = name,
+                            mimeType = intent.type ?: "video/*",
+                            durationMs = 0L,
+                            sizeBytes = 0L,
+                            dateAddedSeconds = System.currentTimeMillis() / 1000,
+                            dateModifiedSeconds = System.currentTimeMillis() / 1000,
+                            width = 0,
+                            height = 0,
+                            folderName = "External Videos",
+                            folderPath = "External Videos",
+                            relativePath = "",
+                            sourceType = com.excavplayer.domain.model.MediaSourceType.LOCAL_DOCUMENT,
+                            availability = com.excavplayer.domain.model.MediaAvailability.AVAILABLE
+                        )
+                    }
                     viewModel.play(video)
                     viewModel.setPlayerOpen(true)
+                } catch (e: Throwable) {
+                    logger.e("MainActivity", "Error handling external intent: ${e.message}", e)
                 }
             }
         }
@@ -270,7 +303,8 @@ class MainActivity : ComponentActivity() {
         if (missing.isNotEmpty()) {
             requestPermissionsLauncher.launch(missing.toTypedArray())
         } else {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !android.os.Environment.isExternalStorageManager()) {
+            val isExternalLaunch = intent?.action == Intent.ACTION_VIEW || intent?.action == Intent.ACTION_SEND
+            if (!isExternalLaunch && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !android.os.Environment.isExternalStorageManager()) {
                 try {
                     val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
                         data = Uri.parse("package:$packageName")

@@ -406,7 +406,11 @@ class PlayerManager @Inject constructor(
     }
 
     private fun buildMediaItem(video: Video, externalSubtitles: List<MediaItem.SubtitleConfiguration> = emptyList()): MediaItem {
-        val uri = Uri.parse(video.uri)
+        val uri = if (video.uri.startsWith("/")) {
+            Uri.fromFile(java.io.File(video.uri))
+        } else {
+            Uri.parse(video.uri)
+        }
         val builder = MediaItem.Builder()
             .setMediaId(video.id)
             .setUri(uri)
@@ -784,6 +788,14 @@ class PlayerManager @Inject constructor(
                 applyDisplayRefreshRateOptimization(currentSettings.matchDisplayRefreshRate)
 
                 val readyDur = exoPlayer.duration.takeIf { it > 0 }
+                if (readyDur != null) {
+                    _state.update { current ->
+                        val updatedVideo = current.currentVideo?.let { vid ->
+                            if (vid.durationMs <= 0L) vid.copy(durationMs = readyDur) else vid
+                        }
+                        current.copy(currentVideo = updatedVideo ?: current.currentVideo)
+                    }
+                }
                 if (readyDur != null && _state.value.chapters.isNotEmpty()) {
                     _state.update { current ->
                         val reNormalized = chapterExtractor.sanitizeAndNormalize(
@@ -811,6 +823,19 @@ class PlayerManager @Inject constructor(
                             play(nextVideo)
                         }
                     }
+                }
+            }
+        }
+
+        override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
+            if (videoSize.width > 0 && videoSize.height > 0) {
+                _state.update { current ->
+                    val updatedVideo = current.currentVideo?.let { vid ->
+                        if (vid.width <= 0 || vid.height <= 0) {
+                            vid.copy(width = videoSize.width, height = videoSize.height)
+                        } else vid
+                    }
+                    current.copy(currentVideo = updatedVideo ?: current.currentVideo)
                 }
             }
         }

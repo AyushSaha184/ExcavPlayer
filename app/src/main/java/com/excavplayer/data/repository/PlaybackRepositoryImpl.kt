@@ -43,7 +43,11 @@ class PlaybackRepositoryImpl @Inject constructor(
             logger.w(TAG, "Cannot save playback state with null or blank videoId")
             return@withContext
         }
-        playbackDao.upsertPlaybackState(state.toEntity())
+        try {
+            playbackDao.upsertPlaybackState(state.toEntity())
+        } catch (e: Throwable) {
+            logger.w(TAG, "Failed to save playback state for video ${state.videoId}: ${e.message}")
+        }
     }
 
     override fun observeContinueWatching(threshold: Float): Flow<List<Video>> {

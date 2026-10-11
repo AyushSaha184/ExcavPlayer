@@ -56,6 +56,9 @@ interface VideoDao {
     """)
     suspend fun getVideoById(id: String): VideoWithMetadataTuple?
 
+    @Query("SELECT * FROM videos WHERE uri = :uri LIMIT 1")
+    suspend fun getVideoByUri(uri: String): VideoEntity?
+
     @Query("""
         SELECT v.*, 
                (f.video_id IS NOT NULL) AS is_favorite,

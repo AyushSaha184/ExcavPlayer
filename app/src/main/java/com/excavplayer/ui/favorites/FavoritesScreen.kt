@@ -394,7 +394,7 @@ fun CompactFavoriteCard(
     }
 
     val animatedBlur by animateDpAsState(
-        targetValue = if (isSelectionMode && !isSelected) 0.dp else 0.dp,
+        targetValue = if (isSelectionMode && !isSelected) 2.dp else 0.dp,
         animationSpec = androidx.compose.animation.core.tween(durationMillis = 200, easing = androidx.compose.animation.core.FastOutSlowInEasing),
         label = "selectionBlur"
     )

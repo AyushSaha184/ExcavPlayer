@@ -129,8 +129,6 @@ fun HomeScreen(
     var propertiesVideo by remember { mutableStateOf<Video?>(null) }
     var propertiesMultiVideos by remember { mutableStateOf<List<Video>?>(null) }
     var renameVideoTarget by remember { mutableStateOf<Video?>(null) }
-    var deleteVideoTarget by remember { mutableStateOf<Video?>(null) }
-    var batchDeleteTargetVideos by remember { mutableStateOf<List<Video>?>(null) }
     var playlistVideoTarget by remember { mutableStateOf<Video?>(null) }
 
     BackHandler(enabled = isSelectionMode || selectedGroup != null) {
@@ -212,7 +210,10 @@ fun HomeScreen(
                                         onAddToPlaylist = { playlistVideoTarget = video },
                                         onRename = { renameVideoTarget = video },
                                         onProperties = { propertiesVideo = video },
-                                        onDelete = { deleteVideoTarget = video }
+                                        onDelete = {
+                                            selectedVideoForMenu = null
+                                            onDeleteVideo(video)
+                                        }
                                     )
                                 }
                             }
@@ -314,7 +315,8 @@ fun HomeScreen(
                                         }
                                     },
                                     onDelete = {
-                                        batchDeleteTargetVideos = selVideos
+                                        onDeleteVideos(selVideos)
+                                        selectedVideoIds = emptySet()
                                     }
                                 )
                             }
@@ -470,7 +472,10 @@ fun HomeScreen(
                                                         onAddToPlaylist = { playlistVideoTarget = video },
                                                         onRename = { renameVideoTarget = video },
                                                         onProperties = { propertiesVideo = video },
-                                                        onDelete = { deleteVideoTarget = video },
+                                                        onDelete = {
+                                                            selectedVideoForMenu = null
+                                                            onDeleteVideo(video)
+                                                        },
                                                         onRemoveFromContinueWatching = { onRemoveFromContinueWatching(video) }
                                                     )
                                                 }
@@ -498,27 +503,9 @@ fun HomeScreen(
                                 videos = group.videos,
                                 isSelectionMode = isSelectionMode,
                                 onClick = { 
-                                    if (isSelectionMode) {
-                                        val groupVideoIds = group.videos.map { it.id }.toSet()
-                                        val allSelected = groupVideoIds.all { it in selectedVideoIds }
-                                        selectedVideoIds = if (allSelected) {
-                                            selectedVideoIds - groupVideoIds
-                                        } else {
-                                            selectedVideoIds + groupVideoIds
-                                        }
-                                    } else {
-                                        selectedGroup = group 
-                                    }
+                                    selectedGroup = group 
                                 },
-                                onLongClick = {
-                                    val groupVideoIds = group.videos.map { it.id }.toSet()
-                                    val allSelected = groupVideoIds.all { it in selectedVideoIds }
-                                    selectedVideoIds = if (allSelected) {
-                                        selectedVideoIds - groupVideoIds
-                                    } else {
-                                        selectedVideoIds + groupVideoIds
-                                    }
-                                },
+                                onLongClick = null,
                                 modifier = Modifier.animateItem()
                             )
                         }
@@ -586,7 +573,8 @@ fun HomeScreen(
                                     }
                                 },
                                 onDelete = {
-                                    batchDeleteTargetVideos = selVideos
+                                    onDeleteVideos(selVideos)
+                                    selectedVideoIds = emptySet()
                                 }
                             )
                         }
@@ -623,25 +611,7 @@ fun HomeScreen(
         )
     }
 
-    deleteVideoTarget?.let { video ->
-        DeleteConfirmDialog(
-            video = video,
-            onDelete = { onDeleteVideo(video) },
-            onDismiss = { deleteVideoTarget = null }
-        )
-    }
 
-    batchDeleteTargetVideos?.let { vids ->
-        BatchDeleteConfirmationDialog(
-            itemCount = vids.size,
-            itemType = if (vids.size == 1) "video" else "videos",
-            onConfirm = {
-                onDeleteVideos(vids)
-                selectedVideoIds = emptySet()
-            },
-            onDismiss = { batchDeleteTargetVideos = null }
-        )
-    }
 
     playlistVideoTarget?.let { video ->
         AddToPlaylistDialog(

@@ -124,20 +124,60 @@ class ThumbnailLoader @Inject constructor(
             return diskBitmap
         }
 
-        // 3. Generate thumbnail from MediaStore / System
+        // 3. Generate thumbnail from MediaStore / System / MediaMetadataRetriever
         return try {
             val uri = Uri.parse(uriString)
-            val bitmap: Bitmap? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                context.contentResolver.loadThumbnail(uri, Size(targetWidth, targetHeight), null)
-            } else {
-                val id = ContentUris.parseId(uri)
-                @Suppress("DEPRECATION")
-                MediaStore.Video.Thumbnails.getThumbnail(
-                    context.contentResolver,
-                    id,
-                    MediaStore.Video.Thumbnails.MINI_KIND,
+            var bitmap: Bitmap? = null
+
+            if (uri.scheme == "content") {
+                bitmap = try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        context.contentResolver.loadThumbnail(uri, Size(targetWidth, targetHeight), null)
+                    } else {
+                        val id = ContentUris.parseId(uri)
+                        @Suppress("DEPRECATION")
+                        MediaStore.Video.Thumbnails.getThumbnail(
+                            context.contentResolver,
+                            id,
+                            MediaStore.Video.Thumbnails.MINI_KIND,
+                            null
+                        )
+                    }
+                } catch (_: Throwable) {
                     null
-                )
+                }
+            }
+
+            if (bitmap == null) {
+                val retriever = android.media.MediaMetadataRetriever()
+                try {
+                    val path = uri.path
+                    if (uri.scheme == "file" && path != null) {
+                        retriever.setDataSource(path)
+                    } else if (uri.scheme == null && uriString.startsWith("/")) {
+                        retriever.setDataSource(uriString)
+                    } else {
+                        retriever.setDataSource(context, uri)
+                    }
+
+                    bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                        retriever.getScaledFrameAtTime(
+                            -1,
+                            android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
+                            targetWidth,
+                            targetHeight
+                        )
+                    } else {
+                        retriever.frameAtTime?.let { orig ->
+                            val scaled = Bitmap.createScaledBitmap(orig, targetWidth, targetHeight, true)
+                            if (scaled != orig) orig.recycle()
+                            scaled
+                        }
+                    }
+                } catch (_: Throwable) {
+                } finally {
+                    try { retriever.release() } catch (_: Throwable) {}
+                }
             }
 
             if (bitmap != null) {
