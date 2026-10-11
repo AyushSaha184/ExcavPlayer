@@ -196,10 +196,11 @@ class MediaStoreDataSource @Inject constructor(
             if (dataColumn != -1 && !cursor.isNull(dataColumn)) {
                 val data = cursor.getString(dataColumn) ?: ""
                 if (data.isNotBlank()) {
-                    val parentFile = File(data).parentFile
-                    if (parentFile != null) {
-                        folderPath = parentFile.absolutePath
-                        folderName = parentFile.name
+                    val lastSlash = data.lastIndexOf('/')
+                    if (lastSlash > 0) {
+                        folderPath = data.substring(0, lastSlash)
+                        val prevSlash = folderPath.lastIndexOf('/')
+                        folderName = if (prevSlash >= 0) folderPath.substring(prevSlash + 1) else folderPath
                     }
                 }
             }

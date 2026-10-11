@@ -644,12 +644,12 @@ fun VideoCard(
 ) {
     val resLabel = formatResolution(video.width, video.height)
     val animatedBlur by animateDpAsState(
-        targetValue = if (isSelectionMode && !isSelected) 2.dp else 0.dp,
+        targetValue = 0.dp,
         animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
         label = "selectionBlur"
     )
     val animatedAlpha by animateFloatAsState(
-        targetValue = if (isSelectionMode && !isSelected) 0.35f else 1f,
+        targetValue = if (isSelectionMode && !isSelected) 0.65f else 1f,
         animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
         label = "selectionAlpha"
     )
@@ -681,24 +681,7 @@ fun VideoCard(
             ) {
                 Thumbnail(video, Modifier.fillMaxSize())
 
-                if (isSelected) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(6.dp)
-                            .size(22.dp)
-                            .clip(CircleShape)
-                            .background(ExcavPalette.Gray),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = "Selected",
-                            tint = ExcavPalette.Ink,
-                            modifier = Modifier.size(14.dp)
-                        )
-                    }
-                } else if (resLabel != null) {
+                if (resLabel != null) {
                     Text(
                         text = resLabel,
                         color = ExcavPalette.Text,
@@ -767,7 +750,7 @@ fun VideoCard(
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp)
                     )
                 }
-                if (onMoreClick != null || dropdownMenu != null) {
+                if ((onMoreClick != null || dropdownMenu != null) && !isSelected) {
                     Box {
                         IconButton(
                             onClick = { onMoreClick?.invoke() },
@@ -955,12 +938,12 @@ fun GroupCard(
     val cardShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 38.dp, bottomEnd = 38.dp)
     val thumbnailShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 14.dp, bottomEnd = 14.dp)
     val animatedBlur by animateDpAsState(
-        targetValue = if (isSelectionMode && !isSelected) 2.dp else 0.dp,
+        targetValue = 0.dp,
         animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
         label = "selectionBlur"
     )
     val animatedAlpha by animateFloatAsState(
-        targetValue = if (isSelectionMode && !isSelected) 0.35f else 1f,
+        targetValue = 1f,
         animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
         label = "selectionAlpha"
     )
@@ -1017,24 +1000,6 @@ fun GroupCard(
                     )
                 }
 
-                if (isSelected) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(8.dp)
-                            .size(22.dp)
-                            .clip(CircleShape)
-                            .background(ExcavPalette.Gray),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = "Selected",
-                            tint = ExcavPalette.Ink,
-                            modifier = Modifier.size(14.dp)
-                        )
-                    }
-                }
 
                 // Translucent Pill placed on top of the lower line of the thumbnail, left side (bisected at middle)
                 val pillShape = CircleShape
@@ -1112,12 +1077,12 @@ fun ContinueWatchingRowCard(
     val watched = video.resumePositionMs ?: 0L
     val remaining = (video.durationMs - watched).coerceAtLeast(0L)
     val animatedBlur by animateDpAsState(
-        targetValue = if (isSelectionMode && !isSelected) 2.dp else 0.dp,
+        targetValue = 0.dp,
         animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
         label = "selectionBlur"
     )
     val animatedAlpha by animateFloatAsState(
-        targetValue = if (isSelectionMode && !isSelected) 0.35f else 1f,
+        targetValue = if (isSelectionMode && !isSelected) 0.65f else 1f,
         animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
         label = "selectionAlpha"
     )
@@ -1149,24 +1114,7 @@ fun ContinueWatchingRowCard(
             ) {
                 Thumbnail(video, Modifier.fillMaxSize())
 
-                if (isSelected) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(6.dp)
-                            .size(22.dp)
-                            .clip(CircleShape)
-                            .background(ExcavPalette.Gray),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = "Selected",
-                            tint = ExcavPalette.Ink,
-                            modifier = Modifier.size(14.dp)
-                        )
-                    }
-                } else if (remaining > 0) {
+                if (remaining > 0) {
                     Text(
                         text = "${formatDuration(remaining)} left",
                         color = ExcavPalette.Text,
@@ -1238,7 +1186,7 @@ fun ContinueWatchingRowCard(
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp)
                     )
                 }
-                if (onMoreClick != null || dropdownMenu != null) {
+                if ((onMoreClick != null || dropdownMenu != null) && !isSelected) {
                     Box {
                         IconButton(
                             onClick = { onMoreClick?.invoke() },
@@ -1278,12 +1226,12 @@ fun FolderCard(
     val cardShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 38.dp, bottomEnd = 38.dp)
     val thumbnailShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 14.dp, bottomEnd = 14.dp)
     val animatedBlur by animateDpAsState(
-        targetValue = if (isSelectionMode && !isSelected) 2.dp else 0.dp,
+        targetValue = 0.dp,
         animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
         label = "selectionBlur"
     )
     val animatedAlpha by animateFloatAsState(
-        targetValue = if (isSelectionMode && !isSelected) 0.35f else 1f,
+        targetValue = if (isSelectionMode && !isSelected) 0.65f else 1f,
         animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
         label = "selectionAlpha"
     )
@@ -1340,24 +1288,6 @@ fun FolderCard(
                     )
                 }
 
-                if (isSelected) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(8.dp)
-                            .size(22.dp)
-                            .clip(CircleShape)
-                            .background(ExcavPalette.Gray),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = "Selected",
-                            tint = ExcavPalette.Ink,
-                            modifier = Modifier.size(14.dp)
-                        )
-                    }
-                }
 
                 // Translucent Pill placed on top of the lower line of the thumbnail, left side (bisected at middle)
                 val pillShape = CircleShape
@@ -1383,7 +1313,7 @@ fun FolderCard(
                     )
                 }
 
-                if (onMoreClick != null || dropdownMenu != null) {
+                if ((onMoreClick != null || dropdownMenu != null) && !isSelected) {
                     Box(
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
@@ -1611,12 +1541,12 @@ fun PlaylistGridCard(
     val cardShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 38.dp, bottomEnd = 38.dp)
     val thumbnailShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 14.dp, bottomEnd = 14.dp)
     val animatedBlur by animateDpAsState(
-        targetValue = if (isSelectionMode && !isSelected) 2.dp else 0.dp,
+        targetValue = 0.dp,
         animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
         label = "selectionBlur"
     )
     val animatedAlpha by animateFloatAsState(
-        targetValue = if (isSelectionMode && !isSelected) 0.35f else 1f,
+        targetValue = if (isSelectionMode && !isSelected) 0.65f else 1f,
         animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
         label = "selectionAlpha"
     )
@@ -1673,24 +1603,6 @@ fun PlaylistGridCard(
                     )
                 }
 
-                if (isSelected) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(8.dp)
-                            .size(22.dp)
-                            .clip(CircleShape)
-                            .background(ExcavPalette.Gray),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = "Selected",
-                            tint = ExcavPalette.Ink,
-                            modifier = Modifier.size(14.dp)
-                        )
-                    }
-                }
 
                 // Translucent Pill placed on top of the lower line of the thumbnail, left side (bisected at middle)
                 val pillShape = CircleShape
@@ -1717,29 +1629,31 @@ fun PlaylistGridCard(
                 }
 
                 // Three-dot Overflow Button on Bottom-Right (Overlapping Edge, CircleShape, Translucent Pill Style)
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 12.dp)
-                        .offset(y = 12.dp)
-                ) {
+                if (!isSelected) {
                     Box(
                         modifier = Modifier
-                            .size(24.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xCC1A202C))
-                            .border(0.75.dp, Color.White.copy(alpha = 0.22f), CircleShape)
-                            .clickable(onClick = onOverflow),
-                        contentAlignment = Alignment.Center
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 12.dp)
+                            .offset(y = 12.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.MoreVert,
-                            contentDescription = stringResource(R.string.cd_more),
-                            tint = Color(0xFFF5F7FA),
-                            modifier = Modifier.size(14.dp)
-                        )
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xCC1A202C))
+                                .border(0.75.dp, Color.White.copy(alpha = 0.22f), CircleShape)
+                                .clickable(onClick = onOverflow),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = stringResource(R.string.cd_more),
+                                tint = Color(0xFFF5F7FA),
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                        dropdownMenu?.invoke()
                     }
-                    dropdownMenu?.invoke()
                 }
             }
 
@@ -1795,12 +1709,12 @@ fun ListVideoRow(
     val formatStr = video.fileFormat
     val resumePos = video.resumePositionMs ?: 0L
     val animatedBlur by animateDpAsState(
-        targetValue = if (isSelectionMode && !isSelected) 2.dp else 0.dp,
+        targetValue = 0.dp,
         animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
         label = "selectionBlur"
     )
     val animatedAlpha by animateFloatAsState(
-        targetValue = if (isSelectionMode && !isSelected) 0.35f else 1f,
+        targetValue = if (isSelectionMode && !isSelected) 0.65f else 1f,
         animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
         label = "selectionAlpha"
     )
@@ -1834,24 +1748,7 @@ fun ListVideoRow(
                     .clip(RoundedCornerShape(10.dp))
             ) {
                 Thumbnail(video, Modifier.fillMaxSize())
-                if (isSelected) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(4.dp)
-                            .size(20.dp)
-                            .clip(CircleShape)
-                            .background(ExcavPalette.Gray),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = "Selected",
-                            tint = ExcavPalette.Ink,
-                            modifier = Modifier.size(13.dp)
-                        )
-                    }
-                } else if (video.durationMs > 0) {
+                if (video.durationMs > 0) {
                     Text(
                         text = video.formattedDuration,
                         color = ExcavPalette.Text,
@@ -1935,7 +1832,7 @@ fun ListVideoRow(
                 }
             }
 
-            if (onMoreClick != null || dropdownMenu != null) {
+            if ((onMoreClick != null || dropdownMenu != null) && !isSelected) {
                 Box {
                     IconButton(onClick = { onMoreClick?.invoke() }) {
                         Icon(

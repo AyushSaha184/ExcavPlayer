@@ -3,6 +3,7 @@ package com.excavplayer
 import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import com.excavplayer.background.MediaSyncWorker
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 
@@ -16,4 +17,9 @@ class ExcavPlayerApp : Application(), Configuration.Provider {
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
             .build()
+
+    override fun onCreate() {
+        super.onCreate()
+        MediaSyncWorker.schedulePeriodicSync(this)
+    }
 }

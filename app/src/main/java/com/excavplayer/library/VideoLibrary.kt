@@ -40,9 +40,9 @@ class VideoLibrary @Inject constructor(
 
     fun searchVideos(query: String): Flow<List<Video>> = videoRepository.searchVideos(query)
 
-    suspend fun refresh(): ExcavResult<Int> {
-        logger.i(TAG, "Refreshing video library via MediaStore sync")
-        return videoRepository.syncWithMediaStore()
+    suspend fun refresh(force: Boolean = false): ExcavResult<Int> {
+        logger.i(TAG, "Refreshing video library via MediaStore sync (force=$force)")
+        return videoRepository.syncWithMediaStore(force)
     }
 
     suspend fun renameVideo(videoId: String, newName: String): ExcavResult<Unit> {

@@ -32,6 +32,8 @@ import com.excavplayer.domain.model.RepeatMode
 import com.excavplayer.domain.model.Video
 import com.excavplayer.domain.repository.PlaybackRepository
 import com.excavplayer.domain.repository.SettingsRepository
+import com.excavplayer.media.thumbnail.SeekPreviewLoader
+import androidx.media3.exoplayer.DefaultLoadControl
 import com.excavplayer.player.chapters.ChapterExtractor
 import com.excavplayer.player.chapters.RawChapter
 import com.excavplayer.player.playback.PlaybackPersistenceManager
@@ -62,6 +64,7 @@ class PlayerManager @Inject constructor(
     private val persistenceManager: PlaybackPersistenceManager,
     val queue: PlaybackQueue,
     private val chapterExtractor: ChapterExtractor,
+    private val seekPreviewLoader: SeekPreviewLoader,
     private val dispatchers: DispatcherProvider,
     private val logger: AppLogger
 ) : PlayerController {
@@ -186,9 +189,20 @@ class PlayerManager @Inject constructor(
             .setConstantBitrateSeekingEnabled(true)
         val mediaSourceFactory = DefaultMediaSourceFactory(context, extractorsFactory)
 
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                /* minBufferMs = */ 1_500,
+                /* maxBufferMs = */ 8_000,
+                /* bufferForPlaybackMs = */ 250,
+                /* bufferForPlaybackAfterRebufferMs = */ 750
+            )
+            .setPrioritizeTimeOverSizeThresholds(true)
+            .build()
+
         ExoPlayer.Builder(context, renderersFactory)
             .setMediaSourceFactory(mediaSourceFactory)
             .setTrackSelector(trackSelector)
+            .setLoadControl(loadControl)
             .setAudioAttributes(audioAttributes, /* handleAudioFocus = */ true)
             .setHandleAudioBecomingNoisy(false) // We manage audio becoming noisy with explicit receiver
             .build().apply {
@@ -300,6 +314,7 @@ class PlayerManager @Inject constructor(
 
     override suspend fun play(video: Video, startPositionMs: Long?) = withContext(dispatchers.main) {
         logger.i(TAG, "play() called for video: ${video.id}")
+        seekPreviewLoader.releaseRetriever()
         val settings = settingsRepository.userSettings.first()
         currentSettings = settings
         userDisabledSubtitlesForSession = false
@@ -689,6 +704,7 @@ class PlayerManager @Inject constructor(
         playerScope.launch {
             persistenceManager.saveImmediate(livePlayback, currentVid)
         }
+        seekPreviewLoader.releaseRetriever()
         try {
             exoPlayer.stop()
             exoPlayer.clearMediaItems()
@@ -704,6 +720,7 @@ class PlayerManager @Inject constructor(
         persistenceManager.stopPeriodicSave()
         releaseLoudnessEnhancer()
         releaseEqualizer()
+        seekPreviewLoader.releaseRetriever()
         val livePlayback = getLivePlaybackState()
         val currentVid = _state.value.currentVideo
         playerScope.launch {

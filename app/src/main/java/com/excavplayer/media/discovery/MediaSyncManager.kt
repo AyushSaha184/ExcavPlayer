@@ -1,5 +1,6 @@
 package com.excavplayer.media.discovery
 
+import android.net.Uri
 import com.excavplayer.core.coroutine.DispatcherProvider
 import com.excavplayer.core.logging.AppLogger
 import com.excavplayer.core.result.ExcavResult
@@ -12,6 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -25,32 +27,44 @@ sealed interface SyncStatus {
 @Singleton
 class MediaSyncManager @Inject constructor(
     private val mediaStoreDataSource: MediaStoreDataSource,
+    private val storageFileScanner: StorageFileScanner,
     private val videoDao: VideoDao,
     private val dispatchers: DispatcherProvider,
     private val logger: AppLogger
 ) {
     companion object {
         private const val TAG = "MediaSyncManager"
+        private const val SYNC_COOLDOWN_MS = 45_000L
     }
+
+    private var lastSyncTimestamp = 0L
 
     private val syncMutex = Mutex()
     private val _syncStatus = MutableStateFlow<SyncStatus>(SyncStatus.Idle)
     val syncStatus: StateFlow<SyncStatus> = _syncStatus.asStateFlow()
 
-    suspend fun syncMediaStore(): ExcavResult<Int> = withContext(dispatchers.io) {
+    suspend fun syncMediaStore(force: Boolean = false): ExcavResult<Int> = withContext(dispatchers.io) {
+        val now = System.currentTimeMillis()
+        if (!force && (now - lastSyncTimestamp < SYNC_COOLDOWN_MS)) {
+            logger.d(TAG, "Sync skipped: cooldown active (${now - lastSyncTimestamp}ms < ${SYNC_COOLDOWN_MS}ms)")
+            return@withContext ExcavResult.Success(0)
+        }
+
         if (!syncMutex.tryLock()) {
             logger.d(TAG, "Sync already in progress, skipping concurrent request")
             return@withContext ExcavResult.Success(0)
         }
 
         try {
+            lastSyncTimestamp = now
             _syncStatus.value = SyncStatus.Syncing(0)
-            logger.i(TAG, "Starting MediaStore synchronization")
+            logger.i(TAG, "Starting MediaStore synchronization (force=$force)")
 
             val existingIds = videoDao.getAllVideoIds().toHashSet()
             val discoveredIds = HashSet<String>()
             var totalCount = 0
 
+            // 1. MediaStore query
             mediaStoreDataSource.queryAllVideosPaged(batchSize = 250) { batch ->
                 videoDao.insertVideos(batch)
                 batch.forEach { discoveredIds.add(it.id) }
@@ -58,18 +72,47 @@ class MediaSyncManager @Inject constructor(
                 _syncStatus.value = SyncStatus.Syncing(totalCount)
             }
 
-            // Detect deleted / missing videos from MediaStore
+            // Detect deleted / missing videos from MediaStore (exclude filesystem & SAF videos)
             val removedIds = existingIds.filter { id ->
-                id.startsWith("ms_") && !discoveredIds.contains(id)
+                !id.startsWith("fs_") && !id.startsWith("saf_") && !discoveredIds.contains(id)
             }
 
             if (removedIds.isNotEmpty()) {
-                logger.i(TAG, "Deleting ${removedIds.size} missing videos from database")
+                logger.i(TAG, "Deleting ${removedIds.size} missing MediaStore videos from database")
                 videoDao.deleteVideos(removedIds)
             }
 
-            _syncStatus.value = SyncStatus.Success(totalScanned = totalCount, updatedCount = discoveredIds.size)
-            logger.i(TAG, "Sync complete: $totalCount items discovered, ${removedIds.size} removed from database")
+            // 2. Recursive storage file scan for unindexed, hidden, or deep video files (on manual refresh or initial empty DB)
+            val unindexedCount: Int
+            if (force || existingIds.isEmpty()) {
+                val existingKeys = videoDao.getAllVideoKeys().toHashSet()
+                val unindexedVideos = storageFileScanner.scanForUnindexedVideos(existingKeys)
+                unindexedCount = unindexedVideos.size
+                if (unindexedVideos.isNotEmpty()) {
+                    videoDao.insertVideos(unindexedVideos)
+                    totalCount += unindexedVideos.size
+                    _syncStatus.value = SyncStatus.Syncing(totalCount)
+                }
+            } else {
+                unindexedCount = 0
+            }
+
+            // 3. Clean up deleted filesystem videos
+            if (force || existingIds.isEmpty()) {
+                val existingFsVideos = videoDao.getAllFsVideos()
+                val staleFsIds = existingFsVideos.filter {
+                    val path = Uri.parse(it.uri).path
+                    path == null || !File(path).exists()
+                }.map { it.id }
+
+                if (staleFsIds.isNotEmpty()) {
+                    logger.i(TAG, "Deleting ${staleFsIds.size} stale filesystem videos from database")
+                    videoDao.deleteVideos(staleFsIds)
+                }
+            }
+
+            _syncStatus.value = SyncStatus.Success(totalScanned = totalCount, updatedCount = discoveredIds.size + unindexedCount)
+            logger.i(TAG, "Sync complete: $totalCount items discovered ($unindexedCount via filesystem scan)")
             ExcavResult.Success(totalCount)
         } catch (e: Exception) {
             logger.e(TAG, "Error synchronizing media library", e)

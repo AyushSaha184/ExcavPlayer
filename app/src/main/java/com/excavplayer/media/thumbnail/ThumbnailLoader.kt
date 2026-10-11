@@ -17,6 +17,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
@@ -36,7 +37,11 @@ class ThumbnailLoader @Inject constructor(
         private const val TAG = "ThumbnailLoader"
         private const val DISK_CACHE_DIR = "thumbnails_v1"
         private const val COMPRESSION_QUALITY = 85
+        private const val MAX_DISK_CACHE_SIZE_BYTES = 64L * 1024 * 1024 // 64 MB disk limit
     }
+
+    private val diskCacheScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + dispatchers.io)
+    private var lastTrimTimeMs = 0L
 
     // Dynamic memory cache: 1/8th of available heap memory, clamped between 16MB and 64MB
     private val maxCacheSizeBytes = run {
@@ -136,10 +141,12 @@ class ThumbnailLoader @Inject constructor(
             }
 
             if (bitmap != null) {
-                // Cache into L1 Memory
+                // Cache into L1 Memory immediately
                 memoryCache.put(cacheKey, bitmap)
-                // Cache into L2 Disk asynchronously
-                saveToDiskCache(cacheKey, bitmap)
+                // Cache into L2 Disk asynchronously without blocking UI return
+                diskCacheScope.launch {
+                    saveToDiskCache(cacheKey, bitmap)
+                }
             }
             bitmap
         } catch (e: Exception) {
@@ -194,9 +201,28 @@ class ThumbnailLoader @Inject constructor(
                 }
                 out.flush()
             }
+            trimDiskCacheIfNeeded()
         } catch (e: Exception) {
             logger.w(TAG, "Failed to save thumbnail to disk cache: ${e.message}")
         }
+    }
+
+    private fun trimDiskCacheIfNeeded() {
+        val now = System.currentTimeMillis()
+        if (now - lastTrimTimeMs < 60_000L) return
+        lastTrimTimeMs = now
+        try {
+            val files = diskCacheDir.listFiles() ?: return
+            var totalSize = files.sumOf { it.length() }
+            if (totalSize > MAX_DISK_CACHE_SIZE_BYTES) {
+                val sorted = files.sortedBy { it.lastModified() }
+                for (file in sorted) {
+                    totalSize -= file.length()
+                    file.delete()
+                    if (totalSize <= (MAX_DISK_CACHE_SIZE_BYTES * 3) / 4) break
+                }
+            }
+        } catch (_: Exception) {}
     }
 
     fun evictThumbnail(uriString: String) {

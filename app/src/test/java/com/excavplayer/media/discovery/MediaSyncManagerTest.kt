@@ -23,12 +23,14 @@ class MediaSyncManagerTest {
 
     private val mediaStoreDataSource = mockk<MediaStoreDataSource>()
     private val videoDao = mockk<VideoDao>(relaxed = true)
+    private val storageFileScanner = mockk<StorageFileScanner>(relaxed = true)
     private lateinit var syncManager: MediaSyncManager
 
     @Before
     fun setup() {
         syncManager = MediaSyncManager(
             mediaStoreDataSource = mediaStoreDataSource,
+            storageFileScanner = storageFileScanner,
             videoDao = videoDao,
             dispatchers = DefaultDispatcherProvider(),
             logger = AndroidAppLogger()

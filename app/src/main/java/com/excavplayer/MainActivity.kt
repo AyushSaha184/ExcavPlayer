@@ -89,15 +89,38 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+
     private val requestPermissionsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         val granted = permissions.entries.all { it.value }
         if (granted) {
             logger.i("MainActivity", "Permissions granted, triggering media sync")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !android.os.Environment.isExternalStorageManager()) {
+                try {
+                    val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                        data = Uri.parse("package:$packageName")
+                    }
+                    manageAllFilesLauncher.launch(intent)
+                } catch (_: Exception) {
+                    try {
+                        val intent = Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                        manageAllFilesLauncher.launch(intent)
+                    } catch (_: Exception) {}
+                }
+            }
             lifecycleScope.launch { videoLibrary.refresh() }
         } else {
             logger.w("MainActivity", "Some permissions were denied: $permissions")
+        }
+    }
+
+    private val manageAllFilesLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && android.os.Environment.isExternalStorageManager()) {
+            logger.i("MainActivity", "All files access granted, triggering media sync")
+            lifecycleScope.launch { videoLibrary.refresh() }
         }
     }
 
@@ -133,6 +156,7 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             logger.w("MainActivity", "Failed to register screenOffReceiver: ${e.message}")
         }
+
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -246,6 +270,19 @@ class MainActivity : ComponentActivity() {
         if (missing.isNotEmpty()) {
             requestPermissionsLauncher.launch(missing.toTypedArray())
         } else {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !android.os.Environment.isExternalStorageManager()) {
+                try {
+                    val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                        data = Uri.parse("package:$packageName")
+                    }
+                    manageAllFilesLauncher.launch(intent)
+                } catch (_: Exception) {
+                    try {
+                        val intent = Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                        manageAllFilesLauncher.launch(intent)
+                    } catch (_: Exception) {}
+                }
+            }
             lifecycleScope.launch { videoLibrary.refresh() }
         }
     }

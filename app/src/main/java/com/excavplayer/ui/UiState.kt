@@ -17,11 +17,13 @@ import com.excavplayer.player.core.PlayerManager
 import com.excavplayer.player.queue.PlaybackQueue
 import com.excavplayer.settings.SettingsManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
@@ -325,9 +327,12 @@ class ExcavViewModel @Inject constructor(
     val pagedVideos: kotlinx.coroutines.flow.Flow<PagingData<Video>> = library.observePagedVideos()
         .cachedIn(viewModelScope)
 
-    private val searchResults = query.flatMapLatest { value ->
-        if (value.isBlank()) flowOf(emptyList()) else library.searchVideos(value)
-    }
+    @OptIn(FlowPreview::class)
+    private val searchResults = query
+        .debounce(280L)
+        .flatMapLatest { value ->
+            if (value.isBlank()) flowOf(emptyList()) else library.searchVideos(value)
+        }
 
     private val folderVideos = selectedFolder.flatMapLatest { folder ->
         folder?.let { library.observeVideosInFolder(it.path) } ?: flowOf(emptyList())
@@ -434,7 +439,7 @@ class ExcavViewModel @Inject constructor(
     fun refreshLibrary() {
         viewModelScope.launch {
             logger.i(TAG, "User requested media library refresh")
-            when (val result = library.refresh()) {
+            when (val result = library.refresh(force = true)) {
                 is ExcavResult.Success -> {
                     // Refreshed silently without toast banner
                 }

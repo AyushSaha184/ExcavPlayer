@@ -94,10 +94,8 @@ fun PlaylistsScreen(
     var propertiesVideo by remember { mutableStateOf<Video?>(null) }
     var propertiesMultiVideos by remember { mutableStateOf<List<Video>?>(null) }
     var renameVideoTarget by remember { mutableStateOf<Video?>(null) }
-    var deleteVideoTarget by remember { mutableStateOf<Video?>(null) }
     var deletePlaylistTarget by remember { mutableStateOf<Playlist?>(null) }
     var batchDeleteTargetPlaylists by remember { mutableStateOf<List<Playlist>?>(null) }
-    var batchDeleteTargetVideos by remember { mutableStateOf<List<Video>?>(null) }
     var playlistVideoTarget by remember { mutableStateOf<Video?>(null) }
 
     // Clear selection when navigating into/out of playlist
@@ -231,7 +229,7 @@ fun PlaylistsScreen(
                                             text = { Text("Delete", color = ExcavPalette.Error) },
                                             leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = ExcavPalette.Error) },
                                             onClick = {
-                                                deleteVideoTarget = video
+                                                onDeleteVideo(video)
                                                 selectedVideoForMenu = null
                                             }
                                         )
@@ -328,7 +326,8 @@ fun PlaylistsScreen(
                                         }
                                     },
                                     onDelete = {
-                                        batchDeleteTargetVideos = selVideos
+                                        onDeleteVideos(selVideos)
+                                        selectedVideoIds = emptySet()
                                     }
                                 )
                             }
@@ -568,26 +567,7 @@ fun PlaylistsScreen(
         )
     }
 
-    deleteVideoTarget?.let { video ->
-        DeleteConfirmDialog(
-            video = video,
-            onDelete = { onDeleteVideo(video) },
-            onDismiss = { deleteVideoTarget = null }
-        )
-    }
 
-    batchDeleteTargetVideos?.let { vids ->
-        BatchDeleteConfirmationDialog(
-            itemCount = vids.size,
-            itemType = if (vids.size == 1) "video" else "videos",
-            onConfirm = {
-                onDeleteVideos(vids)
-                selectedVideoIds = emptySet()
-                batchDeleteTargetVideos = null
-            },
-            onDismiss = { batchDeleteTargetVideos = null }
-        )
-    }
 
     deletePlaylistTarget?.let { playlist ->
         androidx.compose.ui.window.Dialog(

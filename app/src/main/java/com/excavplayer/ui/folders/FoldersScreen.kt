@@ -45,10 +45,8 @@ import com.excavplayer.domain.model.Folder
 import com.excavplayer.domain.model.Playlist
 import com.excavplayer.domain.model.Video
 import com.excavplayer.ui.components.AddToPlaylistDialog
-import com.excavplayer.ui.components.BatchDeleteConfirmationDialog
 import com.excavplayer.ui.components.BatchFolderOptionsMenu
 import com.excavplayer.ui.components.BatchVideoOptionsMenu
-import com.excavplayer.ui.components.DeleteConfirmDialog
 import com.excavplayer.ui.components.EmptyState
 import com.excavplayer.ui.components.FolderCard
 import com.excavplayer.ui.components.FolderPropertiesDialog
@@ -123,10 +121,6 @@ fun FoldersScreen(
     var propertiesFolder by remember { mutableStateOf<Folder?>(null) }
     var renameVideoTarget by remember { mutableStateOf<Video?>(null) }
     var renameFolderTarget by remember { mutableStateOf<Folder?>(null) }
-    var deleteVideoTarget by remember { mutableStateOf<Video?>(null) }
-    var deleteFolderTarget by remember { mutableStateOf<Folder?>(null) }
-    var batchDeleteTargetVideos by remember { mutableStateOf<List<Video>?>(null) }
-    var batchDeleteTargetFolders by remember { mutableStateOf<List<Folder>?>(null) }
     var playlistVideoTarget by remember { mutableStateOf<Video?>(null) }
 
     val isScrolled by remember {
@@ -271,7 +265,7 @@ fun FoldersScreen(
                                                 onAddToPlaylist = { playlistVideoTarget = video },
                                                 onRename = { renameVideoTarget = video },
                                                 onProperties = { propertiesVideo = video },
-                                                onDelete = { deleteVideoTarget = video }
+                                                onDelete = { onDeleteVideo(video) }
                                             )
                                         }
                                     }
@@ -379,7 +373,7 @@ fun FoldersScreen(
                                             onAddToPlaylist = { playlistVideoTarget = video },
                                             onRename = { renameVideoTarget = video },
                                             onProperties = { propertiesVideo = video },
-                                            onDelete = { deleteVideoTarget = video }
+                                            onDelete = { onDeleteVideo(video) }
                                         )
                                     }
                                 }
@@ -432,7 +426,13 @@ fun FoldersScreen(
                                 }
                             },
                             onDelete = {
-                                batchDeleteTargetFolders = selFolders
+                                val allVidsInFolders = stateManager.resolveDescendantVideos(selFolders.map { it.path })
+                                if (allVidsInFolders.isNotEmpty()) {
+                                    onDeleteVideos(allVidsInFolders)
+                                } else {
+                                    onDeleteFolders(selFolders)
+                                }
+                                stateManager.clearSelection()
                             }
                         )
                     } else {
@@ -478,7 +478,8 @@ fun FoldersScreen(
                                 }
                             },
                             onDelete = {
-                                batchDeleteTargetVideos = selVideos
+                                onDeleteVideos(selVideos)
+                                stateManager.clearSelection()
                             }
                         )
                     }
@@ -532,58 +533,7 @@ fun FoldersScreen(
         )
     }
 
-    deleteVideoTarget?.let { video ->
-        DeleteConfirmDialog(
-            video = video,
-            onDelete = { onDeleteVideo(video) },
-            onDismiss = { deleteVideoTarget = null }
-        )
-    }
 
-    deleteFolderTarget?.let { folder ->
-        BatchDeleteConfirmationDialog(
-            itemCount = 1,
-            itemType = "folder",
-            onConfirm = {
-                val descendantVideos = stateManager.resolveDescendantVideos(listOf(folder.path))
-                if (descendantVideos.isNotEmpty()) {
-                    onDeleteVideos(descendantVideos)
-                } else {
-                    onDeleteFolders(listOf(folder))
-                }
-            },
-            onDismiss = { deleteFolderTarget = null }
-        )
-    }
-
-    batchDeleteTargetVideos?.let { vids ->
-        BatchDeleteConfirmationDialog(
-            itemCount = vids.size,
-            itemType = if (vids.size == 1) "video" else "videos",
-            onConfirm = {
-                onDeleteVideos(vids)
-                stateManager.clearSelection()
-            },
-            onDismiss = { batchDeleteTargetVideos = null }
-        )
-    }
-
-    batchDeleteTargetFolders?.let { flds ->
-        BatchDeleteConfirmationDialog(
-            itemCount = flds.size,
-            itemType = if (flds.size == 1) "folder" else "folders",
-            onConfirm = {
-                val allVidsInFolders = stateManager.resolveDescendantVideos(flds.map { it.path })
-                if (allVidsInFolders.isNotEmpty()) {
-                    onDeleteVideos(allVidsInFolders)
-                } else {
-                    onDeleteFolders(flds)
-                }
-                stateManager.clearSelection()
-            },
-            onDismiss = { batchDeleteTargetFolders = null }
-        )
-    }
 
     playlistVideoTarget?.let { video ->
         AddToPlaylistDialog(

@@ -31,6 +31,7 @@ object ExcavPalette {
     val BlueDeep = Color(0xFF64748B)
     val BlueGlow = Color(0x33CBD5E1)
     val CyanGlow = Color(0xFFCBD5E1)
+    val Primary = Color(0xFF38BDF8)
     val Silver = Color(0xFFE2E8F0)
 
     // Auxiliary Accent Colors

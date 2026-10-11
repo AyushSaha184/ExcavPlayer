@@ -41,7 +41,6 @@ fun SearchScreen(
 ) {
     var selectedVideoForMenu by remember { mutableStateOf<Video?>(null) }
     var renameVideoTarget by remember { mutableStateOf<Video?>(null) }
-    var deleteVideoTarget by remember { mutableStateOf<Video?>(null) }
     var playlistVideoTarget by remember { mutableStateOf<Video?>(null) }
     var propertiesVideo by remember { mutableStateOf<Video?>(null) }
 
@@ -102,7 +101,7 @@ fun SearchScreen(
                                     onAddToPlaylist = { playlistVideoTarget = video },
                                     onRename = { renameVideoTarget = video },
                                     onProperties = { propertiesVideo = video },
-                                    onDelete = { deleteVideoTarget = video }
+                                    onDelete = { onDeleteVideo(video) }
                                 )
                             }
                         },
@@ -187,13 +186,7 @@ fun SearchScreen(
         )
     }
 
-    deleteVideoTarget?.let { video ->
-        DeleteConfirmDialog(
-            video = video,
-            onDelete = { onDeleteVideo(video) },
-            onDismiss = { deleteVideoTarget = null }
-        )
-    }
+
 
     playlistVideoTarget?.let { video ->
         AddToPlaylistDialog(

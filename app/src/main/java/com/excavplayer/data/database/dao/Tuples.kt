@@ -30,3 +30,8 @@ data class PlaylistWithCountTuple(
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
     @ColumnInfo(name = "item_count") val itemCount: Int
 )
+
+data class IdUriTuple(
+    @ColumnInfo(name = "id") val id: String,
+    @ColumnInfo(name = "uri") val uri: String
+)

@@ -171,7 +171,7 @@ class VideoRepositoryImpl @Inject constructor(
         videoDao.updateAvailability(videoId, availability.name)
     }
 
-    override suspend fun syncWithMediaStore(): ExcavResult<Int> {
-        return mediaSyncManager.syncMediaStore()
+    override suspend fun syncWithMediaStore(force: Boolean): ExcavResult<Int> {
+        return mediaSyncManager.syncMediaStore(force)
     }
 }

@@ -164,14 +164,18 @@ class SeekPreviewLoader @Inject constructor(
             } catch (e: Throwable) {
                 logger.w(TAG, "Failed to extract seek preview at $clampedTarget ms for video $videoId: ${e.message}")
                 failedKeys.add(key)
-                try {
-                    activeRetriever?.release()
-                } catch (_: Throwable) {}
-                activeRetriever = null
-                activeUriString = null
+                releaseRetriever()
                 null
             }
         }
+    }
+
+    fun releaseRetriever() {
+        try {
+            activeRetriever?.release()
+        } catch (_: Throwable) {}
+        activeRetriever = null
+        activeUriString = null
     }
 
     suspend fun prefetchAdjacent(
@@ -198,11 +202,7 @@ class SeekPreviewLoader @Inject constructor(
         if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
             memoryCache.evictAll()
             failedKeys.clear()
-            try {
-                activeRetriever?.release()
-            } catch (_: Throwable) {}
-            activeRetriever = null
-            activeUriString = null
+            releaseRetriever()
         }
     }
 
@@ -213,10 +213,6 @@ class SeekPreviewLoader @Inject constructor(
     override fun onLowMemory() {
         memoryCache.evictAll()
         failedKeys.clear()
-        try {
-            activeRetriever?.release()
-        } catch (_: Throwable) {}
-        activeRetriever = null
-        activeUriString = null
+        releaseRetriever()
     }
 }

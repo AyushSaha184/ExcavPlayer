@@ -34,7 +34,7 @@ import com.excavplayer.data.database.entity.VideoEntity
         FolderEntity::class,
         DismissedContinueWatchingEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 abstract class ExcavDatabase : RoomDatabase() {
@@ -61,13 +61,19 @@ abstract class ExcavDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_videos_availability_date_added` ON `videos` (`availability`, `date_added`)")
+            }
+        }
+
         fun buildDatabase(context: Context): ExcavDatabase {
             return Room.databaseBuilder(
                 context.applicationContext,
                 ExcavDatabase::class.java,
                 DATABASE_NAME
             )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .fallbackToDestructiveMigration()
                 .build()
         }

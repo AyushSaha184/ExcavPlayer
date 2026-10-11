@@ -199,7 +199,7 @@ fun FavoritesScreen(
                                 onAddToPlaylist = { playlistVideoTarget = video },
                                 onRename = { renameVideoTarget = video },
                                 onProperties = { propertiesVideo = video },
-                                onDelete = { deleteVideoTarget = video }
+                                onDelete = { onDeleteVideo(video) }
                             )
                         }
                     }
@@ -237,7 +237,8 @@ fun FavoritesScreen(
                                 }
                             },
                             onDelete = {
-                                batchDeleteTargetFolders = selFolders
+                                onDeleteFolders(selFolders)
+                                selectedFolderPaths = emptySet()
                             }
                         )
                     } else {
@@ -284,7 +285,8 @@ fun FavoritesScreen(
                                 }
                             },
                             onDelete = {
-                                batchDeleteTargetVideos = selVideos
+                                onDeleteVideos(selVideos)
+                                selectedVideoIds = emptySet()
                             }
                         )
                     }
@@ -338,48 +340,7 @@ fun FavoritesScreen(
         )
     }
 
-    deleteVideoTarget?.let { video ->
-        DeleteConfirmDialog(
-            video = video,
-            onDelete = { onDeleteVideo(video) },
-            onDismiss = { deleteVideoTarget = null }
-        )
-    }
 
-    deleteFolderTarget?.let { folder ->
-        BatchDeleteConfirmationDialog(
-            itemCount = 1,
-            itemType = "folder",
-            onConfirm = {
-                onDeleteFolders(listOf(folder))
-            },
-            onDismiss = { deleteFolderTarget = null }
-        )
-    }
-
-    batchDeleteTargetVideos?.let { vids ->
-        BatchDeleteConfirmationDialog(
-            itemCount = vids.size,
-            itemType = if (vids.size == 1) "video" else "videos",
-            onConfirm = {
-                onDeleteVideos(vids)
-                selectedVideoIds = emptySet()
-            },
-            onDismiss = { batchDeleteTargetVideos = null }
-        )
-    }
-
-    batchDeleteTargetFolders?.let { flds ->
-        BatchDeleteConfirmationDialog(
-            itemCount = flds.size,
-            itemType = if (flds.size == 1) "folder" else "folders",
-            onConfirm = {
-                onDeleteFolders(flds)
-                selectedFolderPaths = emptySet()
-            },
-            onDismiss = { batchDeleteTargetFolders = null }
-        )
-    }
 
     playlistVideoTarget?.let { video ->
         AddToPlaylistDialog(
@@ -433,12 +394,12 @@ fun CompactFavoriteCard(
     }
 
     val animatedBlur by animateDpAsState(
-        targetValue = if (isSelectionMode && !isSelected) 2.dp else 0.dp,
+        targetValue = if (isSelectionMode && !isSelected) 0.dp else 0.dp,
         animationSpec = androidx.compose.animation.core.tween(durationMillis = 200, easing = androidx.compose.animation.core.FastOutSlowInEasing),
         label = "selectionBlur"
     )
     val animatedAlpha by animateFloatAsState(
-        targetValue = if (isSelectionMode && !isSelected) 0.35f else 1f,
+        targetValue = if (isSelectionMode && !isSelected) 0.65f else 1f,
         animationSpec = androidx.compose.animation.core.tween(durationMillis = 200, easing = androidx.compose.animation.core.FastOutSlowInEasing),
         label = "selectionAlpha"
     )
@@ -471,61 +432,42 @@ fun CompactFavoriteCard(
             ) {
                 Thumbnail(video, Modifier.fillMaxSize())
 
-                if (isSelected) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(6.dp)
-                            .size(22.dp)
-                            .clip(CircleShape)
-                            .background(ExcavPalette.Gray),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = "Selected",
-                            tint = ExcavPalette.Ink,
-                            modifier = Modifier.size(14.dp)
-                        )
-                    }
-                } else {
-                    // Resolution Badge (Top Start)
+                // Resolution Badge (Top Start)
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = ExcavPalette.Ink.copy(alpha = 0.85f),
+                    border = BorderStroke(0.5.dp, ExcavPalette.Line),
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(6.dp)
+                ) {
+                    Text(
+                        text = resLabel,
+                        color = ExcavPalette.Text,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp)
+                    )
+                }
+
+                // Duration Badge (Bottom End)
+                if (video.durationMs > 0) {
                     Surface(
                         shape = RoundedCornerShape(4.dp),
                         color = ExcavPalette.Ink.copy(alpha = 0.85f),
                         border = BorderStroke(0.5.dp, ExcavPalette.Line),
                         modifier = Modifier
-                            .align(Alignment.TopStart)
+                            .align(Alignment.BottomEnd)
                             .padding(6.dp)
                     ) {
                         Text(
-                            text = resLabel,
+                            text = video.formattedDuration,
                             color = ExcavPalette.Text,
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold
-                            ),
-                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp)
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
                         )
-                    }
-
-                    // Duration Badge (Bottom End)
-                    if (video.durationMs > 0) {
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = ExcavPalette.Ink.copy(alpha = 0.85f),
-                            border = BorderStroke(0.5.dp, ExcavPalette.Line),
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(6.dp)
-                        ) {
-                            Text(
-                                text = video.formattedDuration,
-                                color = ExcavPalette.Text,
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
-                            )
-                        }
                     }
                 }
 
@@ -605,7 +547,7 @@ fun CompactFavoriteCard(
                     }
                 }
 
-                if (onMoreClick != null || dropdownMenu != null) {
+                if ((onMoreClick != null || dropdownMenu != null) && !isSelected) {
                     Box {
                         IconButton(
                             onClick = { onMoreClick?.invoke() },

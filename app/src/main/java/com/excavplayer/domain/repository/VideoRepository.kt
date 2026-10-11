@@ -19,5 +19,5 @@ interface VideoRepository {
     suspend fun deleteVideo(videoId: String): ExcavResult<Unit>
     suspend fun deleteVideosAfterConfirmation(videoIds: List<String>): ExcavResult<Unit>
     suspend fun updateAvailability(videoId: String, availability: MediaAvailability)
-    suspend fun syncWithMediaStore(): ExcavResult<Int>
+    suspend fun syncWithMediaStore(force: Boolean = false): ExcavResult<Int>
 }

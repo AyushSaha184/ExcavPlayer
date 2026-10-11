@@ -20,6 +20,8 @@ class SubtitleHelperTest {
     private val helper = SubtitleHelper(
         context = mockk(relaxed = true),
         subtitlePreferenceDao = dao,
+        searchService = mockk(relaxed = true),
+        downloader = mockk(relaxed = true),
         dispatchers = DefaultDispatcherProvider(),
         logger = AndroidAppLogger()
     )

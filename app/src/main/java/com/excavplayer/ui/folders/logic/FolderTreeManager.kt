@@ -113,14 +113,14 @@ object FolderTreeManager {
         // Build nodes bottom-up (sorted by path length descending so children resolve before parents)
         val sortedPaths = allPaths.sortedByDescending { it.length }
         val nodesMap = mutableMapOf<String, FolderTreeNode>()
+        val childrenByParent = mutableMapOf<String, MutableMap<String, FolderTreeNode>>()
 
         for (path in sortedPaths) {
             val directVids = (directVideosByFolder[path] ?: emptyList()).sortedWith(NaturalVideoComparator)
             val parentPath = getParentPath(path)
 
-            // Collect direct subfolder nodes already processed
-            val directSubNodes = nodesMap.values.filter { it.parentPath == path }
-                .associateBy { it.path }
+            // Collect direct subfolder nodes already processed in O(1) time
+            val directSubNodes = childrenByParent[path] ?: emptyMap()
 
             val recursiveCount = directVids.size + directSubNodes.values.sumOf { it.recursiveVideoCount }
             val recursiveSize = directVids.sumOf { it.sizeBytes } + directSubNodes.values.sumOf { it.recursiveSizeBytes }
@@ -142,7 +142,7 @@ object FolderTreeManager {
 
             val displayName = formatDirectoryName(path)
 
-            nodesMap[path] = FolderTreeNode(
+            val node = FolderTreeNode(
                 path = path,
                 name = displayName,
                 parentPath = parentPath,
@@ -152,6 +152,10 @@ object FolderTreeManager {
                 recursiveSizeBytes = recursiveSize,
                 previewVideos = previews
             )
+            nodesMap[path] = node
+            if (parentPath != null) {
+                childrenByParent.getOrPut(parentPath) { mutableMapOf() }[path] = node
+            }
         }
 
         // Determine top root nodes (storage volumes)

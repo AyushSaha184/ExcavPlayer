@@ -147,6 +147,12 @@ interface VideoDao {
     @Query("SELECT uri FROM videos")
     suspend fun getAllVideoUris(): List<String>
 
+    @Query("SELECT LOWER(display_name) || ':' || size_bytes FROM videos")
+    suspend fun getAllVideoKeys(): List<String>
+
+    @Query("SELECT id, uri FROM videos WHERE id LIKE 'fs_%'")
+    suspend fun getAllFsVideos(): List<IdUriTuple>
+
     @Query("UPDATE videos SET availability = :availability WHERE id = :videoId")
     suspend fun updateAvailability(videoId: String, availability: String)
 

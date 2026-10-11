@@ -11,7 +11,8 @@ import androidx.room.PrimaryKey
         Index(value = ["uri"], unique = true),
         Index(value = ["folder_path"]),
         Index(value = ["date_added"]),
-        Index(value = ["display_name"])
+        Index(value = ["display_name"]),
+        Index(value = ["availability", "date_added"])
     ]
 )
 data class VideoEntity(
