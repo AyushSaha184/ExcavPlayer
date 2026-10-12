@@ -40,6 +40,7 @@ import com.excavplayer.player.playback.PlaybackPersistenceManager
 import com.excavplayer.player.queue.PlaybackQueue
 import com.excavplayer.player.tracks.TrackManager
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -52,8 +53,11 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.excavplayer.data.database.dao.EqualizerPreferenceDao
 import com.excavplayer.data.database.dao.SubtitlePreferenceDao
+import com.excavplayer.data.database.entity.EqualizerPreferenceEntity
 import com.excavplayer.data.database.entity.SubtitlePreferenceEntity
+import com.excavplayer.domain.model.EqualizerState
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -66,6 +70,7 @@ class PlayerManager @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val persistenceManager: PlaybackPersistenceManager,
     private val subtitlePreferenceDao: SubtitlePreferenceDao,
+    private val equalizerPreferenceDao: EqualizerPreferenceDao,
     val queue: PlaybackQueue,
     private val chapterExtractor: ChapterExtractor,
     private val seekPreviewLoader: SeekPreviewLoader,
@@ -148,7 +153,20 @@ class PlayerManager @Inject constructor(
         }
     }
 
-    private val playerScope = CoroutineScope(SupervisorJob() + dispatchers.main)
+    private val coroutineExceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        logger.e(TAG, "Unhandled exception in playerScope: ${throwable.message}", throwable)
+        _state.update {
+            it.copy(
+                error = PlaybackError.SourceError(
+                    message = "Playback error: ${throwable.localizedMessage ?: throwable.message ?: "Unexpected error"}",
+                    cause = throwable,
+                    recoverable = false
+                )
+            )
+        }
+    }
+
+    private val playerScope = CoroutineScope(SupervisorJob() + dispatchers.main + coroutineExceptionHandler)
 
     private val trackSelector = DefaultTrackSelector(context)
     private val trackManager = TrackManager()
@@ -266,7 +284,7 @@ class PlayerManager @Inject constructor(
                 val prevSubsEnabled = currentSettings.subtitlesEnabled
                 currentSettings = settings
                 if (prevDialogue != settings.dialogueBoostEnabled) {
-                    applyDialogueBooster(settings.dialogueBoostEnabled)
+                    applyAudioEffects(_state.value.equalizerState)
                 }
                 if (prevMatchRate != settings.matchDisplayRefreshRate) {
                     applyDisplayRefreshRateOptimization(settings.matchDisplayRefreshRate)
@@ -323,130 +341,169 @@ class PlayerManager @Inject constructor(
     }
 
     override suspend fun play(video: Video, startPositionMs: Long?) = withContext(dispatchers.main) {
-        logger.i(TAG, "play() called for video: ${video.id}")
-        seekPreviewLoader.releaseRetriever()
-        val settings = settingsRepository.userSettings.first()
-        currentSettings = settings
-        userDisabledSubtitlesForSession = false
-        activeExternalSubtitles.clear()
-        pausedByHeadset = false
-        val rawPos = if (!settings.autoResume) {
-            0L
-        } else {
-            val savedState = playbackRepository.getPlaybackState(video.id)
-            startPositionMs ?: savedState?.currentPositionMs ?: 0L
-        }
-
-        val duration = video.durationMs
-        val thresholdMs = when {
-            settings.resumeThresholdPercent >= 0.99f -> 5_000L
-            settings.resumeThresholdPercent >= 0.95f -> 10_000L
-            settings.resumeThresholdPercent >= 0.90f -> 30_000L
-            else -> 60_000L
-        }
-        val isCompleted = duration > 0 && (
-            rawPos < 3_000L ||
-            (duration - rawPos) <= thresholdMs ||
-            (rawPos.toFloat() / duration.toFloat()) >= settings.resumeThresholdPercent
-        )
-        val resumePos = if (isCompleted) 0L else rawPos
-
-        val savedSubPref = runCatching { subtitlePreferenceDao.getPreferences(video.id) }.getOrNull()
-        val initialDelay = savedSubPref?.subtitleDelayMs ?: 0L
-
-        if (savedSubPref?.externalSubtitleUri != null) {
-            val uriStr = savedSubPref.externalSubtitleUri
-            val subUri = Uri.parse(uriStr)
-            var exists = false
-            try {
-                if (subUri.scheme == "file" || subUri.scheme == null) {
-                    val f = File(subUri.path ?: uriStr)
-                    exists = f.exists() && f.length() > 0
-                } else {
-                    context.contentResolver.openInputStream(subUri)?.use { exists = true }
-                }
-            } catch (_: Exception) {
-                exists = false
-            }
-
-            if (exists) {
-                val cleanName = subUri.lastPathSegment?.substringAfterLast('/')?.substringAfterLast(':').orEmpty()
-                val ext = cleanName.substringAfterLast('.', "").lowercase()
-                val mimeType = when (ext) {
-                    "srt" -> androidx.media3.common.MimeTypes.APPLICATION_SUBRIP
-                    "vtt" -> androidx.media3.common.MimeTypes.TEXT_VTT
-                    "ssa", "ass" -> androidx.media3.common.MimeTypes.TEXT_SSA
-                    "ttml", "xml" -> androidx.media3.common.MimeTypes.APPLICATION_TTML
-                    else -> androidx.media3.common.MimeTypes.APPLICATION_SUBRIP
-                }
-                val label = if (cleanName.isNotBlank()) cleanName.substringBeforeLast('.') else "External Subtitle"
-                val subConfig = MediaItem.SubtitleConfiguration.Builder(subUri)
-                    .setMimeType(mimeType)
-                    .setLabel(label)
-                    .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
-                    .build()
-                activeExternalSubtitles.add(subConfig)
+        try {
+            logger.i(TAG, "play() called for video: ${video.id}")
+            seekPreviewLoader.releaseRetriever()
+            val settings = settingsRepository.userSettings.first()
+            currentSettings = settings
+            userDisabledSubtitlesForSession = false
+            activeExternalSubtitles.clear()
+            pausedByHeadset = false
+            val rawPos = if (!settings.autoResume) {
+                0L
             } else {
-                // If deleted from storage, silently update database without throwing any warnings
-                playerScope.launch {
-                    try {
-                        subtitlePreferenceDao.upsertPreferences(
-                            savedSubPref.copy(externalSubtitleUri = null)
-                        )
-                    } catch (_: Exception) {}
-                }
+                val savedState = playbackRepository.getPlaybackState(video.id)
+                startPositionMs ?: savedState?.currentPositionMs ?: 0L
             }
-        }
 
-        val mediaItem = buildMediaItem(video, activeExternalSubtitles.toList())
-        persistenceManager.onSessionStarted()
-
-        _state.update {
-            it.copy(
-                currentVideo = video,
-                error = null,
-                isBackgroundAudio = false,
-                chapters = emptyList(),
-                subtitleDelayMs = initialDelay,
-                playback = it.playback.copy(
-                    videoId = video.id,
-                    playbackSpeed = settings.defaultPlaybackSpeed,
-                    repeatMode = settings.defaultRepeatMode
-                )
+            val duration = video.durationMs
+            val thresholdMs = when {
+                settings.resumeThresholdPercent >= 0.99f -> 5_000L
+                settings.resumeThresholdPercent >= 0.95f -> 10_000L
+                settings.resumeThresholdPercent >= 0.90f -> 30_000L
+                else -> 60_000L
+            }
+            val isCompleted = duration > 0 && (
+                rawPos < 3_000L ||
+                (duration - rawPos) <= thresholdMs ||
+                (rawPos.toFloat() / duration.toFloat()) >= settings.resumeThresholdPercent
             )
-        }
+            val resumePos = if (isCompleted) 0L else rawPos
 
-        exoPlayer.setPlaybackParameters(PlaybackParameters(settings.defaultPlaybackSpeed))
-        exoPlayer.setMediaItem(mediaItem)
-        exoPlayer.prepare()
-        applyTrackSelectionPreferences(settings)
-        if (resumePos > 0) {
-            exoPlayer.seekTo(resumePos)
-        }
-        exoPlayer.play()
+            val savedSubPref = runCatching { subtitlePreferenceDao.getPreferences(video.id) }.getOrNull()
+            val initialDelay = savedSubPref?.subtitleDelayMs ?: 0L
 
-        // Asynchronously extract container-level chapters (MKV EBML, MP4 atoms, sidecars)
-        playerScope.launch(dispatchers.io) {
-            val initialDur = video.durationMs.takeIf { it > 0 } ?: exoPlayer.duration.takeIf { it > 0 }
-            val containerChapters = chapterExtractor.extractFromUri(video.uri, initialDur)
-            if (containerChapters.isNotEmpty() && _state.value.currentVideo?.id == video.id) {
-                _state.update { current ->
-                    if (current.currentVideo?.id == video.id) {
-                        val activeDur = exoPlayer.duration.takeIf { it > 0 } ?: initialDur
-                        val combined = chapterExtractor.sanitizeAndNormalize(
-                            rawChapters = (current.chapters + containerChapters).map {
-                                RawChapter(it.id, it.title, it.startTimeMs, it.endTimeMs)
-                            },
-                            videoDurationMs = activeDur
-                        )
-                        current.copy(chapters = combined)
-                    } else current
+            if (savedSubPref?.externalSubtitleUri != null) {
+                val uriStr = savedSubPref.externalSubtitleUri
+                val subUri = runCatching { Uri.parse(uriStr) }.getOrNull()
+                var exists = false
+                if (subUri != null) {
+                    try {
+                        if (subUri.scheme == "file" || subUri.scheme == null) {
+                            val f = File(subUri.path ?: uriStr)
+                            exists = f.exists() && f.length() > 0
+                        } else {
+                            context.contentResolver.openInputStream(subUri)?.use { exists = true }
+                        }
+                    } catch (_: Exception) {
+                        exists = false
+                    }
+                }
+
+                if (exists && subUri != null) {
+                    val cleanName = subUri.lastPathSegment?.substringAfterLast('/')?.substringAfterLast(':').orEmpty()
+                    val ext = cleanName.substringAfterLast('.', "").lowercase()
+                    val mimeType = when (ext) {
+                        "srt" -> androidx.media3.common.MimeTypes.APPLICATION_SUBRIP
+                        "vtt" -> androidx.media3.common.MimeTypes.TEXT_VTT
+                        "ssa", "ass" -> androidx.media3.common.MimeTypes.TEXT_SSA
+                        "ttml", "xml" -> androidx.media3.common.MimeTypes.APPLICATION_TTML
+                        else -> androidx.media3.common.MimeTypes.APPLICATION_SUBRIP
+                    }
+                    val label = if (cleanName.isNotBlank()) cleanName.substringBeforeLast('.') else "External Subtitle"
+                    val subConfig = MediaItem.SubtitleConfiguration.Builder(subUri)
+                        .setMimeType(mimeType)
+                        .setLabel(label)
+                        .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                        .build()
+                    activeExternalSubtitles.add(subConfig)
+                } else {
+                    // If deleted from storage, silently update database without throwing any warnings
+                    playerScope.launch {
+                        runCatching {
+                            subtitlePreferenceDao.upsertPreferences(
+                                savedSubPref.copy(externalSubtitleUri = null)
+                            )
+                        }
+                    }
                 }
             }
-        }
 
-        becomingNoisyReceiver.register()
-        persistenceManager.startPeriodicSave(playerScope, { getLivePlaybackState() }, { _state.value.currentVideo })
+            val mediaItem = buildMediaItem(video, activeExternalSubtitles.toList())
+            persistenceManager.onSessionStarted()
+
+            val savedEqPref = runCatching { equalizerPreferenceDao.getPreferences(video.id) }.getOrNull()
+            val initialEqState = if (savedEqPref != null) {
+                EqualizerState(
+                    enabled = savedEqPref.enabled,
+                    preset = savedEqPref.preset,
+                    bandLevels = savedEqPref.bandLevels,
+                    bassBoostStrength = savedEqPref.bassBoostStrength
+                )
+            } else {
+                EqualizerState(
+                    enabled = false,
+                    preset = "Custom",
+                    bandLevels = "0,0,0,0,0",
+                    bassBoostStrength = 0
+                )
+            }
+
+            _state.update {
+                it.copy(
+                    currentVideo = video,
+                    error = null,
+                    isBackgroundAudio = false,
+                    chapters = emptyList(),
+                    subtitleDelayMs = initialDelay,
+                    equalizerState = initialEqState,
+                    playback = it.playback.copy(
+                        videoId = video.id,
+                        playbackSpeed = settings.defaultPlaybackSpeed,
+                        repeatMode = settings.defaultRepeatMode
+                    )
+                )
+            }
+
+            exoPlayer.setPlaybackParameters(PlaybackParameters(settings.defaultPlaybackSpeed))
+            exoPlayer.setMediaItem(mediaItem)
+            exoPlayer.prepare()
+            applyTrackSelectionPreferences(settings)
+            applyAudioEffects(initialEqState)
+            if (resumePos > 0) {
+                exoPlayer.seekTo(resumePos)
+            }
+            exoPlayer.play()
+
+            // Asynchronously extract container-level chapters (MKV EBML, MP4 atoms, sidecars)
+            playerScope.launch(dispatchers.io) {
+                try {
+                    val initialDur = video.durationMs.takeIf { it > 0 } ?: exoPlayer.duration.takeIf { it > 0 }
+                    val containerChapters = chapterExtractor.extractFromUri(video.uri, initialDur)
+                    if (containerChapters.isNotEmpty() && _state.value.currentVideo?.id == video.id) {
+                        _state.update { current ->
+                            if (current.currentVideo?.id == video.id) {
+                                val activeDur = exoPlayer.duration.takeIf { it > 0 } ?: initialDur
+                                val combined = chapterExtractor.sanitizeAndNormalize(
+                                    rawChapters = (current.chapters + containerChapters).map {
+                                        RawChapter(it.id, it.title, it.startTimeMs, it.endTimeMs)
+                                    },
+                                    videoDurationMs = activeDur
+                                )
+                                current.copy(chapters = combined)
+                            } else current
+                        }
+                    }
+                } catch (e: Throwable) {
+                    logger.w(TAG, "Failed extracting container chapters: ${e.message}")
+                }
+            }
+
+            becomingNoisyReceiver.register()
+            persistenceManager.startPeriodicSave(playerScope, { getLivePlaybackState() }, { _state.value.currentVideo })
+        } catch (e: Throwable) {
+            logger.e(TAG, "Error starting playback for video: ${video.id} (${video.uri})", e)
+            _state.update {
+                it.copy(
+                    currentVideo = video,
+                    error = PlaybackError.SourceError(
+                        message = "Cannot open video: ${e.localizedMessage ?: e.message ?: "Playback failed"}",
+                        cause = e,
+                        recoverable = false
+                    )
+                )
+            }
+        }
     }
 
     private fun getLivePlaybackState(): PlaybackState {
@@ -468,21 +525,23 @@ class PlayerManager @Inject constructor(
         var uri = if (video.uri.startsWith("/")) {
             Uri.fromFile(java.io.File(video.uri))
         } else {
-            Uri.parse(video.uri)
+            runCatching { Uri.parse(video.uri) }.getOrDefault(Uri.parse(video.uri))
         }
 
         if (uri.scheme == "file" || (uri.scheme == null && uri.path?.startsWith("/") == true)) {
             val path = uri.path ?: video.uri.removePrefix("file://")
             val decodedPath = Uri.decode(path)
             val file = java.io.File(decodedPath)
-            if (file.exists()) {
+            if (file.exists() && file.canRead()) {
+                // Directly accessible local/private file
+                uri = Uri.fromFile(file)
+            } else if (file.exists()) {
+                // File exists but direct reading blocked (scoped storage on Android 10/11)
+                // Safely search MediaStore strictly by matching absolute path
                 try {
-                    val projection = arrayOf(
-                        android.provider.MediaStore.Video.Media._ID,
-                        android.provider.MediaStore.Video.Media.SIZE
-                    )
-                    val selection = "${android.provider.MediaStore.Video.Media.DISPLAY_NAME} = ?"
-                    val selectionArgs = arrayOf(file.name)
+                    val projection = arrayOf(android.provider.MediaStore.Video.Media._ID)
+                    val selection = "${android.provider.MediaStore.Video.Media.DATA} = ?"
+                    val selectionArgs = arrayOf(file.absolutePath)
                     context.contentResolver.query(
                         android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
                         projection,
@@ -490,20 +549,9 @@ class PlayerManager @Inject constructor(
                         selectionArgs,
                         null
                     )?.use { cursor ->
-                        val idCol = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Video.Media._ID)
-                        val sizeCol = cursor.getColumnIndex(android.provider.MediaStore.Video.Media.SIZE)
-                        var resolvedId: Long? = null
-                        while (cursor.moveToNext()) {
-                            val candidateId = cursor.getLong(idCol)
-                            val candidateSize = if (sizeCol != -1) cursor.getLong(sizeCol) else -1L
-                            if (file.length() > 0 && candidateSize == file.length()) {
-                                resolvedId = candidateId
-                                break
-                            } else if (resolvedId == null) {
-                                resolvedId = candidateId
-                            }
-                        }
-                        if (resolvedId != null) {
+                        if (cursor.moveToFirst()) {
+                            val idCol = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Video.Media._ID)
+                            val resolvedId = cursor.getLong(idCol)
                             uri = android.content.ContentUris.withAppendedId(
                                 android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
                                 resolvedId
@@ -512,19 +560,14 @@ class PlayerManager @Inject constructor(
                     }
                 } catch (_: Throwable) {}
             }
-        } else if (android.provider.DocumentsContract.isDocumentUri(context, uri)) {
+        } else if (uri.scheme == "content") {
+            // Content URI (SAF document or tree URI, or MediaStore URI):
+            // Renew persistable permission if available without rewriting the URI
             try {
-                val authority = uri.authority
-                if (authority == "com.android.providers.media.documents") {
-                    val docId = android.provider.DocumentsContract.getDocumentId(uri)
-                    val id = docId.substringAfter("video:").toLongOrNull() ?: docId.toLongOrNull()
-                    if (id != null) {
-                        uri = android.content.ContentUris.withAppendedId(
-                            android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-                            id
-                        )
-                    }
-                }
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
             } catch (_: Throwable) {}
         }
 
@@ -532,8 +575,19 @@ class PlayerManager @Inject constructor(
             .setMediaId(video.id)
             .setUri(uri)
 
-        if (video.mimeType.isNotBlank() && video.mimeType != "video/*" && video.mimeType != "*/*") {
-            builder.setMimeType(video.mimeType)
+        // Only specify MIME type when necessary; allow ExoPlayer container sniffing
+        // to avoid playback failures from false MIME type mismatches
+        if (video.mimeType.isNotBlank() &&
+            video.mimeType != "video/*" &&
+            video.mimeType != "*/*" &&
+            video.mimeType != "application/octet-stream"
+        ) {
+            val ext = uri.lastPathSegment?.substringAfterLast('.', "")?.lowercase().orEmpty()
+            if (ext.isEmpty() || ext in setOf("mp4", "m4v", "mkv", "webm", "avi", "mov", "flv", "ts")) {
+                // Let ExoPlayer DefaultExtractorsFactory sniff the container magic bytes
+            } else {
+                builder.setMimeType(video.mimeType)
+            }
         }
 
         if (externalSubtitles.isNotEmpty()) {
@@ -644,8 +698,148 @@ class PlayerManager @Inject constructor(
 
     private var equalizer: android.media.audiofx.Equalizer? = null
     private var equalizerSessionId: Int = C.AUDIO_SESSION_ID_UNSET
+    private var bassBoost: android.media.audiofx.BassBoost? = null
+    private var bassBoostSessionId: Int = C.AUDIO_SESSION_ID_UNSET
+
+    fun applyAudioEffects(eqState: EqualizerState) {
+        val sessionId = exoPlayer.audioSessionId
+        if (sessionId == C.AUDIO_SESSION_ID_UNSET || sessionId <= 0) return
+
+        try {
+            if (eqState.enabled) {
+                if (equalizer == null || equalizerSessionId != sessionId) {
+                    releaseEqualizer()
+                    equalizer = android.media.audiofx.Equalizer(0, sessionId)
+                    equalizerSessionId = sessionId
+                }
+                equalizer?.let { eq ->
+                    eq.enabled = true
+                    val numBands = eq.numberOfBands
+                    val minLevel = eq.bandLevelRange.getOrNull(0) ?: -1000
+                    val maxLevel = eq.bandLevelRange.getOrNull(1) ?: 1000
+
+                    when (eqState.preset) {
+                        "Balanced" -> {
+                            for (i in 0 until numBands) {
+                                val band = i.toShort()
+                                val centerFreq = eq.getCenterFreq(band)
+                                val level = if (centerFreq >= 3_000_000) {
+                                    100.coerceIn(minLevel.toInt(), maxLevel.toInt()).toShort()
+                                } else {
+                                    0.toShort()
+                                }
+                                eq.setBandLevel(band, level)
+                            }
+                        }
+                        "Bass Boost" -> {
+                            for (i in 0 until numBands) {
+                                val band = i.toShort()
+                                val centerFreq = eq.getCenterFreq(band)
+                                val level = when {
+                                    centerFreq < 250_000 -> 700.coerceIn(minLevel.toInt(), maxLevel.toInt()).toShort()
+                                    centerFreq < 600_000 -> 400.coerceIn(minLevel.toInt(), maxLevel.toInt()).toShort()
+                                    else -> 0.toShort()
+                                }
+                                eq.setBandLevel(band, level)
+                            }
+                        }
+                        else -> { // "Custom"
+                            val levels = eqState.bandLevels.split(",")
+                                .mapNotNull { it.trim().toIntOrNull() }
+                            for (i in 0 until numBands) {
+                                val band = i.toShort()
+                                val dbVal = levels.getOrNull(i) ?: 0
+                                val mbVal = (dbVal * 100).coerceIn(minLevel.toInt(), maxLevel.toInt()).toShort()
+                                eq.setBandLevel(band, mbVal)
+                            }
+                        }
+                    }
+                }
+
+                // BassBoost hardware effect
+                if (eqState.preset == "Bass Boost" || eqState.bassBoostStrength > 0) {
+                    if (bassBoost == null || bassBoostSessionId != sessionId) {
+                        releaseBassBoost()
+                        bassBoost = android.media.audiofx.BassBoost(0, sessionId)
+                        bassBoostSessionId = sessionId
+                    }
+                    bassBoost?.let { bb ->
+                        bb.enabled = true
+                        val strength = if (eqState.preset == "Bass Boost" && eqState.bassBoostStrength == 0) {
+                            700.toShort()
+                        } else {
+                            eqState.bassBoostStrength.coerceIn(0, 1000).toShort()
+                        }
+                        bb.setStrength(strength)
+                    }
+                } else {
+                    releaseBassBoost()
+                }
+            } else if (currentSettings.dialogueBoostEnabled) {
+                applyDialogueBooster(true)
+                releaseBassBoost()
+            } else {
+                releaseEqualizer()
+                releaseBassBoost()
+            }
+        } catch (e: Exception) {
+            logger.w(TAG, "Failed to apply equalizer settings: ${e.message}")
+        }
+    }
+
+    fun setVideoEqualizerEnabled(enabled: Boolean) {
+        val currentVideo = _state.value.currentVideo ?: return
+        val newEqState = _state.value.equalizerState.copy(
+            enabled = enabled,
+            preset = if (enabled && _state.value.equalizerState.preset.isEmpty()) "Custom" else _state.value.equalizerState.preset
+        )
+        _state.update { it.copy(equalizerState = newEqState) }
+        applyAudioEffects(newEqState)
+        saveEqualizerPreferences(currentVideo.id, newEqState)
+    }
+
+    fun setVideoEqualizerPreset(preset: String) {
+        val currentVideo = _state.value.currentVideo ?: return
+        val newEqState = _state.value.equalizerState.copy(preset = preset)
+        _state.update { it.copy(equalizerState = newEqState) }
+        applyAudioEffects(newEqState)
+        saveEqualizerPreferences(currentVideo.id, newEqState)
+    }
+
+    fun setVideoEqualizerBandLevels(levels: String) {
+        val currentVideo = _state.value.currentVideo ?: return
+        val newEqState = _state.value.equalizerState.copy(bandLevels = levels)
+        _state.update { it.copy(equalizerState = newEqState) }
+        applyAudioEffects(newEqState)
+        saveEqualizerPreferences(currentVideo.id, newEqState)
+    }
+
+    fun setVideoEqualizerBassStrength(strength: Int) {
+        val currentVideo = _state.value.currentVideo ?: return
+        val newEqState = _state.value.equalizerState.copy(bassBoostStrength = strength)
+        _state.update { it.copy(equalizerState = newEqState) }
+        applyAudioEffects(newEqState)
+        saveEqualizerPreferences(currentVideo.id, newEqState)
+    }
+
+    private fun saveEqualizerPreferences(videoId: String, eqState: EqualizerState) {
+        playerScope.launch(dispatchers.io) {
+            runCatching {
+                equalizerPreferenceDao.upsertPreferences(
+                    EqualizerPreferenceEntity(
+                        videoId = videoId,
+                        enabled = eqState.enabled,
+                        preset = eqState.preset,
+                        bandLevels = eqState.bandLevels,
+                        bassBoostStrength = eqState.bassBoostStrength
+                    )
+                )
+            }
+        }
+    }
 
     fun applyDialogueBooster(enabled: Boolean) {
+        if (_state.value.equalizerState.enabled) return
         val sessionId = exoPlayer.audioSessionId
         if (sessionId != C.AUDIO_SESSION_ID_UNSET && sessionId > 0) {
             try {
@@ -660,15 +854,13 @@ class PlayerManager @Inject constructor(
                         val numBands = eq.numberOfBands
                         for (i in 0 until numBands) {
                             val band = i.toShort()
-                            val centerFreq = eq.getCenterFreq(band) // in mHz
+                            val centerFreq = eq.getCenterFreq(band)
                             when {
-                                // Boost human vocal speech range (800 Hz - 4.5 kHz)
                                 centerFreq in 800_000..4_500_000 -> {
                                     val maxLevel = eq.bandLevelRange.getOrNull(1) ?: 1000
                                     val boost = (maxLevel * 0.55f).toInt().coerceAtMost(maxLevel.toInt()).toShort()
                                     eq.setBandLevel(band, boost)
                                 }
-                                // Subtle cut on heavy sub-bass (< 250 Hz) to clear up mud/boomy rumble
                                 centerFreq < 250_000 -> {
                                     val minLevel = eq.bandLevelRange.getOrNull(0) ?: -1000
                                     val cut = (minLevel * 0.25f).toInt().coerceAtLeast(minLevel.toInt()).toShort()
@@ -702,6 +894,18 @@ class PlayerManager @Inject constructor(
         } finally {
             equalizer = null
             equalizerSessionId = C.AUDIO_SESSION_ID_UNSET
+        }
+    }
+
+    private fun releaseBassBoost() {
+        try {
+            bassBoost?.enabled = false
+            bassBoost?.release()
+        } catch (e: Exception) {
+            logger.w(TAG, "Failed to release BassBoost: ${e.message}")
+        } finally {
+            bassBoost = null
+            bassBoostSessionId = C.AUDIO_SESSION_ID_UNSET
         }
     }
 
@@ -863,6 +1067,7 @@ class PlayerManager @Inject constructor(
         persistenceManager.stopPeriodicSave()
         releaseLoudnessEnhancer()
         releaseEqualizer()
+        releaseBassBoost()
         val livePlayback = getLivePlaybackState()
         val currentVid = _state.value.currentVideo
         playerScope.launch {
@@ -884,6 +1089,7 @@ class PlayerManager @Inject constructor(
         persistenceManager.stopPeriodicSave()
         releaseLoudnessEnhancer()
         releaseEqualizer()
+        releaseBassBoost()
         seekPreviewLoader.releaseRetriever()
         val livePlayback = getLivePlaybackState()
         val currentVid = _state.value.currentVideo
@@ -896,7 +1102,23 @@ class PlayerManager @Inject constructor(
 
     override fun dispatch(command: PlayerCommand) {
         when (command) {
-            is PlayerCommand.Play -> playerScope.launch { play(command.video, command.startPositionMs) }
+            is PlayerCommand.Play -> playerScope.launch {
+                try {
+                    play(command.video, command.startPositionMs)
+                } catch (e: Throwable) {
+                    logger.e(TAG, "Unhandled error in play dispatch: ${e.message}", e)
+                    _state.update {
+                        it.copy(
+                            currentVideo = command.video,
+                            error = PlaybackError.SourceError(
+                                message = "Cannot play video: ${e.localizedMessage ?: e.message ?: "Failed"}",
+                                cause = e,
+                                recoverable = false
+                            )
+                        )
+                    }
+                }
+            }
             PlayerCommand.Pause -> pause()
             PlayerCommand.Resume -> resume()
             is PlayerCommand.SeekTo -> seekTo(command.positionMs)
@@ -1001,7 +1223,7 @@ class PlayerManager @Inject constructor(
         }
 
         override fun onAudioSessionIdChanged(audioSessionId: Int) {
-            applyDialogueBooster(currentSettings.dialogueBoostEnabled)
+            applyAudioEffects(_state.value.equalizerState)
             applyLoudnessEnhancer(_state.value.playback.volume)
         }
 

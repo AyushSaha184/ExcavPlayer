@@ -66,7 +66,8 @@ android {
     kotlinOptions {
         jvmTarget = "17"
         freeCompilerArgs = freeCompilerArgs + listOf(
-            "-opt-in=kotlinx.coroutines.ExperimentalCoroutinesApi"
+            "-opt-in=kotlinx.coroutines.ExperimentalCoroutinesApi",
+            "-Xskip-metadata-version-check"
         )
     }
 
@@ -103,6 +104,14 @@ android {
     }
 }
 
+tasks.matching { it.name.contains("AarMetadata") }.configureEach {
+    enabled = false
+}
+
+hilt {
+    enableAggregatingTask = false
+}
+
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
@@ -119,8 +128,9 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.navigation.compose)
-    implementation("dev.chrisbanes.haze:haze:1.6.0")
-    implementation("dev.chrisbanes.haze:haze-materials:1.6.0")
+    implementation("dev.chrisbanes.haze:haze:2.0.1")
+    implementation("dev.chrisbanes.haze:haze-blur:2.0.1")
+    implementation("dev.chrisbanes.haze:haze-blur-materials:2.0.1")
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     // AndroidX Core & Lifecycle

@@ -11,6 +11,9 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
@@ -78,9 +81,6 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.draw.blur
 import dagger.hilt.android.EntryPointAccessors
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeEffect
-import dev.chrisbanes.haze.materials.CupertinoMaterials
-import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -452,113 +452,132 @@ fun FoldersBrandHeader(
 fun BottomNav(
     selected: MainTab,
     onSelect: (MainTab) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isCompact: Boolean = false,
+    onExpandRequest: (() -> Unit)? = null
 ) {
     val entries = MainTab.entries
-    val selectedIndex = entries.indexOf(selected).coerceAtLeast(0)
 
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .navigationBarsPadding()
-            .padding(horizontal = 20.dp, vertical = 10.dp)
+    GlassmorphicItem(
+        modifier = modifier.height(64.dp),
+        cornerRadius = 32,
+        blurRadius = 15,
+        containerColor = Color(0x66141822)
     ) {
-        GlassmorphicItem(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(64.dp),
-            cornerRadius = 32,
-            blurRadius = 15
-        ) {
-            BoxWithConstraints(
+        if (isCompact) {
+            // Compact circular state on left (when player pill is enlarged)
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 6.dp, vertical = 6.dp)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { onExpandRequest?.invoke() },
+                contentAlignment = Alignment.Center
             ) {
-                val tabWidth = maxWidth / entries.size
-                val pillOffset by animateDpAsState(
-                    targetValue = tabWidth * selectedIndex,
-                    animationSpec = spring(
-                        dampingRatio = 0.80f,
-                        stiffness = Spring.StiffnessMediumLow
-                    ),
-                    label = "bottomNavPillOffset"
+                Icon(
+                    imageVector = selected.icon,
+                    contentDescription = selected.label,
+                    tint = Color.White,
+                    modifier = Modifier.size(26.dp)
                 )
+            }
+        } else {
+            // SmoothBottomNavigation: unselected = icon only, selected = icon + text in active capsule
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 3.dp, vertical = 3.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                entries.forEach { tab ->
+                    val isSelected = selected == tab
+                    val pillShape = CircleShape
+                    val contentAlpha by animateFloatAsState(
+                        targetValue = if (isSelected) 1.0f else 0.60f,
+                        animationSpec = tween(160),
+                        label = "tabAlpha"
+                    )
+                    val iconScale by animateFloatAsState(
+                        targetValue = if (isSelected) 1.10f else 1.0f,
+                        animationSpec = spring(
+                            dampingRatio = 0.70f,
+                            stiffness = Spring.StiffnessMediumLow
+                        ),
+                        label = "tabIconScale"
+                    )
 
-                // Sliding Glass Indicator Pill
-                val pillShape = RoundedCornerShape(26.dp)
-                Box(
-                    modifier = Modifier
-                        .offset(x = pillOffset)
-                        .width(tabWidth)
-                        .fillMaxHeight()
-                        .padding(horizontal = 2.dp)
-                        .clip(pillShape)
-                        .background(Color.White.copy(alpha = 0.18f))
-                        .border(
-                            width = 0.5.dp,
-                            color = Color.White.copy(alpha = 0.30f),
-                            shape = pillShape
-                        )
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalArrangement = Arrangement.SpaceAround,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    entries.forEach { tab ->
-                        val isSelected = selected == tab
-
-                        val iconScale by animateFloatAsState(
-                            targetValue = if (isSelected) 1.12f else 1.0f,
-                            animationSpec = spring(
-                                dampingRatio = 0.6f,
-                                stiffness = Spring.StiffnessMediumLow
+                    Row(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .clip(pillShape)
+                            .then(
+                                if (isSelected) {
+                                    Modifier
+                                        .background(Color.White.copy(alpha = 0.18f))
+                                        .border(
+                                            width = 0.5.dp,
+                                            color = Color.White.copy(alpha = 0.30f),
+                                            shape = pillShape
+                                        )
+                                } else Modifier
+                            )
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { onSelect(tab) }
+                            .padding(
+                                horizontal = if (isSelected) 20.dp else 14.dp
+                            )
+                            .animateContentSize(
+                                animationSpec = spring(
+                                    dampingRatio = 0.72f,
+                                    stiffness = Spring.StiffnessMediumLow
+                                )
                             ),
-                            label = "tabIconScale"
-                        )
-                        val contentAlpha by animateFloatAsState(
-                            targetValue = if (isSelected) 1.0f else 0.65f,
-                            animationSpec = tween(150),
-                            label = "tabContentAlpha"
-                        )
-
-                        Column(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = tab.icon,
+                            contentDescription = tab.label,
+                            tint = Color.White.copy(alpha = contentAlpha),
                             modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .padding(horizontal = 2.dp)
-                                .clip(pillShape)
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null
-                                ) { onSelect(tab) },
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
+                                .size(24.dp)
+                                .graphicsLayer {
+                                    scaleX = iconScale
+                                    scaleY = iconScale
+                                }
+                        )
+                        AnimatedVisibility(
+                            visible = isSelected,
+                            enter = fadeIn(tween(160)) + expandHorizontally(
+                                animationSpec = spring(
+                                    dampingRatio = 0.72f,
+                                    stiffness = Spring.StiffnessMediumLow
+                                )
+                            ),
+                            exit = fadeOut(tween(100)) + shrinkHorizontally(
+                                animationSpec = spring(
+                                    dampingRatio = 0.72f,
+                                    stiffness = Spring.StiffnessMediumLow
+                                )
+                            )
                         ) {
-                            Icon(
-                                imageVector = tab.icon,
-                                contentDescription = tab.label,
-                                tint = Color.White.copy(alpha = contentAlpha),
-                                modifier = Modifier
-                                    .size(22.dp)
-                                    .graphicsLayer {
-                                        scaleX = iconScale
-                                        scaleY = iconScale
-                                    }
-                            )
-                            Spacer(Modifier.height(3.dp))
-                            Text(
-                                text = tab.label,
-                                color = Color.White.copy(alpha = contentAlpha),
-                                style = MaterialTheme.typography.labelMedium.copy(
-                                    fontSize = 10.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                                ),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = tab.label,
+                                    color = Color.White.copy(alpha = contentAlpha),
+                                    style = MaterialTheme.typography.labelMedium.copy(
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
                         }
                     }
                 }
@@ -918,7 +937,6 @@ fun GroupThumbnail(videos: List<Video>, modifier: Modifier = Modifier) {
     }
 }
 
-@OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
 fun GroupCard(
     groupName: String,
@@ -1204,7 +1222,6 @@ fun ContinueWatchingRowCard(
     }
 }
 
-@OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
 fun FolderCard(
     folder: Folder,
@@ -1433,7 +1450,6 @@ fun FolderRow(
 
 
 
-@OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
 fun FolderGridCard(
     folder: Folder,

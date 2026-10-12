@@ -73,7 +73,7 @@ class SeekPreviewLoader @Inject constructor(
         } catch (_: Throwable) {}
 
         val newRetriever = MediaMetadataRetriever()
-        val path = uri.path
+        val path = uri.path?.let { Uri.decode(it) }
         if (uri.scheme == "file" && path != null) {
             newRetriever.setDataSource(path)
         } else if (uri.scheme == null && uriStr.startsWith("/")) {

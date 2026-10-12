@@ -6,6 +6,13 @@ data class PlaybackPosition(
     val bufferedPositionMs: Long = 0L
 )
 
+data class EqualizerState(
+    val enabled: Boolean = false,
+    val preset: String = "Custom",
+    val bandLevels: String = "0,0,0,0,0",
+    val bassBoostStrength: Int = 0
+)
+
 data class PlayerState(
     val currentVideo: Video? = null,
     val playback: PlaybackState = PlaybackState(),
@@ -20,7 +27,8 @@ data class PlayerState(
     val areControlsVisible: Boolean = true,
     val isScreenLocked: Boolean = false,
     val isInPictureInPicture: Boolean = false,
-    val isBackgroundAudio: Boolean = false
+    val isBackgroundAudio: Boolean = false,
+    val equalizerState: EqualizerState = EqualizerState()
 )
 
 sealed interface PlayerCommand {

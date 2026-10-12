@@ -26,5 +26,9 @@ data class UserSettings(
     val hardwareAccelerationMode: String = "Automatic",
     val hardwareAccelerationEnabled: Boolean = true,
     val dialogueBoostEnabled: Boolean = false,
-    val matchDisplayRefreshRate: Boolean = false
+    val matchDisplayRefreshRate: Boolean = false,
+    val equalizerEnabled: Boolean = false,
+    val equalizerPreset: String = "Custom",
+    val equalizerBandLevels: String = "0,0,0,0,0",
+    val bassBoostStrength: Int = 0
 )

@@ -216,10 +216,17 @@ class ChapterExtractor @Inject constructor(
      * Extracts chapters from media container or external sidecar files.
      */
     suspend fun extractFromUri(uriString: String, videoDurationMs: Long? = null): List<MediaChapter> = withContext(Dispatchers.IO) {
-        val localPath = when {
+        val rawLocalPath = when {
             uriString.startsWith("file://", ignoreCase = true) -> uriString.substring(7)
             uriString.startsWith("/") -> uriString
             else -> null
+        }
+        val localPath = rawLocalPath?.let { raw ->
+            try {
+                android.net.Uri.decode(raw) ?: raw
+            } catch (_: Throwable) {
+                raw
+            }
         }
 
         // 1. Local file path: check sidecars and random access

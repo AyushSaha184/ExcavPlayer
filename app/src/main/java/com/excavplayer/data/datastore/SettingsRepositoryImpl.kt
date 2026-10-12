@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.excavplayer.core.coroutine.DispatcherProvider
@@ -61,6 +62,10 @@ class SettingsRepositoryImpl @Inject constructor(
         val KEY_HARDWARE_ACCELERATION_MODE = stringPreferencesKey("hardware_acceleration_mode")
         val KEY_DIALOGUE_BOOST = booleanPreferencesKey("dialogue_boost")
         val KEY_MATCH_DISPLAY_REFRESH_RATE = booleanPreferencesKey("match_display_refresh_rate")
+        val KEY_EQUALIZER_ENABLED = booleanPreferencesKey("equalizer_enabled")
+        val KEY_EQUALIZER_PRESET = stringPreferencesKey("equalizer_preset")
+        val KEY_EQUALIZER_BAND_LEVELS = stringPreferencesKey("equalizer_band_levels")
+        val KEY_BASS_BOOST_STRENGTH = intPreferencesKey("bass_boost_strength")
     }
 
     override val userSettings: Flow<UserSettings> = context.dataStore.data
@@ -105,7 +110,11 @@ class SettingsRepositoryImpl @Inject constructor(
                 hardwareAccelerationMode = hwMode,
                 hardwareAccelerationEnabled = hwMode != "Disabled",
                 dialogueBoostEnabled = preferences[KEY_DIALOGUE_BOOST] ?: false,
-                matchDisplayRefreshRate = preferences[KEY_MATCH_DISPLAY_REFRESH_RATE] ?: false
+                matchDisplayRefreshRate = preferences[KEY_MATCH_DISPLAY_REFRESH_RATE] ?: false,
+                equalizerEnabled = preferences[KEY_EQUALIZER_ENABLED] ?: false,
+                equalizerPreset = preferences[KEY_EQUALIZER_PRESET] ?: "Custom",
+                equalizerBandLevels = preferences[KEY_EQUALIZER_BAND_LEVELS] ?: "0,0,0,0,0",
+                bassBoostStrength = preferences[KEY_BASS_BOOST_STRENGTH] ?: 0
             )
         }
         .flowOn(dispatchers.io)
@@ -247,6 +256,26 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun updateMatchDisplayRefreshRate(enabled: Boolean) {
         logger.i(TAG, "updateMatchDisplayRefreshRate: $enabled")
         edit { it[KEY_MATCH_DISPLAY_REFRESH_RATE] = enabled }
+    }
+
+    override suspend fun updateEqualizerEnabled(enabled: Boolean) {
+        logger.i(TAG, "updateEqualizerEnabled: $enabled")
+        edit { it[KEY_EQUALIZER_ENABLED] = enabled }
+    }
+
+    override suspend fun updateEqualizerPreset(preset: String) {
+        logger.i(TAG, "updateEqualizerPreset: $preset")
+        edit { it[KEY_EQUALIZER_PRESET] = preset }
+    }
+
+    override suspend fun updateEqualizerBandLevels(levels: String) {
+        logger.i(TAG, "updateEqualizerBandLevels: $levels")
+        edit { it[KEY_EQUALIZER_BAND_LEVELS] = levels }
+    }
+
+    override suspend fun updateBassBoostStrength(strength: Int) {
+        logger.i(TAG, "updateBassBoostStrength: $strength")
+        edit { it[KEY_BASS_BOOST_STRENGTH] = strength }
     }
 
     private suspend fun edit(transform: suspend (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {

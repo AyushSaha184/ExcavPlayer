@@ -823,6 +823,22 @@ class ExcavViewModel @Inject constructor(
         }
     }
 
+    fun setEqualizerEnabled(enabled: Boolean) {
+        player.setVideoEqualizerEnabled(enabled)
+    }
+
+    fun setEqualizerPreset(preset: String) {
+        player.setVideoEqualizerPreset(preset)
+    }
+
+    fun setEqualizerBandLevels(levels: String) {
+        player.setVideoEqualizerBandLevels(levels)
+    }
+
+    fun setBassBoostStrength(strength: Int) {
+        player.setVideoEqualizerBassStrength(strength)
+    }
+
     fun showMessage(text: String, isError: Boolean = false, actionLabel: String? = null) {
         _userMessage.value = UserMessage(message = text, isError = isError, actionLabel = actionLabel)
     }

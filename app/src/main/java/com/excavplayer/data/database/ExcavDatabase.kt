@@ -6,11 +6,13 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.excavplayer.data.database.dao.EqualizerPreferenceDao
 import com.excavplayer.data.database.dao.MediaSourceDao
 import com.excavplayer.data.database.dao.PlaybackDao
 import com.excavplayer.data.database.dao.SubtitlePreferenceDao
 import com.excavplayer.data.database.dao.VideoDao
 import com.excavplayer.data.database.entity.DismissedContinueWatchingEntity
+import com.excavplayer.data.database.entity.EqualizerPreferenceEntity
 import com.excavplayer.data.database.entity.FolderEntity
 import com.excavplayer.data.database.entity.MediaSourceEntity
 import com.excavplayer.data.database.entity.PlaybackEntity
@@ -24,9 +26,10 @@ import com.excavplayer.data.database.entity.VideoEntity
         SubtitlePreferenceEntity::class,
         MediaSourceEntity::class,
         FolderEntity::class,
-        DismissedContinueWatchingEntity::class
+        DismissedContinueWatchingEntity::class,
+        EqualizerPreferenceEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = true
 )
 abstract class ExcavDatabase : RoomDatabase() {
@@ -35,6 +38,7 @@ abstract class ExcavDatabase : RoomDatabase() {
     abstract fun playbackDao(): PlaybackDao
     abstract fun mediaSourceDao(): MediaSourceDao
     abstract fun subtitlePreferenceDao(): SubtitlePreferenceDao
+    abstract fun equalizerPreferenceDao(): EqualizerPreferenceDao
 
     companion object {
         const val DATABASE_NAME = "excav_player.db"
@@ -65,13 +69,30 @@ abstract class ExcavDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `equalizer_preferences` (
+                        `video_id` TEXT NOT NULL,
+                        `enabled` INTEGER NOT NULL,
+                        `preset` TEXT NOT NULL,
+                        `band_levels` TEXT NOT NULL,
+                        `bass_boost_strength` INTEGER NOT NULL,
+                        PRIMARY KEY(`video_id`)
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun buildDatabase(context: Context): ExcavDatabase {
             return Room.databaseBuilder(
                 context.applicationContext,
                 ExcavDatabase::class.java,
                 DATABASE_NAME
             )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .fallbackToDestructiveMigration()
                 .build()
         }

@@ -148,4 +148,24 @@ class SettingsManager @Inject constructor(
         logger.i(TAG, "Setting match display refresh rate to: $enabled")
         settingsRepository.updateMatchDisplayRefreshRate(enabled)
     }
+
+    suspend fun setEqualizerEnabled(enabled: Boolean) {
+        logger.i(TAG, "Setting equalizer enabled to: $enabled")
+        settingsRepository.updateEqualizerEnabled(enabled)
+    }
+
+    suspend fun setEqualizerPreset(preset: String) {
+        logger.i(TAG, "Setting equalizer preset to: $preset")
+        settingsRepository.updateEqualizerPreset(preset)
+    }
+
+    suspend fun setEqualizerBandLevels(levels: String) {
+        logger.i(TAG, "Setting equalizer band levels to: $levels")
+        settingsRepository.updateEqualizerBandLevels(levels)
+    }
+
+    suspend fun setBassBoostStrength(strength: Int) {
+        logger.i(TAG, "Setting bass boost strength to: $strength")
+        settingsRepository.updateBassBoostStrength(strength)
+    }
 }

@@ -28,13 +28,12 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.excavplayer.R
 import com.excavplayer.ui.theme.ExcavPalette
+import dev.chrisbanes.haze.HazeInput
 import dev.chrisbanes.haze.HazeProgressive
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.hazeChild
-import dev.chrisbanes.haze.hazeEffect
-import dev.chrisbanes.haze.materials.CupertinoMaterials
-import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
+import dev.chrisbanes.haze.blur.HazeBlurStyle
+import dev.chrisbanes.haze.blur.hazeBlur
+import dev.chrisbanes.haze.blur.materials.CupertinoMaterials
 import androidx.compose.animation.core.EaseInCubic
 import androidx.compose.animation.core.EaseIn
 
@@ -49,7 +48,6 @@ import androidx.compose.ui.graphics.graphicsLayer
  */
 val LocalHazeState = compositionLocalOf { HazeState() }
 
-@OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
 fun GlassmorphicItem(
     modifier: Modifier = Modifier,
@@ -57,7 +55,7 @@ fun GlassmorphicItem(
     cornerRadius: Int = 20,
     blurRadius: Int = 10,
     containerColor: Color = Color(0x66141720),
-    hazeStyle: HazeStyle = CupertinoMaterials.ultraThin(containerColor = containerColor),
+    hazeStyle: HazeBlurStyle = CupertinoMaterials.ultraThin(containerColor = containerColor),
     content: @Composable BoxScope.() -> Unit
 ) {
     val shape = remember(cornerRadius) { RoundedCornerShape(cornerRadius.dp) }
@@ -65,7 +63,7 @@ fun GlassmorphicItem(
     Box(
         modifier = modifier
             .clip(shape)
-            .hazeEffect(state = hazeState, style = hazeStyle)
+            .hazeBlur(input = HazeInput.Sources(hazeState), style = hazeStyle)
             .border(
                 width = 1.dp,
                 brush = Brush.verticalGradient(
@@ -80,7 +78,6 @@ fun GlassmorphicItem(
     )
 }
 
-@OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
 fun GlassmorphicBackButton(
     onClick: () -> Unit,
@@ -109,7 +106,6 @@ fun GlassmorphicBackButton(
     }
 }
 
-@OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
 fun GlassmorphicHeaderActions(
     onSearch: () -> Unit,
@@ -193,7 +189,6 @@ fun GlassmorphicHeaderActions(
  * linear blur gradient (full blur at the top, smoothly graduating to transparent below).
  * Scrim and progressive blur fade in cleanly when content is scrolled underneath.
  */
-@OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
 fun ProgressiveHeaderContainer(
     modifier: Modifier = Modifier,
@@ -217,16 +212,18 @@ fun ProgressiveHeaderContainer(
                 modifier = Modifier
                     .matchParentSize()
                     .graphicsLayer { alpha = blurAlpha }
-                    .hazeEffect(
-                        state = hazeState,
-                        style = CupertinoMaterials.ultraThin(containerColor = Color.Transparent)
-                    ) {
-                        progressive = HazeProgressive.verticalGradient(
-                            startIntensity = 1f,
-                            endIntensity = 0f,
-                            easing = EaseInCubic
-                        )
-                    }
+                    .hazeBlur(
+                        input = HazeInput.Sources(hazeState),
+                        style = CupertinoMaterials.ultraThin(containerColor = Color.Transparent).then {
+                            progressive(
+                                HazeProgressive.verticalGradient(
+                                    startIntensity = 1f,
+                                    endIntensity = 0f,
+                                    easing = EaseInCubic
+                                )
+                            )
+                        }
+                    )
                     .background(
                         Brush.verticalGradient(
                             listOf(
@@ -255,7 +252,6 @@ fun ProgressiveHeaderContainer(
  * Progressive linear blur scrim positioned below headings/headers.
  * Uses Haze progressive vertical gradient with EaseInCubic curve so scrolling content smoothly blurs as it passes underneath.
  */
-@OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
 fun ProgressiveHeaderBlur(
     modifier: Modifier = Modifier,
@@ -276,13 +272,18 @@ fun ProgressiveHeaderBlur(
                 .fillMaxWidth()
                 .height(height)
                 .graphicsLayer { alpha = blurAlpha }
-                .hazeEffect(state = hazeState, style = CupertinoMaterials.ultraThin(containerColor = containerColor)) {
-                    progressive = HazeProgressive.verticalGradient(
-                        startIntensity = 1f,
-                        endIntensity = 0f,
-                        easing = EaseInCubic
-                    )
-                }
+                .hazeBlur(
+                    input = HazeInput.Sources(hazeState),
+                    style = CupertinoMaterials.ultraThin(containerColor = containerColor).then {
+                        progressive(
+                            HazeProgressive.verticalGradient(
+                                startIntensity = 1f,
+                                endIntensity = 0f,
+                                easing = EaseInCubic
+                            )
+                        )
+                    }
+                )
                 .background(
                     Brush.verticalGradient(
                         listOf(

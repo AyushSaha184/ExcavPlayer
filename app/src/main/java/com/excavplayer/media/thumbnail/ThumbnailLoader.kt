@@ -151,7 +151,7 @@ class ThumbnailLoader @Inject constructor(
             if (bitmap == null) {
                 val retriever = android.media.MediaMetadataRetriever()
                 try {
-                    val path = uri.path
+                    val path = uri.path?.let { Uri.decode(it) }
                     if (uri.scheme == "file" && path != null) {
                         retriever.setDataSource(path)
                     } else if (uri.scheme == null && uriString.startsWith("/")) {

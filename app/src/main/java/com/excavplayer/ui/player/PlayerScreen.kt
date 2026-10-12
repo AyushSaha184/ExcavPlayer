@@ -75,8 +75,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.excavplayer.domain.model.EqualizerState
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -111,7 +113,7 @@ import com.excavplayer.ui.theme.ExcavShapes
 enum class ScrubSource { SLIDER, SWIPE }
 data class ScrubState(val targetMs: Long, val source: ScrubSource)
 private enum class DragClassifierMode { NONE, VERTICAL, HORIZONTAL_SEEK }
-private enum class PlayerSheet { SUBTITLES, AUDIO, SPEED, CHAPTERS }
+private enum class PlayerSheet { SUBTITLES, AUDIO, SPEED, CHAPTERS, MORE_OPTIONS, EQUALIZER, SUBTITLE_CUSTOMIZATION }
 private enum class DoubleTapSide { LEFT, RIGHT }
 
 @Composable
@@ -145,6 +147,7 @@ fun PlayerScreen(
     var controlsVisible by rememberSaveable { mutableStateOf(true) }
     var scrubState by remember { mutableStateOf<ScrubState?>(null) }
     var activeSheet by rememberSaveable { mutableStateOf<PlayerSheet?>(null) }
+    var wasPlayingBeforeSettings by remember { mutableStateOf(false) }
     var isLocked by rememberSaveable { mutableStateOf(false) }
     var keepAudioOnBackground by rememberSaveable { mutableStateOf(false) }
 
@@ -578,20 +581,13 @@ fun PlayerScreen(
                     setBackgroundColor(android.graphics.Color.BLACK)
                     setShutterBackgroundColor(android.graphics.Color.BLACK)
                     this.resizeMode = resizeMode
-                    subtitleView?.apply {
-                        setViewType(androidx.media3.ui.SubtitleView.VIEW_TYPE_CANVAS)
-                        setApplyEmbeddedStyles(false)
-                        setApplyEmbeddedFontSizes(false)
-                        setBottomPaddingFraction(0.08f)
-                    }
+                    applySubtitleStyles(subtitleView, settings)
                 }
             },
             update = { playerView ->
                 playerView.keepScreenOn = state.playback.isPlaying
                 playerView.resizeMode = resizeMode
-                playerView.subtitleView?.apply {
-                    setBottomPaddingFraction(0.08f)
-                }
+                applySubtitleStyles(playerView.subtitleView, settings)
 
                 // Display Refresh Rate Optimization (Judder-Free Playback)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -917,9 +913,17 @@ fun PlayerScreen(
                             }
                             onClose()
                         },
-                        onOpenSheet = {
+                        onOpenSheet = { sheet ->
                             onUserInteraction()
-                            activeSheet = it
+                            if (sheet == PlayerSheet.EQUALIZER || sheet == PlayerSheet.SUBTITLE_CUSTOMIZATION) {
+                                if (activeSheet != PlayerSheet.EQUALIZER && activeSheet != PlayerSheet.SUBTITLE_CUSTOMIZATION) {
+                                    wasPlayingBeforeSettings = state.playback.isPlaying
+                                    if (state.playback.isPlaying) {
+                                        vm.player.pause()
+                                    }
+                                }
+                            }
+                            activeSheet = sheet
                         },
                         onLock = {
                             onUserInteraction()
@@ -1008,27 +1012,47 @@ fun PlayerScreen(
             }
         }
 
-        // Active Bottom Sheet with smooth entering and exiting animation
+        // Active Bottom Sheet with anchor-originating box pop animation
+        val currentSheet = activeSheet
+        var lastSheet by remember { mutableStateOf<PlayerSheet?>(null) }
+        if (currentSheet != null) {
+            lastSheet = currentSheet
+        }
+
         AnimatedVisibility(
             visible = activeSheet != null && !isPip,
-            enter = slideInVertically(
-                initialOffsetY = { (it * 0.40f).toInt() },
-                animationSpec = spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow)
-            ) + fadeIn(animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)),
-            exit = slideOutVertically(
-                targetOffsetY = { (it * 0.35f).toInt() },
-                animationSpec = tween(durationMillis = 160, easing = FastOutSlowInEasing)
-            ) + fadeOut(animationSpec = tween(durationMillis = 160, easing = FastOutSlowInEasing))
+            enter = fadeIn(animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing)),
+            exit = fadeOut(animationSpec = tween(durationMillis = 140, easing = FastOutSlowInEasing))
         ) {
-            activeSheet?.let { sheetType ->
+            lastSheet?.let { sheetType ->
                 SheetContainer(
                     sheet = sheetType,
                     state = state,
                     vm = vm,
+                    isOpen = activeSheet != null,
                     maxSheetHeight = maxHeight,
+                    onChangeSheet = { newSheet ->
+                        onUserInteraction()
+                        if (newSheet == PlayerSheet.EQUALIZER || newSheet == PlayerSheet.SUBTITLE_CUSTOMIZATION) {
+                            if (activeSheet != PlayerSheet.EQUALIZER && activeSheet != PlayerSheet.SUBTITLE_CUSTOMIZATION) {
+                                wasPlayingBeforeSettings = state.playback.isPlaying
+                                if (state.playback.isPlaying) {
+                                    vm.player.pause()
+                                }
+                            }
+                        }
+                        activeSheet = newSheet
+                    },
                     onDismiss = {
                         onUserInteraction()
+                        val closingSheet = activeSheet
                         activeSheet = null
+                        if (closingSheet == PlayerSheet.EQUALIZER || closingSheet == PlayerSheet.SUBTITLE_CUSTOMIZATION) {
+                            if (wasPlayingBeforeSettings) {
+                                vm.player.resume()
+                                wasPlayingBeforeSettings = false
+                            }
+                        }
                     },
                     onPickSubtitle = onPickSubtitle
                 )
@@ -1197,6 +1221,7 @@ private fun PlayerControlsOverlay(
                 IconButton(
                     onClick = {
                         onInteraction()
+                        onOpenSheet(PlayerSheet.MORE_OPTIONS)
                     },
                     modifier = Modifier
                         .size(topBtnSize)
@@ -1514,29 +1539,46 @@ private fun PlayerControlsOverlay(
 // -----------------------------------------------------------------------------------------
 // Bottom Sheet Containers
 // -----------------------------------------------------------------------------------------
+private fun getSheetTransformOrigin(sheet: PlayerSheet?): TransformOrigin {
+    return when (sheet) {
+        PlayerSheet.MORE_OPTIONS,
+        PlayerSheet.EQUALIZER,
+        PlayerSheet.SUBTITLE_CUSTOMIZATION -> TransformOrigin(0.95f, 0.0f)
+        PlayerSheet.AUDIO -> TransformOrigin(0.80f, 0.0f)
+        PlayerSheet.SUBTITLES -> TransformOrigin(0.68f, 0.0f)
+        PlayerSheet.SPEED -> TransformOrigin(0.82f, 1.0f)
+        PlayerSheet.CHAPTERS -> TransformOrigin(0.15f, 1.0f)
+        null -> TransformOrigin(0.5f, 0.5f)
+    }
+}
+
 @Composable
 private fun SheetContainer(
     sheet: PlayerSheet,
     state: PlayerState,
     vm: ExcavViewModel,
+    isOpen: Boolean = true,
     maxSheetHeight: androidx.compose.ui.unit.Dp = 420.dp,
+    onChangeSheet: (PlayerSheet) -> Unit = {},
     onDismiss: () -> Unit,
     onPickSubtitle: () -> Unit
 ) {
     val settings by vm.userSettings.collectAsStateWithLifecycle()
 
     // Alignment and padding matching trigger button locations:
-    // Subtitles & Audio -> Top bar on right (Alignment.TopEnd)
+    // Subtitles, Audio, More Options, Equalizer, Subtitle Customization -> Top bar on right (Alignment.TopEnd)
     // Speed -> Bottom bar on right (Alignment.BottomEnd)
     // Chapters -> Bottom bar on left (Alignment.BottomStart)
     val alignment = when (sheet) {
-        PlayerSheet.SUBTITLES, PlayerSheet.AUDIO -> Alignment.TopEnd
+        PlayerSheet.SUBTITLES, PlayerSheet.AUDIO, PlayerSheet.MORE_OPTIONS,
+        PlayerSheet.EQUALIZER, PlayerSheet.SUBTITLE_CUSTOMIZATION -> Alignment.TopEnd
         PlayerSheet.SPEED -> Alignment.BottomEnd
         PlayerSheet.CHAPTERS -> Alignment.BottomStart
     }
 
     val containerPadding = when (sheet) {
-        PlayerSheet.SUBTITLES, PlayerSheet.AUDIO -> PaddingValues(top = 56.dp, end = 16.dp, bottom = 16.dp, start = 16.dp)
+        PlayerSheet.SUBTITLES, PlayerSheet.AUDIO, PlayerSheet.MORE_OPTIONS,
+        PlayerSheet.EQUALIZER, PlayerSheet.SUBTITLE_CUSTOMIZATION -> PaddingValues(top = 56.dp, end = 16.dp, bottom = 16.dp, start = 16.dp)
         PlayerSheet.SPEED -> PaddingValues(bottom = 76.dp, end = 16.dp, top = 16.dp, start = 16.dp)
         PlayerSheet.CHAPTERS -> PaddingValues(bottom = 76.dp, start = 16.dp, top = 16.dp, end = 16.dp)
     }
@@ -1553,54 +1595,110 @@ private fun SheetContainer(
             .padding(containerPadding),
         contentAlignment = alignment
     ) {
-        Box(
-            modifier = Modifier
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    enabled = false
-                ) {}
-                .widthIn(
-                    min = 280.dp,
-                    max = when (sheet) {
-                        PlayerSheet.SUBTITLES -> 400.dp
-                        PlayerSheet.CHAPTERS -> 380.dp
-                        PlayerSheet.AUDIO -> 340.dp
-                        PlayerSheet.SPEED -> 320.dp
-                    }
+        AnimatedVisibility(
+            visible = isOpen,
+            enter = scaleIn(
+                initialScale = 0.35f,
+                transformOrigin = getSheetTransformOrigin(sheet),
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioLowBouncy,
+                    stiffness = Spring.StiffnessMediumLow
                 )
-                .heightIn(max = (maxSheetHeight * 0.88f).coerceAtLeast(200.dp))
-                .clip(RoundedCornerShape(22.dp))
-                .darkUltraThinBlur(
-                    shape = RoundedCornerShape(22.dp),
-                    backgroundColor = Color(0xF20E121B),
-                    strokeColor = Color.White.copy(alpha = 0.20f)
-                )
+            ) + fadeIn(animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing)),
+            exit = scaleOut(
+                targetScale = 0.35f,
+                transformOrigin = getSheetTransformOrigin(sheet),
+                animationSpec = tween(durationMillis = 140, easing = FastOutSlowInEasing)
+            ) + fadeOut(animationSpec = tween(durationMillis = 140, easing = FastOutSlowInEasing))
         ) {
-            Column(
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .imePadding()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        enabled = false
+                    ) {}
+                    .widthIn(
+                        min = 280.dp,
+                        max = when (sheet) {
+                            PlayerSheet.SUBTITLES -> 400.dp
+                            PlayerSheet.CHAPTERS -> 380.dp
+                            PlayerSheet.AUDIO -> 340.dp
+                            PlayerSheet.SPEED -> 320.dp
+                            PlayerSheet.MORE_OPTIONS -> 300.dp
+                            PlayerSheet.EQUALIZER -> 400.dp
+                            PlayerSheet.SUBTITLE_CUSTOMIZATION -> 380.dp
+                        }
+                    )
+                    .heightIn(max = (maxSheetHeight * 0.88f).coerceAtLeast(200.dp))
+                    .clip(RoundedCornerShape(22.dp))
+                    .darkUltraThinBlur(
+                        shape = RoundedCornerShape(22.dp),
+                        backgroundColor = Color(0xF20E121B),
+                        strokeColor = Color.White.copy(alpha = 0.20f)
+                    )
             ) {
-                when (sheet) {
-                    PlayerSheet.SUBTITLES -> SubtitleSheet(
-                        state = state,
-                        player = vm.player,
-                        vm = vm,
-                        onPickSubtitle = onPickSubtitle,
-                        onDismiss = onDismiss
-                    )
-                    PlayerSheet.AUDIO -> AudioSheet(state, vm.player, onDismiss)
-                    PlayerSheet.SPEED -> SpeedSheet(state, vm.player, onDismiss)
-                    PlayerSheet.CHAPTERS -> ChaptersSheet(
-                        chapters = state.chapters,
-                        playbackPositionFlow = vm.player.playbackPosition,
-                        onSelectChapter = {
-                            vm.player.seekTo(it.startTimeMs)
-                            onDismiss()
-                        },
-                        onDismiss = onDismiss
-                    )
+                AnimatedContent(
+                    targetState = sheet,
+                    transitionSpec = {
+                        if (targetState == PlayerSheet.EQUALIZER || targetState == PlayerSheet.SUBTITLE_CUSTOMIZATION) {
+                            (slideInHorizontally { it / 3 } + fadeIn(animationSpec = tween(180)))
+                                .togetherWith(slideOutHorizontally { -it / 3 } + fadeOut(animationSpec = tween(140)))
+                        } else {
+                            (slideInHorizontally { -it / 3 } + fadeIn(animationSpec = tween(180)))
+                                .togetherWith(slideOutHorizontally { it / 3 } + fadeOut(animationSpec = tween(140)))
+                        }
+                    },
+                    label = "sheetPageTransition"
+                ) { currentSheet ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .imePadding()
+                    ) {
+                        when (currentSheet) {
+                            PlayerSheet.SUBTITLES -> SubtitleSheet(
+                                state = state,
+                                player = vm.player,
+                                vm = vm,
+                                onOpenCustomization = { onChangeSheet(PlayerSheet.SUBTITLE_CUSTOMIZATION) },
+                                onPickSubtitle = onPickSubtitle,
+                                onDismiss = onDismiss
+                            )
+                            PlayerSheet.AUDIO -> AudioSheet(state, vm.player, onDismiss)
+                            PlayerSheet.SPEED -> SpeedSheet(state, vm.player, onDismiss)
+                            PlayerSheet.CHAPTERS -> ChaptersSheet(
+                                chapters = state.chapters,
+                                playbackPositionFlow = vm.player.playbackPosition,
+                                onSelectChapter = {
+                                    vm.player.seekTo(it.startTimeMs)
+                                    onDismiss()
+                                },
+                                onDismiss = onDismiss
+                            )
+                            PlayerSheet.MORE_OPTIONS -> MoreOptionsSheet(
+                                onOpenEqualizer = { onChangeSheet(PlayerSheet.EQUALIZER) },
+                                onOpenSubtitleCustomization = { onChangeSheet(PlayerSheet.SUBTITLE_CUSTOMIZATION) },
+                                onDismiss = onDismiss
+                            )
+                            PlayerSheet.EQUALIZER -> EqualizerSheet(
+                                equalizerState = state.equalizerState,
+                                vm = vm,
+                                onBack = {
+                                    onChangeSheet(PlayerSheet.MORE_OPTIONS)
+                                },
+                                onDismiss = onDismiss
+                            )
+                            PlayerSheet.SUBTITLE_CUSTOMIZATION -> SubtitleCustomizationSheet(
+                                settings = settings,
+                                vm = vm,
+                                onBack = {
+                                    onChangeSheet(PlayerSheet.MORE_OPTIONS)
+                                },
+                                onDismiss = onDismiss
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -1794,6 +1892,7 @@ private fun SubtitleSheet(
     state: PlayerState,
     player: PlayerManager,
     vm: ExcavViewModel,
+    onOpenCustomization: () -> Unit = {},
     onPickSubtitle: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -1812,14 +1911,28 @@ private fun SubtitleSheet(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "Subtitles",
-                color = ExcavPalette.Text,
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Subtitles",
+                    color = ExcavPalette.Text,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
                 )
-            )
+                Spacer(Modifier.width(6.dp))
+                IconButton(
+                    onClick = onOpenCustomization,
+                    modifier = Modifier.size(26.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Palette,
+                        contentDescription = "Subtitle Style",
+                        tint = ExcavPalette.TextMuted,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
             SubtitlesPillTabBar(
                 selectedTab = selectedTab,
                 onTabSelected = { selectedTab = it }
@@ -2961,3 +3074,1103 @@ private fun Context.findActivity(): Activity? {
     }
     return null
 }
+
+// -----------------------------------------------------------------------------------------
+// Subtitle Style Application
+// -----------------------------------------------------------------------------------------
+private fun applySubtitleStyles(
+    subtitleView: androidx.media3.ui.SubtitleView?,
+    settings: UserSettings
+) {
+    subtitleView?.apply {
+        setViewType(androidx.media3.ui.SubtitleView.VIEW_TYPE_CANVAS)
+        setApplyEmbeddedStyles(false)
+        setApplyEmbeddedFontSizes(false)
+        setBottomPaddingFraction(0.08f)
+
+        val fgColor = when (settings.subtitleTextColor) {
+            "Yellow" -> android.graphics.Color.parseColor("#FFE066")
+            "Cyan" -> android.graphics.Color.parseColor("#00E5FF")
+            "Green" -> android.graphics.Color.parseColor("#69F0AE")
+            "Amber" -> android.graphics.Color.parseColor("#FFAB40")
+            "Pink" -> android.graphics.Color.parseColor("#FF4081")
+            else -> android.graphics.Color.WHITE
+        }
+
+        val (bgColor, edgeType, edgeColor) = when (settings.subtitleBackgroundStyle) {
+            "Background" -> Triple(
+                android.graphics.Color.BLACK,
+                androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_NONE,
+                android.graphics.Color.TRANSPARENT
+            )
+            "Both" -> Triple(
+                android.graphics.Color.BLACK,
+                androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_OUTLINE,
+                android.graphics.Color.BLACK
+            )
+            "None" -> Triple(
+                android.graphics.Color.TRANSPARENT,
+                androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_NONE,
+                android.graphics.Color.TRANSPARENT
+            )
+            else -> Triple(
+                android.graphics.Color.TRANSPARENT,
+                androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_OUTLINE,
+                android.graphics.Color.BLACK
+            )
+        }
+
+        val captionStyle = androidx.media3.ui.CaptionStyleCompat(
+            fgColor,
+            bgColor,
+            android.graphics.Color.TRANSPARENT,
+            edgeType,
+            edgeColor,
+            null
+        )
+        setStyle(captionStyle)
+
+        val sizeFraction = when (settings.subtitleTextSize) {
+            "Small" -> 0.040f
+            "Large" -> 0.068f
+            "Extra Large" -> 0.084f
+            else -> 0.0533f
+        }
+        setFractionalTextSize(sizeFraction)
+    }
+}
+
+// -----------------------------------------------------------------------------------------
+// More Options Sheet (Three Dot Menu)
+// -----------------------------------------------------------------------------------------
+@Composable
+private fun MoreOptionsSheet(
+    onOpenEqualizer: () -> Unit,
+    onOpenSubtitleCustomization: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 16.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "More Options",
+                color = ExcavPalette.Text,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+            )
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Close",
+                    tint = ExcavPalette.TextMuted,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+
+        MoreOptionItem(
+            icon = Icons.Default.GraphicEq,
+            title = "Volume Equalizer",
+            subtitle = "Custom, Balanced, Bass Boost",
+            onClick = onOpenEqualizer
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        MoreOptionItem(
+            icon = Icons.Default.Subtitles,
+            title = "Subtitle Customization",
+            subtitle = "Color, size, border & background",
+            onClick = onOpenSubtitleCustomization
+        )
+    }
+}
+
+@Composable
+private fun MoreOptionItem(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color.White.copy(alpha = 0.05f))
+            .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(ExcavPalette.Primary.copy(alpha = 0.18f))
+                .border(1.dp, ExcavPalette.Primary.copy(alpha = 0.35f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = ExcavPalette.Primary,
+                modifier = Modifier.size(19.dp)
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = title,
+                color = ExcavPalette.Text,
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 14.sp
+                )
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                color = ExcavPalette.TextMuted,
+                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 11.5.sp)
+            )
+        }
+        Icon(
+            imageVector = Icons.Default.ChevronRight,
+            contentDescription = null,
+            tint = ExcavPalette.TextMuted,
+            modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
+// -----------------------------------------------------------------------------------------
+// Equalizer Sheet & Presets
+// -----------------------------------------------------------------------------------------
+private enum class EqualizerPreset { CUSTOM, BALANCED, BASS_BOOST }
+
+@Composable
+private fun EqualizerPillTabBar(
+    selectedPreset: EqualizerPreset,
+    onPresetSelected: (EqualizerPreset) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val tabs = remember {
+        listOf(
+            EqualizerPreset.CUSTOM to "Custom",
+            EqualizerPreset.BALANCED to "Balanced",
+            EqualizerPreset.BASS_BOOST to "Bass Boost"
+        )
+    }
+    val selectedIndex = selectedPreset.ordinal
+
+    val targetOffsetFraction by animateFloatAsState(
+        targetValue = selectedIndex.toFloat(),
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "eqPillOffset"
+    )
+
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(Color.White.copy(alpha = 0.08f))
+            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
+            .padding(3.dp)
+    ) {
+        Layout(
+            content = {
+                // Animated Highlight Pill Background
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(17.dp))
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(ExcavPalette.Primary, ExcavPalette.Primary.copy(alpha = 0.85f))
+                            )
+                        )
+                )
+                // Tabs
+                tabs.forEach { (preset, label) ->
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(17.dp))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { onPresetSelected(preset) }
+                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = label,
+                            color = if (selectedPreset == preset) Color.White else ExcavPalette.TextMuted,
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontWeight = if (selectedPreset == preset) FontWeight.Bold else FontWeight.Medium,
+                                fontSize = 11.5.sp
+                            )
+                        )
+                    }
+                }
+            }
+        ) { measurables, constraints ->
+            val indicatorMeasurable = measurables[0]
+            val tabMeasurables = measurables.drop(1)
+            val tabPlaceables = tabMeasurables.map { it.measure(constraints) }
+
+            val totalWidth = tabPlaceables.sumOf { it.width }
+            val maxHeight = tabPlaceables.maxOf { it.height }
+
+            val currentIndex = targetOffsetFraction.toInt().coerceIn(0, tabPlaceables.size - 1)
+            val nextIndex = (currentIndex + 1).coerceAtMost(tabPlaceables.size - 1)
+            val fraction = targetOffsetFraction - currentIndex
+
+            val currentWidth = tabPlaceables[currentIndex].width
+            val nextWidth = tabPlaceables[nextIndex].width
+            val indicatorWidth = (currentWidth + (nextWidth - currentWidth) * fraction).roundToInt()
+
+            var currentXOffset = 0
+            for (i in 0 until currentIndex) {
+                currentXOffset += tabPlaceables[i].width
+            }
+            val targetXOffset = currentXOffset + (tabPlaceables[currentIndex].width * fraction).roundToInt()
+
+            val indicatorPlaceable = indicatorMeasurable.measure(
+                androidx.compose.ui.unit.Constraints.fixed(indicatorWidth, maxHeight)
+            )
+
+            layout(totalWidth, maxHeight) {
+                indicatorPlaceable.placeRelative(targetXOffset, 0)
+                var x = 0
+                tabPlaceables.forEach {
+                    it.placeRelative(x, 0)
+                    x += it.width
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EqualizerSheet(
+    equalizerState: EqualizerState,
+    vm: ExcavViewModel,
+    onBack: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val selectedPreset = remember(equalizerState.preset) {
+        when (equalizerState.preset) {
+            "Balanced" -> EqualizerPreset.BALANCED
+            "Bass Boost" -> EqualizerPreset.BASS_BOOST
+            else -> EqualizerPreset.CUSTOM
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 14.dp)
+    ) {
+        // Top Row: Back Button, Title, and On/Off Toggle
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = onBack,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = ExcavPalette.Text,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = "Equalizer",
+                    color = ExcavPalette.Text,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
+                )
+            }
+
+            // Top-right SleekSwitch (off by default; when turned on, goes directly to Custom preset)
+            SleekSwitch(
+                checked = equalizerState.enabled,
+                onCheckedChange = { isEnabled ->
+                    if (isEnabled) {
+                        vm.setEqualizerPreset("Custom")
+                        vm.setEqualizerEnabled(true)
+                    } else {
+                        vm.setEqualizerEnabled(false)
+                    }
+                }
+            )
+        }
+
+        // Animated Pill Tab Bar for 3 presets
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            EqualizerPillTabBar(
+                selectedPreset = selectedPreset,
+                onPresetSelected = { preset ->
+                    val presetStr = when (preset) {
+                        EqualizerPreset.CUSTOM -> "Custom"
+                        EqualizerPreset.BALANCED -> "Balanced"
+                        EqualizerPreset.BASS_BOOST -> "Bass Boost"
+                    }
+                    vm.setEqualizerPreset(presetStr)
+                }
+            )
+        }
+
+        // Animated horizontal page transitions matching Tracks & Online Subtitles
+        AnimatedContent(
+            targetState = selectedPreset,
+            transitionSpec = {
+                val targetIndex = targetState.ordinal
+                val initialIndex = initialState.ordinal
+                if (targetIndex > initialIndex) {
+                    (slideInHorizontally { width -> width / 3 } + fadeIn(animationSpec = tween(200))) togetherWith
+                    (slideOutHorizontally { width -> -width / 3 } + fadeOut(animationSpec = tween(200)))
+                } else {
+                    (slideInHorizontally { width -> -width / 3 } + fadeIn(animationSpec = tween(200))) togetherWith
+                    (slideOutHorizontally { width -> width / 3 } + fadeOut(animationSpec = tween(200)))
+                }
+            },
+            label = "equalizerPresetTransition"
+        ) { preset ->
+            when (preset) {
+                EqualizerPreset.CUSTOM -> CustomEqualizerTabContent(
+                    isEnabled = equalizerState.enabled,
+                    bandLevelsStr = equalizerState.bandLevels,
+                    onUpdateBandLevels = { vm.setEqualizerBandLevels(it) }
+                )
+                EqualizerPreset.BALANCED -> BalancedEqualizerTabContent(
+                    isEnabled = equalizerState.enabled
+                )
+                EqualizerPreset.BASS_BOOST -> BassBoostEqualizerTabContent(
+                    isEnabled = equalizerState.enabled,
+                    bassStrength = equalizerState.bassBoostStrength,
+                    onUpdateBassStrength = { vm.setBassBoostStrength(it) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CustomEqualizerTabContent(
+    isEnabled: Boolean,
+    bandLevelsStr: String,
+    onUpdateBandLevels: (String) -> Unit
+) {
+    val bandLabels = remember { listOf("60 Hz", "230 Hz", "910 Hz", "3.6 kHz", "14 kHz") }
+    val levels = remember(bandLevelsStr) {
+        val parsed = bandLevelsStr.split(",").mapNotNull { it.trim().toIntOrNull() }
+        List(5) { i -> parsed.getOrNull(i) ?: 0 }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+    ) {
+        if (!isEnabled) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 10.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color.White.copy(alpha = 0.05f))
+                    .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Equalizer is Off. Toggle switch above to activate.",
+                    color = ExcavPalette.TextMuted,
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp)
+                )
+            }
+        }
+
+        bandLabels.forEachIndexed { index, label ->
+            val level = levels.getOrNull(index) ?: 0
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = label,
+                    color = if (isEnabled) ExcavPalette.Text else ExcavPalette.TextMuted.copy(alpha = 0.6f),
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 12.5.sp
+                    ),
+                    modifier = Modifier.width(62.dp)
+                )
+                Slider(
+                    value = level.toFloat(),
+                    onValueChange = { newVal ->
+                        val updated = levels.toMutableList()
+                        updated[index] = newVal.roundToInt()
+                        onUpdateBandLevels(updated.joinToString(","))
+                    },
+                    valueRange = -10f..10f,
+                    steps = 19,
+                    enabled = isEnabled,
+                    colors = SliderDefaults.colors(
+                        thumbColor = ExcavPalette.Primary,
+                        activeTrackColor = ExcavPalette.Primary,
+                        inactiveTrackColor = Color.White.copy(alpha = 0.15f),
+                        disabledThumbColor = ExcavPalette.TextMuted.copy(alpha = 0.4f),
+                        disabledActiveTrackColor = ExcavPalette.TextMuted.copy(alpha = 0.2f),
+                        disabledInactiveTrackColor = Color.White.copy(alpha = 0.08f)
+                    ),
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = if (level > 0) "+$level dB" else "$level dB",
+                    color = if (isEnabled) (if (level != 0) ExcavPalette.Primary else ExcavPalette.TextMuted) else ExcavPalette.TextMuted.copy(alpha = 0.6f),
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.5.sp
+                    ),
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.width(48.dp)
+                )
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        // Reset to Flat button (clean text without coiled/refresh icon)
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.CenterEnd
+        ) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(enabled = isEnabled) {
+                        onUpdateBandLevels("0,0,0,0,0")
+                    }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Reset to Flat",
+                    color = if (isEnabled) ExcavPalette.TextMuted else ExcavPalette.TextMuted.copy(alpha = 0.4f),
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 11.5.sp
+                    )
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BalancedEqualizerTabContent(
+    isEnabled: Boolean
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+    ) {
+        if (!isEnabled) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 10.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color.White.copy(alpha = 0.05f))
+                    .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Equalizer is Off. Toggle switch above to activate.",
+                    color = ExcavPalette.TextMuted,
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp)
+                )
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color.White.copy(alpha = 0.04f))
+                .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+                .padding(14.dp)
+        ) {
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(ExcavPalette.Primary.copy(alpha = 0.2f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.GraphicEq,
+                            contentDescription = null,
+                            tint = ExcavPalette.Primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "Balanced Acoustic Profile",
+                            color = ExcavPalette.Text,
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 14.sp
+                            )
+                        )
+                        Text(
+                            text = "Optimized for all video genres",
+                            color = ExcavPalette.TextMuted,
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp)
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                Text(
+                    text = "Tuned for reference studio playback with pristine vocal clarity, natural background atmosphere, and balanced high-frequency sparkle without ear fatigue.",
+                    color = ExcavPalette.TextMuted,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp, lineHeight = 17.sp)
+                )
+
+                Spacer(Modifier.height(14.dp))
+
+                // Frequency response badges
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    EqBadge(label = "Bass: Flat 0dB", active = isEnabled, modifier = Modifier.weight(1f))
+                    EqBadge(label = "Mids: Clean 0dB", active = isEnabled, modifier = Modifier.weight(1f))
+                    EqBadge(label = "Treble: +1dB", active = isEnabled, modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BassBoostEqualizerTabContent(
+    isEnabled: Boolean,
+    bassStrength: Int,
+    onUpdateBassStrength: (Int) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+    ) {
+        if (!isEnabled) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 10.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color.White.copy(alpha = 0.05f))
+                    .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Equalizer is Off. Toggle switch above to activate.",
+                    color = ExcavPalette.TextMuted,
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp)
+                )
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color.White.copy(alpha = 0.04f))
+                .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+                .padding(14.dp)
+        ) {
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(ExcavPalette.Primary.copy(alpha = 0.2f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.GraphicEq,
+                            contentDescription = null,
+                            tint = ExcavPalette.Primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "Cinema Bass Boost",
+                            color = ExcavPalette.Text,
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 14.sp
+                            )
+                        )
+                        Text(
+                            text = "Heavy low-end resonance",
+                            color = ExcavPalette.TextMuted,
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp)
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
+
+                Text(
+                    text = "Delivers high-impact low-frequency punch, explosive movie rumbles, and warm acoustic fullness through deep bass frequency synthesis.",
+                    color = ExcavPalette.TextMuted,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp, lineHeight = 17.sp)
+                )
+
+                Spacer(Modifier.height(14.dp))
+
+                // Hardware Bass Boost Strength Slider
+                val strengthPercent = if (bassStrength == 0) 70 else (bassStrength / 10).coerceIn(0, 100)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Bass Intensity",
+                        color = if (isEnabled) ExcavPalette.Text else ExcavPalette.TextMuted.copy(alpha = 0.6f),
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium)
+                    )
+                    Text(
+                        text = "$strengthPercent%",
+                        color = if (isEnabled) ExcavPalette.Primary else ExcavPalette.TextMuted.copy(alpha = 0.6f),
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold)
+                    )
+                }
+
+                Slider(
+                    value = strengthPercent.toFloat(),
+                    onValueChange = { onUpdateBassStrength((it * 10).toInt()) },
+                    valueRange = 0f..100f,
+                    steps = 9,
+                    enabled = isEnabled,
+                    colors = SliderDefaults.colors(
+                        thumbColor = ExcavPalette.Primary,
+                        activeTrackColor = ExcavPalette.Primary,
+                        inactiveTrackColor = Color.White.copy(alpha = 0.15f),
+                        disabledThumbColor = ExcavPalette.TextMuted.copy(alpha = 0.4f),
+                        disabledActiveTrackColor = ExcavPalette.TextMuted.copy(alpha = 0.2f),
+                        disabledInactiveTrackColor = Color.White.copy(alpha = 0.08f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EqBadge(
+    label: String,
+    active: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (active) ExcavPalette.Primary.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.04f))
+            .border(
+                1.dp,
+                if (active) ExcavPalette.Primary.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.08f),
+                RoundedCornerShape(8.dp)
+            )
+            .padding(vertical = 6.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            color = if (active) ExcavPalette.Primary else ExcavPalette.TextMuted,
+            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold, fontSize = 10.5.sp)
+        )
+    }
+}
+
+// -----------------------------------------------------------------------------------------
+// Subtitle Customization Sheet
+// -----------------------------------------------------------------------------------------
+@Composable
+private fun SubtitleCustomizationSheet(
+    settings: UserSettings,
+    vm: ExcavViewModel,
+    onBack: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val colors = remember {
+        listOf(
+            "White" to Color(0xFFFFFFFF),
+            "Yellow" to Color(0xFFFFE066),
+            "Cyan" to Color(0xFF00E5FF),
+            "Green" to Color(0xFF69F0AE),
+            "Amber" to Color(0xFFFFAB40),
+            "Pink" to Color(0xFFFF4081)
+        )
+    }
+    val sizes = remember { listOf("Small", "Normal", "Large", "Extra Large") }
+    val styles = remember {
+        listOf(
+            "Border" to "Border",
+            "Background" to "Background",
+            "Both" to "Both",
+            "None" to "None"
+        )
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp)
+    ) {
+        // Header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = onBack,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = ExcavPalette.Text,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = "Subtitle Style",
+                    color = ExcavPalette.Text,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
+                )
+            }
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Close",
+                    tint = ExcavPalette.TextMuted,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+
+        // Live Subtitle Preview Box
+        val previewFgColor = when (settings.subtitleTextColor) {
+            "Yellow" -> Color(0xFFFFE066)
+            "Cyan" -> Color(0xFF00E5FF)
+            "Green" -> Color(0xFF69F0AE)
+            "Amber" -> Color(0xFFFFAB40)
+            "Pink" -> Color(0xFFFF4081)
+            else -> Color.White
+        }
+        val previewFontSize = when (settings.subtitleTextSize) {
+            "Small" -> 13.sp
+            "Large" -> 19.sp
+            "Extra Large" -> 22.sp
+            else -> 16.sp
+        }
+        val hasBg = settings.subtitleBackgroundStyle == "Background" || settings.subtitleBackgroundStyle == "Both"
+        val hasBorder = settings.subtitleBackgroundStyle == "Border" || settings.subtitleBackgroundStyle == "Both" || settings.subtitleBackgroundStyle == "Outline"
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(84.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color(0xFF1B2333), Color(0xFF0E131F))
+                    )
+                )
+                .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(14.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(4.dp))
+                    .then(
+                        if (hasBg) Modifier.background(Color.Black.copy(alpha = 0.95f)).padding(horizontal = 8.dp, vertical = 2.dp)
+                        else Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                    )
+            ) {
+                Text(
+                    text = "ExcavPlayer Subtitle Preview",
+                    color = previewFgColor,
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontSize = previewFontSize,
+                        fontWeight = FontWeight.Bold,
+                        shadow = if (hasBorder) androidx.compose.ui.graphics.Shadow(
+                            color = Color.Black,
+                            offset = androidx.compose.ui.geometry.Offset(1.5f, 1.5f),
+                            blurRadius = 3f
+                        ) else null
+                    ),
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
+
+        // Color Section
+        Text(
+            text = "SUBTITLE COLOR",
+            color = ExcavPalette.TextMuted,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.Bold,
+                fontSize = 11.sp,
+                letterSpacing = 0.5.sp
+            )
+        )
+        Spacer(Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            colors.forEach { (colorName, colorVal) ->
+                val isSelected = settings.subtitleTextColor.equals(colorName, ignoreCase = true)
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(colorVal)
+                        .border(
+                            width = if (isSelected) 2.5.dp else 1.dp,
+                            color = if (isSelected) ExcavPalette.Primary else Color.White.copy(alpha = 0.25f),
+                            shape = CircleShape
+                        )
+                        .clickable { vm.setSubtitleTextColor(colorName) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isSelected) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            tint = if (colorName == "White" || colorName == "Yellow" || colorName == "Cyan" || colorName == "Green") Color.Black else Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // Text Size Section
+        Text(
+            text = "SUBTITLE SIZE",
+            color = ExcavPalette.TextMuted,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.Bold,
+                fontSize = 11.sp,
+                letterSpacing = 0.5.sp
+            )
+        )
+        Spacer(Modifier.height(8.dp))
+        val sizeIndex = sizes.indexOfFirst { it.equals(settings.subtitleTextSize, ignoreCase = true) }.coerceAtLeast(1)
+        SegmentedAnimatedPillBar(
+            options = sizes,
+            selectedIndex = sizeIndex,
+            onSelectIndex = { index ->
+                vm.setSubtitleTextSize(sizes[index])
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(Modifier.height(16.dp))
+
+        // Border & Background Style Section (Strictly black only)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "BORDER & BACKGROUND",
+                color = ExcavPalette.TextMuted,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                    letterSpacing = 0.5.sp
+                )
+            )
+            Text(
+                text = "Black only",
+                color = ExcavPalette.Primary.copy(alpha = 0.85f),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp)
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        val currentStyle = if (settings.subtitleBackgroundStyle.equals("Outline", ignoreCase = true)) "Border" else settings.subtitleBackgroundStyle
+        val styleIndex = styles.indexOfFirst { it.first.equals(currentStyle, ignoreCase = true) }.coerceAtLeast(0)
+        SegmentedAnimatedPillBar(
+            options = styles.map { it.second },
+            selectedIndex = styleIndex,
+            onSelectIndex = { index ->
+                vm.setSubtitleBackgroundStyle(styles[index].first)
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+// -----------------------------------------------------------------------------------------
+// Segmented Animated Pill Bar (Bouncy Spring Highlight matching Tracks / Presets)
+// -----------------------------------------------------------------------------------------
+@Composable
+private fun SegmentedAnimatedPillBar(
+    options: List<String>,
+    selectedIndex: Int,
+    onSelectIndex: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val targetOffsetFraction by animateFloatAsState(
+        targetValue = selectedIndex.toFloat(),
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "segmentedPillOffset"
+    )
+
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.White.copy(alpha = 0.05f))
+            .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(12.dp))
+            .padding(3.dp)
+    ) {
+        Layout(
+            content = {
+                // Animated Highlight Pill Background with spring glide
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(9.dp))
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(ExcavPalette.Primary, ExcavPalette.Primary.copy(alpha = 0.85f))
+                            )
+                        )
+                )
+                // Segment items
+                options.forEachIndexed { index, label ->
+                    val isSelected = selectedIndex == index
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(9.dp))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { onSelectIndex(index) }
+                            .padding(vertical = 7.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = label,
+                            color = if (isSelected) Color.White else ExcavPalette.TextMuted,
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                fontSize = 11.5.sp
+                            ),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+        ) { measurables, constraints ->
+            val indicatorMeasurable = measurables[0]
+            val tabMeasurables = measurables.drop(1)
+            val tabCount = tabMeasurables.size
+            val tabWidth = constraints.maxWidth / tabCount
+
+            val tabPlaceables = tabMeasurables.map {
+                it.measure(androidx.compose.ui.unit.Constraints.fixed(tabWidth, constraints.minHeight))
+            }
+            val maxHeight = tabPlaceables.maxOfOrNull { it.height } ?: 0
+
+            val indicatorPlaceable = indicatorMeasurable.measure(
+                androidx.compose.ui.unit.Constraints.fixed(tabWidth, maxHeight)
+            )
+
+            val indicatorXOffset = (targetOffsetFraction * tabWidth).roundToInt()
+
+            layout(constraints.maxWidth, maxHeight) {
+                indicatorPlaceable.placeRelative(indicatorXOffset, 0)
+                tabPlaceables.forEachIndexed { i, placeable ->
+                    placeable.placeRelative(i * tabWidth, 0)
+                }
+            }
+        }
+    }
+}
+

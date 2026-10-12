@@ -2,6 +2,7 @@ package com.excavplayer.data.database.di
 
 import android.content.Context
 import com.excavplayer.data.database.ExcavDatabase
+import com.excavplayer.data.database.dao.EqualizerPreferenceDao
 import com.excavplayer.data.database.dao.MediaSourceDao
 import com.excavplayer.data.database.dao.PlaybackDao
 import com.excavplayer.data.database.dao.SubtitlePreferenceDao
@@ -34,4 +35,7 @@ object DatabaseModule {
 
     @Provides
     fun provideSubtitlePreferenceDao(database: ExcavDatabase): SubtitlePreferenceDao = database.subtitlePreferenceDao()
+
+    @Provides
+    fun provideEqualizerPreferenceDao(database: ExcavDatabase): EqualizerPreferenceDao = database.equalizerPreferenceDao()
 }
