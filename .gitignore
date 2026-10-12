@@ -36,7 +36,7 @@ native/
 android/
 
 # Project files
-ARCHITECTURE.md
+/graphify-out
 
 # OS
 .DS_Store
