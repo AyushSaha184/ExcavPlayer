@@ -52,6 +52,7 @@ class SubtitleSearchService @Inject constructor(
             val jobs = mutableListOf<kotlinx.coroutines.Deferred<List<SubtitleSearchResult>>>()
 
             if (source == SubtitleSource.ALL || source == SubtitleSource.OPENSUBTITLES) {
+                jobs.add(async { searchOpenSubtitlesV3(cleanQuery, languageCode) })
                 jobs.add(async { searchOpenSubtitles(cleanQuery, languageCode) })
                 jobs.add(async { searchOpenSubtitlesWeb(cleanQuery, languageCode) })
             }
@@ -81,6 +82,156 @@ class SubtitleSearchService @Inject constructor(
                     }.thenByDescending { it.downloads ?: 0 }
                 )
         }
+    }
+
+    private fun normalizeLangCode(threeLetter: String): String {
+        return when (threeLetter.lowercase()) {
+            "eng" -> "en"
+            "spa" -> "es"
+            "fre", "fra" -> "fr"
+            "ger", "deu" -> "de"
+            "hin" -> "hi"
+            "ara" -> "ar"
+            "por" -> "pt"
+            "rus" -> "ru"
+            "jpn" -> "ja"
+            "kor" -> "ko"
+            "chi", "zho" -> "zh"
+            "ita" -> "it"
+            "ind" -> "id"
+            "tur" -> "tr"
+            "vie" -> "vi"
+            else -> threeLetter.take(2).lowercase()
+        }
+    }
+
+    private fun getLanguageName(twoOrThreeLetter: String): String {
+        val code2 = normalizeLangCode(twoOrThreeLetter)
+        return SubtitleLanguage.SUPPORTED.firstOrNull { it.code.equals(code2, ignoreCase = true) }?.name
+            ?: twoOrThreeLetter.uppercase()
+    }
+
+    /**
+     * High-reliability OpenSubtitles v3 search via IMDb Suggest & OpenSubtitles Stremio gateway
+     */
+    private fun searchOpenSubtitlesV3(query: String, languageCode: String): List<SubtitleSearchResult> {
+        val results = mutableListOf<SubtitleSearchResult>()
+        try {
+            val cleanInfo = cleanVideoTitle(query)
+            val searchTitle = cleanInfo.title.ifBlank { query }
+            val firstChar = searchTitle.firstOrNull()?.lowercaseChar() ?: 'a'
+            val encodedQuery = URLEncoder.encode(searchTitle.lowercase(), "UTF-8")
+
+            var imdbId: String? = null
+            var isSeries = (cleanInfo.season != null && cleanInfo.episode != null)
+
+            // 1. Try official IMDb Suggest API
+            try {
+                val imdbUrl = "https://v2.sg.media-imdb.com/suggestion/titles/$firstChar/$encodedQuery.json"
+                val conn = (URL(imdbUrl).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 8_000
+                    readTimeout = 8_000
+                    setRequestProperty("User-Agent", "Mozilla/5.0")
+                }
+                if (conn.responseCode in 200..299) {
+                    val body = conn.inputStream.use { it.reader().readText() }
+                    val root = json.parseToJsonElement(body).jsonObject
+                    val items = root["d"]?.jsonArray
+                    val best = items?.firstOrNull()?.jsonObject
+                    imdbId = best?.get("id")?.jsonPrimitive?.contentOrNull
+                    val qType = best?.get("q")?.jsonPrimitive?.contentOrNull.orEmpty()
+                    if (qType.contains("series", ignoreCase = true) || qType.contains("tv", ignoreCase = true)) {
+                        isSeries = true
+                    }
+                }
+            } catch (e: Exception) {
+                logger.d(TAG, "IMDb suggestion failed: ${e.message}")
+            }
+
+            // Fallback: Cinemeta catalog search
+            if (imdbId == null) {
+                try {
+                    val cat = if (isSeries) "series" else "movie"
+                    val cinemetaUrl = "https://v3-cinemeta.strem.io/catalog/$cat/top/search=$encodedQuery.json"
+                    val conn = (URL(cinemetaUrl).openConnection() as HttpURLConnection).apply {
+                        connectTimeout = 8_000
+                        readTimeout = 8_000
+                        setRequestProperty("User-Agent", "Mozilla/5.0")
+                    }
+                    if (conn.responseCode in 200..299) {
+                        val body = conn.inputStream.use { it.reader().readText() }
+                        val root = json.parseToJsonElement(body).jsonObject
+                        val metas = root["metas"]?.jsonArray
+                        imdbId = metas?.firstOrNull()?.jsonObject?.get("id")?.jsonPrimitive?.contentOrNull
+                    }
+                } catch (e: Exception) {
+                    logger.d(TAG, "Cinemeta catalog failed: ${e.message}")
+                }
+            }
+
+            if (imdbId == null) {
+                logger.d(TAG, "IMDb ID could not be determined for: $searchTitle")
+                return emptyList()
+            }
+
+            // 2. Fetch OpenSubtitles v3
+            val subUrl = if (cleanInfo.season != null && cleanInfo.episode != null) {
+                "https://opensubtitles-v3.strem.io/subtitles/series/$imdbId:${cleanInfo.season}:${cleanInfo.episode}.json"
+            } else {
+                "https://opensubtitles-v3.strem.io/subtitles/movie/$imdbId.json"
+            }
+
+            val conn = (URL(subUrl).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 10_000
+                readTimeout = 12_000
+                setRequestProperty("User-Agent", "Mozilla/5.0")
+            }
+
+            if (conn.responseCode in 200..299) {
+                val body = conn.inputStream.use { it.reader().readText() }
+                val root = json.parseToJsonElement(body).jsonObject
+                val subtitles = root["subtitles"]?.jsonArray ?: JsonArray(emptyList())
+
+                val target2 = if (languageCode != "all") languageCode.lowercase() else null
+
+                for (item in subtitles) {
+                    val obj = item.jsonObject
+                    val subId = obj["id"]?.jsonPrimitive?.contentOrNull ?: continue
+                    val downloadUrl = obj["url"]?.jsonPrimitive?.contentOrNull ?: continue
+                    val rawLang = obj["lang"]?.jsonPrimitive?.contentOrNull ?: "eng"
+                    val lang2 = normalizeLangCode(rawLang)
+
+                    if (target2 != null && !lang2.equals(target2, ignoreCase = true) && !rawLang.equals(target2, ignoreCase = true)) {
+                        continue
+                    }
+
+                    val fileName = obj["subtitleFileName"]?.jsonPrimitive?.contentOrNull
+                        ?: obj["movieReleaseName"]?.jsonPrimitive?.contentOrNull
+                        ?: "$searchTitle.srt"
+                    val releaseName = obj["movieReleaseName"]?.jsonPrimitive?.contentOrNull
+                        ?: cleanInfo.formatted
+                    val langDisplayName = getLanguageName(rawLang)
+
+                    results.add(
+                        SubtitleSearchResult(
+                            id = "os_v3_$subId",
+                            source = "OpenSubtitles",
+                            title = releaseName,
+                            fileName = fileName,
+                            language = langDisplayName,
+                            languageCode = lang2,
+                            downloadUrl = downloadUrl,
+                            format = "srt",
+                            hearingImpaired = false,
+                            downloads = null
+                        )
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            logger.w(TAG, "searchOpenSubtitlesV3 error: ${e.message}")
+        }
+        return results
     }
 
     /**

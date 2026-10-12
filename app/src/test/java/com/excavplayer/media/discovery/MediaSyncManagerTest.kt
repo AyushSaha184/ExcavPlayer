@@ -63,6 +63,24 @@ class MediaSyncManagerTest {
         coVerify { videoDao.insertVideos(any()) }
         // Missing ms_3 should be deleted from database
         coVerify { videoDao.deleteVideos(listOf("ms_3")) }
+        // Private storage videos should be purged
+        coVerify { videoDao.purgePrivateStorageVideos() }
+    }
+
+    @Test
+    fun `syncMediaStore discovers unindexed storage videos and inserts them`() = runBlocking {
+        coEvery { videoDao.getAllVideoIds() } returns emptyList()
+        coEvery { mediaStoreDataSource.queryAllVideosPaged(any(), any()) } returns 0
+
+        val unindexed = listOf(createVideoEntity("fs_100"))
+        coEvery { storageFileScanner.scanForUnindexedVideos(any()) } returns unindexed
+
+        val result = syncManager.syncMediaStore(force = true)
+
+        assertThat(result.isSuccess).isTrue()
+        coVerify { storageFileScanner.scanForUnindexedVideos(any()) }
+        coVerify { videoDao.insertVideos(unindexed) }
+        coVerify { videoDao.purgePrivateStorageVideos() }
     }
 
     private fun createVideoEntity(id: String): VideoEntity {

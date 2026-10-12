@@ -43,4 +43,29 @@ class SubtitleHelperTest {
         assertThat(helper.inferMimeTypeFromUri(Uri.parse("file:///movie/sub.ttml")))
             .isEqualTo(MimeTypes.APPLICATION_TTML)
     }
+
+    @Test
+    fun `cleanVideoTitle removes resolutions, codecs, junk and preserves show, season, episode`() {
+        val test1 = cleanVideoTitle("Inception.2010.1080p.BluRay.x264.AAC5.1-[YTS.MX].mp4")
+        assertThat(test1.formatted).isEqualTo("Inception")
+        assertThat(test1.season).isNull()
+        assertThat(test1.episode).isNull()
+
+        val test2 = cleanVideoTitle("Breaking.Bad.S01E03.720p.HDTV.x264-AVS.mkv")
+        assertThat(test2.formatted).isEqualTo("Breaking Bad S01E03")
+        assertThat(test2.season).isEqualTo(1)
+        assertThat(test2.episode).isEqualTo(3)
+
+        val test3 = cleanVideoTitle("Stranger Things 4x01 Chapter One 1080p.mkv")
+        assertThat(test3.formatted).isEqualTo("Stranger Things S04E01")
+        assertThat(test3.season).isEqualTo(4)
+        assertThat(test3.episode).isEqualTo(1)
+
+        val test4 = cleanVideoTitle("The.Batman.2022.2160p.UHD.HDR.x265.mkv")
+        assertThat(test4.formatted).isEqualTo("The Batman")
+
+        val test5 = cleanVideoTitle("Naruto.Shippuden.Episode.42.720p.mp4")
+        assertThat(test5.formatted).isEqualTo("Naruto Shippuden E42")
+        assertThat(test5.episode).isEqualTo(42)
+    }
 }

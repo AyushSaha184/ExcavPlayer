@@ -23,25 +23,35 @@ class PipHelper @Inject constructor(
     }
 
     val isPipSupported: Boolean
-        get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-                context.packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
+        get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
 
     fun enterPictureInPicture(activity: Activity, video: Video?, isPlaying: Boolean): Boolean {
-        if (!isPipSupported) {
-            logger.w(TAG, "Picture-in-picture is not supported on this device")
+        if (activity.isFinishing || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1 && activity.isDestroyed)) {
+            logger.w(TAG, "Activity is finishing or destroyed, skipping PiP")
+            return false
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            logger.w(TAG, "Picture-in-picture is not supported on this Android version")
             return false
         }
 
         return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val params = buildPipParams(activity, video, isPlaying)
-                activity.enterPictureInPictureMode(params)
-            } else {
-                false
-            }
+            val params = buildPipParams(activity, video, isPlaying)
+            activity.enterPictureInPictureMode(params)
         } catch (e: Exception) {
             logger.e(TAG, "Error entering Picture-in-Picture mode", e)
-            false
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    @Suppress("DEPRECATION")
+                    activity.enterPictureInPictureMode()
+                    true
+                } else {
+                    false
+                }
+            } catch (fallbackEx: Exception) {
+                logger.e(TAG, "Fallback enterPictureInPictureMode failed", fallbackEx)
+                false
+            }
         }
     }
 

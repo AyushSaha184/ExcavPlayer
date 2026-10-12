@@ -156,6 +156,9 @@ interface VideoDao {
     @Query("SELECT id, uri FROM videos WHERE id LIKE 'fs_%'")
     suspend fun getAllFsVideos(): List<IdUriTuple>
 
+    @Query("DELETE FROM videos WHERE folder_name = 'private' OR folder_path LIKE '%/private%' OR uri LIKE '%/storage/private%'")
+    suspend fun purgePrivateStorageVideos()
+
     @Query("UPDATE videos SET availability = :availability WHERE id = :videoId")
     suspend fun updateAvailability(videoId: String, availability: String)
 

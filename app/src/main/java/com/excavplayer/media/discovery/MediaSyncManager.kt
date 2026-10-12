@@ -60,6 +60,9 @@ class MediaSyncManager @Inject constructor(
             _syncStatus.value = SyncStatus.Syncing(0)
             logger.i(TAG, "Starting MediaStore synchronization (force=$force)")
 
+            // Purge any corrupted or private storage entries from database
+            videoDao.purgePrivateStorageVideos()
+
             val existingIds = videoDao.getAllVideoIds().toHashSet()
             val discoveredIds = HashSet<String>()
             var totalCount = 0
@@ -72,35 +75,41 @@ class MediaSyncManager @Inject constructor(
                 _syncStatus.value = SyncStatus.Syncing(totalCount)
             }
 
-            // Detect deleted / missing videos from MediaStore (exclude SAF videos)
+            // Detect deleted / missing videos from MediaStore (exclude SAF and filesystem videos)
             val removedIds = existingIds.filter { id ->
-                !id.startsWith("saf_") && !discoveredIds.contains(id)
+                !id.startsWith("saf_") && !id.startsWith("fs_") && !discoveredIds.contains(id)
             }
 
             if (removedIds.isNotEmpty()) {
-                logger.i(TAG, "Deleting ${removedIds.size} missing MediaStore/legacy videos from database")
+                logger.i(TAG, "Deleting ${removedIds.size} missing MediaStore videos from database")
                 videoDao.deleteVideos(removedIds)
             }
 
-            // Clean up any legacy filesystem videos from the database
+            // 2. Storage file scan: discover unindexed videos and insert them directly into database
+            val existingKeys = videoDao.getAllVideoKeys().toHashSet()
+            val unindexedVideos = storageFileScanner.scanForUnindexedVideos(existingKeys)
+            var unindexedInserted = 0
+            if (unindexedVideos.isNotEmpty()) {
+                videoDao.insertVideos(unindexedVideos)
+                unindexedInserted = unindexedVideos.size
+                totalCount += unindexedInserted
+                _syncStatus.value = SyncStatus.Syncing(totalCount)
+            }
+
+            // 3. Clean up stale filesystem videos whose files were deleted from disk
             val existingFsVideos = videoDao.getAllFsVideos()
-            if (existingFsVideos.isNotEmpty()) {
-                logger.i(TAG, "Purging ${existingFsVideos.size} legacy filesystem videos from database")
-                videoDao.deleteVideos(existingFsVideos.map { it.id })
+            val staleFsIds = existingFsVideos.filter {
+                val path = Uri.parse(it.uri).path
+                path == null || !File(path).exists()
+            }.map { it.id }
+
+            if (staleFsIds.isNotEmpty()) {
+                logger.i(TAG, "Deleting ${staleFsIds.size} stale filesystem videos from database")
+                videoDao.deleteVideos(staleFsIds)
             }
 
-            // 2. Storage file scan: discover unindexed videos and request MediaScanner to index them into MediaStore
-            var unindexedScanned = 0
-            if (force || existingIds.isEmpty()) {
-                val existingKeys = videoDao.getAllVideoKeys().toHashSet()
-                val unindexedVideos = storageFileScanner.scanForUnindexedVideos(existingKeys)
-                unindexedScanned = unindexedVideos.size
-                // Note: scanForUnindexedVideos already calls MediaScannerConnection.scanFile.
-                // We do NOT insert raw file:/// URIs into Room, allowing MediaStore to index them cleanly.
-            }
-
-            _syncStatus.value = SyncStatus.Success(totalScanned = totalCount, updatedCount = discoveredIds.size)
-            logger.i(TAG, "Sync complete: $totalCount items discovered ($unindexedScanned sent to MediaScanner)")
+            _syncStatus.value = SyncStatus.Success(totalScanned = totalCount, updatedCount = discoveredIds.size + unindexedInserted)
+            logger.i(TAG, "Sync complete: $totalCount items discovered ($unindexedInserted via storage scan)")
             ExcavResult.Success(totalCount)
         } catch (e: Exception) {
             logger.e(TAG, "Error synchronizing media library", e)

@@ -81,9 +81,16 @@ object FolderTreeManager {
             )
         }
 
+        // Filter out any corrupted or private storage videos
+        val validVideos = videos.filter { v ->
+            !v.folderPath.contains("/private") &&
+            !v.folderName.equals("private", ignoreCase = true) &&
+            !v.uri.contains("/storage/private")
+        }
+
         // Group videos by their normalized immediate folder path
         val directVideosByFolder = mutableMapOf<String, MutableList<Video>>()
-        for (v in videos) {
+        for (v in validVideos) {
             val normFolder = normalizePath(v.folderPath)
             directVideosByFolder.getOrPut(normFolder) { mutableListOf() }.add(v)
         }
@@ -176,6 +183,8 @@ object FolderTreeManager {
         if (path == INTERNAL_STORAGE_ROOT || path == "/storage/emulated") return true
         if (path.startsWith("/storage/")) {
             val rem = path.removePrefix("/storage/").trimStart('/')
+            val firstSeg = rem.substringBefore('/')
+            if (firstSeg.lowercase() in setOf("private", "self", "emulated", "knox", "enc_media", "lost.dir")) return false
             return rem.isNotEmpty() && !rem.contains('/')
         }
         return path == "/"

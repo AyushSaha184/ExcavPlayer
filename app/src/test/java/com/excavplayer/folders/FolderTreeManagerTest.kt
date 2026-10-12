@@ -114,4 +114,19 @@ class FolderTreeManagerTest {
         val movieVideos = FolderTreeManager.getAllDescendantVideos(tree, "/storage/emulated/0/Movies")
         assertThat(movieVideos.map { it.id }).containsExactly("1", "2")
     }
+
+    @Test
+    fun testBuildTree_filtersOutPrivateDirectoriesAndVideos() {
+        val normalVideo = createTestVideo("1", "normal.mp4", "/storage/emulated/0/Movies")
+        val privateVideo1 = createTestVideo("2", "secret.mp4", "/storage/private")
+        val privateVideo2 = createTestVideo("3", "corrupt.mp4", "/storage/emulated/0/private")
+
+        val tree = FolderTreeManager.buildTree(listOf(normalVideo, privateVideo1, privateVideo2))
+
+        val rootSubfolders = FolderTreeManager.getSubfolders(tree, null)
+        assertThat(rootSubfolders.map { it.name }).containsExactly("Movies")
+        assertThat(rootSubfolders.none { it.name.equals("private", ignoreCase = true) }).isTrue()
+        assertThat(FolderTreeManager.isStorageRoot("/storage/private")).isFalse()
+        assertThat(FolderTreeManager.isStorageRoot("/storage/self")).isFalse()
+    }
 }

@@ -2,6 +2,9 @@
 
 package com.excavplayer.ui.player
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.net.Uri
 import android.os.Build
@@ -78,7 +81,9 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.StateFlow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -131,7 +136,7 @@ fun PlayerScreen(
     val queue by vm.queueState.collectAsStateWithLifecycle()
     val settings by vm.userSettings.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val activity = context as? android.app.Activity
+    val activity = remember(context) { context.findActivity() }
     val audioManager = remember(context) {
         context.getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
     }
@@ -923,8 +928,14 @@ fun PlayerScreen(
                         },
                         onPip = {
                             onUserInteraction()
-                            activity?.let {
-                                pipHelper.enterPictureInPicture(it, state.currentVideo, state.playback.isPlaying)
+                            val currentActivity = activity ?: context.findActivity()
+                            if (currentActivity != null) {
+                                controlsVisible = false
+                                activeSheet = null
+                                val entered = pipHelper.enterPictureInPicture(currentActivity, state.currentVideo, state.playback.isPlaying)
+                                if (entered) {
+                                    vm.player.dispatch(PlayerCommand.SetInPictureInPicture(true))
+                                }
                             }
                         },
                         onCycleOrientation = {
@@ -1060,47 +1071,56 @@ private fun PlayerControlsOverlay(
         LocalRippleConfiguration provides null,
         LocalMinimumInteractiveComponentSize provides Dp.Unspecified
     ) {
-        val topBtnSize = ((if (isVeryCompact) 28.dp else if (isCompact) 34.dp else 42.dp) * splitScale).coerceIn(20.dp, 42.dp)
-        val topIconSize = (topBtnSize * 0.52f).coerceIn(11.dp, 22.dp)
-        val titleFontSize = if (isVeryCompact) 11.sp else if (isCompact) 13.sp else 16.sp
-        val topSpacing = ((if (isVeryCompact) 6.dp else if (isCompact) 10.dp else 16.dp) * splitScale).coerceIn(4.dp, 16.dp)
-        val topBtnSpacing = ((if (isVeryCompact) 3.dp else if (isCompact) 6.dp else 10.dp) * splitScale).coerceIn(2.dp, 10.dp)
-
-        val centerPlaySize = ((if (isVeryCompact) 42.dp else if (isCompact) 54.dp else 66.dp) * splitScale).coerceIn(32.dp, 66.dp)
-        val centerPlayIconSize = (centerPlaySize * 0.55f).coerceIn(18.dp, 36.dp)
-        val centerSkipSize = ((if (isVeryCompact) 32.dp else if (isCompact) 40.dp else 50.dp) * splitScale).coerceIn(24.dp, 50.dp)
-        val centerSkipIconSize = (centerSkipSize * 0.55f).coerceIn(13.dp, 26.dp)
-        val centerSpacing = ((if (isVeryCompact) 12.dp else if (isCompact) 18.dp else 28.dp) * splitScale).coerceIn(8.dp, 28.dp)
-
-        val bottomPillBtnSize = ((if (isVeryCompact) 24.dp else if (isCompact) 30.dp else 38.dp) * splitScale).coerceIn(18.dp, 38.dp)
-        val bottomPillIconSize = (bottomPillBtnSize * 0.55f).coerceIn(10.dp, 21.dp)
-        val bottomPillPaddingH = ((if (isVeryCompact) 3.dp else if (isCompact) 5.dp else 8.dp) * splitScale).coerceIn(2.dp, 8.dp)
-        val bottomPillPaddingV = ((if (isVeryCompact) 2.dp else if (isCompact) 3.dp else 4.dp) * splitScale).coerceIn(1.dp, 4.dp)
-        val bottomPillSpacing = ((if (isVeryCompact) 1.dp else 3.dp) * splitScale).coerceIn(0.5.dp, 4.dp)
-        val speedTextSize = if (isVeryCompact) 10.sp else if (isCompact) 11.5.sp else 13.sp
-        val speedPaddingH = ((if (isVeryCompact) 4.dp else if (isCompact) 8.dp else 12.dp) * splitScale).coerceIn(3.dp, 12.dp)
-        val speedPaddingV = ((if (isVeryCompact) 2.dp else if (isCompact) 4.dp else 8.dp) * splitScale).coerceIn(1.dp, 8.dp)
-        val timelineTextSize = if (isVeryCompact) 10.5.sp else if (isCompact) 12.sp else 14.sp
-        val timelineSpacing = ((if (isVeryCompact) 4.dp else if (isCompact) 8.dp else 14.dp) * splitScale).coerceIn(3.dp, 14.dp)
-        val outerPaddingH = ((if (isVeryCompact) 6.dp else if (isCompact) 10.dp else 16.dp) * splitScale).coerceIn(4.dp, 16.dp)
-        val outerPaddingV = ((if (isVeryCompact) 4.dp else if (isCompact) 8.dp else 10.dp) * splitScale).coerceIn(3.dp, 10.dp)
-
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(horizontal = outerPaddingH, vertical = outerPaddingV)
         ) {
-            // Top Bar: Back button, Marquee Title, Dialogue Booster, Subtitle (CC), Audio Track
-            Row(
+            val minDim = minOf(maxWidth, maxHeight)
+            val maxDim = maxOf(maxWidth, maxHeight)
+            // Dynamic scale factor derived continuously from screen width and height
+            val dynamicScale = ((minDim / 380.dp) * 0.65f + (maxDim / 820.dp) * 0.35f).coerceIn(0.6f, 1.4f) * splitScale
+
+            val topBtnSize = (40.dp * dynamicScale).coerceIn(24.dp, 54.dp)
+            val topIconSize = topBtnSize * 0.52f
+            val titleFontSize = (15f * dynamicScale).coerceIn(11f, 18f).sp
+            val topSpacing = (12.dp * dynamicScale).coerceIn(4.dp, 20.dp)
+            val topBtnSpacing = (8.dp * dynamicScale).coerceIn(3.dp, 14.dp)
+
+            val centerPlaySize = (64.dp * dynamicScale).coerceIn(40.dp, 84.dp)
+            val centerPlayIconSize = centerPlaySize * 0.55f
+            val centerSkipSize = (48.dp * dynamicScale).coerceIn(30.dp, 64.dp)
+            val centerSkipIconSize = centerSkipSize * 0.55f
+            val centerSpacing = (24.dp * dynamicScale).coerceIn(10.dp, 36.dp)
+
+            val bottomPillBtnSize = (36.dp * dynamicScale).coerceIn(24.dp, 48.dp)
+            val bottomPillIconSize = bottomPillBtnSize * 0.55f
+            val bottomPillPaddingH = (7.dp * dynamicScale).coerceIn(3.dp, 12.dp)
+            val bottomPillPaddingV = (4.dp * dynamicScale).coerceIn(2.dp, 6.dp)
+            val bottomPillSpacing = (3.dp * dynamicScale).coerceIn(1.dp, 6.dp)
+            val speedTextSize = (12f * dynamicScale).coerceIn(9.5f, 15f).sp
+            val speedPaddingH = (10.dp * dynamicScale).coerceIn(4.dp, 14.dp)
+            val speedPaddingV = (4.dp * dynamicScale).coerceIn(2.dp, 8.dp)
+            val timelineTextSize = (13f * dynamicScale).coerceIn(10f, 16f).sp
+            val timelineSpacing = (10.dp * dynamicScale).coerceIn(4.dp, 16.dp)
+            val outerPaddingH = (14.dp * dynamicScale).coerceIn(6.dp, 24.dp)
+            val outerPaddingV = (10.dp * dynamicScale).coerceIn(4.dp, 18.dp)
+
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = if (isVeryCompact) 0.dp else 4.dp)
-                    .align(Alignment.TopCenter),
-                verticalAlignment = Alignment.CenterVertically
+                    .fillMaxSize()
+                    .padding(horizontal = outerPaddingH, vertical = outerPaddingV)
             ) {
-                IconButton(
-                    onClick = onClose,
+                // Top Bar: Back button, Marquee Title, Dialogue Booster, Subtitle (CC), Audio Track
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = if (dynamicScale < 0.75f) 0.dp else 4.dp)
+                        .align(Alignment.TopCenter),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = onClose,
                     modifier = Modifier
                         .size(topBtnSize)
                         .playerGlass(CircleShape)
@@ -1166,6 +1186,25 @@ private fun PlayerControlsOverlay(
                     Icon(
                         imageVector = Icons.Default.MusicNote,
                         contentDescription = stringResource(R.string.audio_tracks),
+                        tint = Color.White,
+                        modifier = Modifier.size(topIconSize)
+                    )
+                }
+
+                Spacer(Modifier.width(topBtnSpacing))
+
+                // More Options (Three Dot) Button
+                IconButton(
+                    onClick = {
+                        onInteraction()
+                    },
+                    modifier = Modifier
+                        .size(topBtnSize)
+                        .playerGlass(CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "More options",
                         tint = Color.White,
                         modifier = Modifier.size(topIconSize)
                     )
@@ -1469,6 +1508,7 @@ private fun PlayerControlsOverlay(
             }
         }
     }
+}
 }
 
 // -----------------------------------------------------------------------------------------
@@ -1860,19 +1900,31 @@ private fun TracksTabContent(
         // -------------------------------------------------------------------------
         // Subtitle Delay Control (Player Seekbar Style, Range: -5.0s .. +5.0s)
         // -------------------------------------------------------------------------
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(14.dp))
         HorizontalDivider(color = ExcavPalette.Line.copy(alpha = 0.5f), thickness = 0.8.dp)
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(14.dp))
 
-        val currentDelaySec = remember(state.subtitleDelayMs) {
-            (state.subtitleDelayMs / 100.0).roundToInt() / 10.0
+        var sliderValue by remember(state.subtitleDelayMs) {
+            mutableFloatStateOf((state.subtitleDelayMs / 1000f).coerceIn(-5.0f, 5.0f))
+        }
+        var isSliding by remember { mutableStateOf(false) }
+        var moveCount by remember { mutableIntStateOf(0) }
+        var debounceJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+        val scope = rememberCoroutineScope()
+
+        val currentDelaySec = remember(state.subtitleDelayMs, sliderValue, isSliding) {
+            if (isSliding) {
+                (sliderValue * 10).roundToInt() / 10.0
+            } else {
+                (state.subtitleDelayMs / 100.0).roundToInt() / 10.0
+            }
         }
 
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             // Header Row: Label & Value / Reset
             Row(
@@ -1906,7 +1958,7 @@ private fun TracksTabContent(
                         )
                     )
 
-                    if (state.subtitleDelayMs != 0L) {
+                    if (state.subtitleDelayMs != 0L || sliderValue != 0f) {
                         Text(
                             text = "Reset",
                             color = ExcavPalette.Primary,
@@ -1916,7 +1968,11 @@ private fun TracksTabContent(
                             ),
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
-                                .clickable { vm.setSubtitleDelay(0L) }
+                                .clickable {
+                                    debounceJob?.cancel()
+                                    sliderValue = 0f
+                                    vm.setSubtitleDelay(0L)
+                                }
                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                         )
                     }
@@ -1924,21 +1980,37 @@ private fun TracksTabContent(
             }
 
             // Player seekbar style Slider (-5.0s .. +5.0s)
-            Slider(
-                value = (state.subtitleDelayMs / 1000f).coerceIn(-5.0f, 5.0f),
+            ExcavSleekSlider(
+                value = sliderValue,
                 onValueChange = { newVal ->
-                    val roundedMs = ((newVal * 10).roundToInt() * 100L).coerceIn(-5000L, 5000L)
-                    vm.setSubtitleDelay(roundedMs)
+                    sliderValue = newVal
+                    moveCount++
+                    if (moveCount > 1) {
+                        debounceJob?.cancel()
+                        debounceJob = scope.launch {
+                            delay(500L)
+                            val roundedMs = ((newVal * 10).roundToInt() * 100L).coerceIn(-5000L, 5000L)
+                            vm.setSubtitleDelay(roundedMs)
+                        }
+                    }
+                },
+                onValueChangeStarted = {
+                    isSliding = true
+                    moveCount = 0
+                    debounceJob?.cancel()
+                },
+                onValueChangeFinished = {
+                    if (moveCount <= 1) {
+                        debounceJob?.cancel()
+                        val roundedMs = ((sliderValue * 10).roundToInt() * 100L).coerceIn(-5000L, 5000L)
+                        vm.setSubtitleDelay(roundedMs)
+                    }
+                    isSliding = false
+                    moveCount = 0
                 },
                 valueRange = -5.0f..5.0f,
-                colors = SliderDefaults.colors(
-                    thumbColor = Color.White,
-                    activeTrackColor = ExcavPalette.Primary,
-                    inactiveTrackColor = Color.White.copy(alpha = 0.15f)
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(26.dp)
+                showZeroMarker = false,
+                modifier = Modifier.fillMaxWidth()
             )
 
             // Range markers (-5s, 0s, +5s)
@@ -1964,68 +2036,41 @@ private fun TracksTabContent(
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp)
                 )
             }
-
-            // Centered -0.1s and +0.1s adjustment buttons
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp, bottom = 4.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Surface(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .border(1.dp, ExcavPalette.Line, RoundedCornerShape(12.dp))
-                        .clickable {
-                            val newMs = (state.subtitleDelayMs - 100L).coerceAtLeast(-5000L)
-                            vm.setSubtitleDelay(newMs)
-                        },
-                    color = ExcavPalette.SurfaceCard
-                ) {
-                    Text(
-                        text = "-0.1s",
-                        color = ExcavPalette.Text,
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 12.sp
-                        ),
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
-                    )
-                }
-
-                Spacer(Modifier.width(16.dp))
-
-                Surface(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .border(1.dp, ExcavPalette.Line, RoundedCornerShape(12.dp))
-                        .clickable {
-                            val newMs = (state.subtitleDelayMs + 100L).coerceAtMost(5000L)
-                            vm.setSubtitleDelay(newMs)
-                        },
-                    color = ExcavPalette.SurfaceCard
-                ) {
-                    Text(
-                        text = "+0.1s",
-                        color = ExcavPalette.Text,
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 12.sp
-                        ),
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
-                    )
-                }
-            }
         }
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(12.dp))
 
-        // Action Button: Add subtitles (centered, sized to text only)
-        Box(
+        // Action Row: -0.1s, Add subtitles, +0.1s
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            contentAlignment = Alignment.Center
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            Surface(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .border(1.dp, ExcavPalette.Line, RoundedCornerShape(12.dp))
+                    .clickable {
+                        debounceJob?.cancel()
+                        val newMs = (state.subtitleDelayMs - 100L).coerceAtLeast(-5000L)
+                        sliderValue = (newMs / 1000f).coerceIn(-5.0f, 5.0f)
+                        vm.setSubtitleDelay(newMs)
+                    },
+                color = ExcavPalette.SurfaceCard
+            ) {
+                Text(
+                    text = "-0.1s",
+                    color = ExcavPalette.Text,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 12.sp
+                    ),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                )
+            }
+
+            Spacer(Modifier.width(12.dp))
+
             Surface(
                 modifier = Modifier
                     .clip(RoundedCornerShape(16.dp))
@@ -2054,6 +2099,31 @@ private fun TracksTabContent(
                     )
                 }
             }
+
+            Spacer(Modifier.width(12.dp))
+
+            Surface(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .border(1.dp, ExcavPalette.Line, RoundedCornerShape(12.dp))
+                    .clickable {
+                        debounceJob?.cancel()
+                        val newMs = (state.subtitleDelayMs + 100L).coerceAtMost(5000L)
+                        sliderValue = (newMs / 1000f).coerceIn(-5.0f, 5.0f)
+                        vm.setSubtitleDelay(newMs)
+                    },
+                color = ExcavPalette.SurfaceCard
+            ) {
+                Text(
+                    text = "+0.1s",
+                    color = ExcavPalette.Text,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 12.sp
+                    ),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                )
+            }
         }
     }
 }
@@ -2065,7 +2135,8 @@ private fun OnlineSubTabContent(
 ) {
     val onlineState by vm.onlineSubtitleState.collectAsStateWithLifecycle()
     val videoTitle = remember(state.currentVideo) {
-        state.currentVideo?.displayName?.substringBeforeLast('.').orEmpty()
+        val raw = state.currentVideo?.displayName.orEmpty()
+        com.excavplayer.subtitles.cleanVideoTitle(raw).formatted
     }
 
     LaunchedEffect(videoTitle) {
@@ -2878,3 +2949,11 @@ fun PlayerTimelineSection(
     }
 }
 
+private fun Context.findActivity(): Activity? {
+    var ctx = this
+    while (ctx is ContextWrapper) {
+        if (ctx is Activity) return ctx
+        ctx = ctx.baseContext
+    }
+    return null
+}

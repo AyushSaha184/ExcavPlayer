@@ -29,8 +29,10 @@ class StorageFileScanner @Inject constructor(
             "3gp", "ts", "m4v", "vob", "ogv", "f4v", "rmvb", "asf"
         )
         private val EXCLUDED_DIR_NAMES = setOf(
-            "data", "obb", ".thumbnails", ".trashed", ".trash", "cache"
+            "data", "obb", ".thumbnails", ".trashed", ".trash", "cache",
+            "private", "self", "knox", "enc_media", "lost.dir"
         )
+        private val SD_CARD_PATTERN = Regex("""^[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}$""")
     }
 
     fun getStorageRoots(): List<File> {
@@ -52,7 +54,10 @@ class StorageFileScanner @Inject constructor(
                     }
                     val root = parent?.parentFile
                     if (root != null && root.exists() && root.canRead() && !roots.contains(root)) {
-                        roots.add(root)
+                        val name = root.name.lowercase()
+                        if (name !in EXCLUDED_DIR_NAMES && !name.startsWith(".")) {
+                            roots.add(root)
+                        }
                     }
                 }
             }
@@ -64,7 +69,8 @@ class StorageFileScanner @Inject constructor(
                 val children = storageDir.listFiles()
                 if (children != null) {
                     for (c in children) {
-                        if (c.isDirectory && c.name != "emulated" && c.name != "self" && c.canRead() && !roots.contains(c)) {
+                        val name = c.name
+                        if (c.isDirectory && SD_CARD_PATTERN.matches(name) && c.canRead() && !roots.contains(c)) {
                             roots.add(c)
                         }
                     }
@@ -112,8 +118,12 @@ class StorageFileScanner @Inject constructor(
         outList: MutableList<VideoEntity>,
         depth: Int = 0
     ) {
-        if (depth > 25) return
-        if (dir.name in EXCLUDED_DIR_NAMES && (dir.parentFile?.name == "Android" || dir.name.startsWith("."))) {
+        if (depth > 30) return
+        val dirNameLower = dir.name.lowercase()
+        if (dirNameLower in EXCLUDED_DIR_NAMES || dir.name.startsWith(".")) {
+            return
+        }
+        if (dir.absolutePath.contains("/storage/private") || dirNameLower == "private") {
             return
         }
 

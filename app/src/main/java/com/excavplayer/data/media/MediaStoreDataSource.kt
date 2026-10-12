@@ -196,6 +196,9 @@ class MediaStoreDataSource @Inject constructor(
             if (dataColumn != -1 && !cursor.isNull(dataColumn)) {
                 val data = cursor.getString(dataColumn) ?: ""
                 if (data.isNotBlank()) {
+                    if (data.startsWith("/storage/private") || data.contains("/storage/private/")) {
+                        continue
+                    }
                     val lastSlash = data.lastIndexOf('/')
                     if (lastSlash > 0) {
                         folderPath = data.substring(0, lastSlash)
@@ -215,6 +218,10 @@ class MediaStoreDataSource @Inject constructor(
             if (folderName.isEmpty() && bucketNameColumn != -1 && !cursor.isNull(bucketNameColumn)) {
                 folderName = cursor.getString(bucketNameColumn) ?: "Internal Storage"
                 if (folderPath.isEmpty()) folderPath = "/storage/emulated/0/$folderName"
+            }
+
+            if (folderPath.startsWith("/storage/private") || folderName.equals("private", ignoreCase = true) || folderPath.contains("/private")) {
+                continue
             }
 
             videos.add(

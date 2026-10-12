@@ -59,6 +59,7 @@ import com.excavplayer.ui.components.RenameVideoDialog
 import com.excavplayer.ui.components.SectionTitle
 import com.excavplayer.ui.components.VideoOptionsMenu
 import com.excavplayer.ui.components.VideoPropertiesDialog
+import com.excavplayer.ui.folders.logic.FolderTreeManager
 import dev.chrisbanes.haze.hazeSource
 
 @Composable
@@ -110,40 +111,14 @@ fun FoldersScreen(
         selectedVideoIds = emptySet()
     }
 
-    fun normalizePath(raw: String?): String {
-        val trimmed = raw.orEmpty().trim().trimEnd('/')
-        return when {
-            trimmed.isEmpty() || trimmed == "/storage/emulated/0" || trimmed == "/storage/emulated" || trimmed.equals("Internal Storage", ignoreCase = true) -> "/storage/emulated/0"
-            trimmed.startsWith("/storage/emulated/0") -> trimmed
-            trimmed.startsWith("/storage/") -> trimmed
-            trimmed.startsWith("/") -> trimmed
-            else -> "/storage/emulated/0/$trimmed"
-        }
+    // Build the hierarchical directory tree from all detected video files
+    val tree = remember(videos) {
+        FolderTreeManager.buildTree(videos)
     }
 
     // Active directory path normalized
     val normCurrent = remember(selectedFolder) {
-        normalizePath(selectedFolder?.path)
-    }
-
-    val activeFolderVideos = remember(selectedFolder, folderVideos, folderVideosMap, videos) {
-        if (selectedFolder == null) {
-            emptyList()
-        } else if (folderVideos.isNotEmpty()) {
-            folderVideos.sortedWith(NaturalVideoComparator)
-        } else {
-            val currentNorm = normalizePath(selectedFolder.path)
-            val fromMap = folderVideosMap[currentNorm] ?: folderVideosMap[selectedFolder.name.lowercase()].orEmpty()
-            val list = if (fromMap.isNotEmpty()) {
-                fromMap
-            } else {
-                videos.filter {
-                    val vNorm = normalizePath(it.folderPath)
-                    vNorm == currentNorm || it.folderPath.equals(selectedFolder.path, ignoreCase = true)
-                }
-            }
-            list.sortedWith(NaturalVideoComparator)
-        }
+        selectedFolder?.path?.let { FolderTreeManager.normalizePath(it) } ?: FolderTreeManager.INTERNAL_STORAGE_ROOT
     }
 
     val isScrolled by remember {
@@ -155,28 +130,26 @@ fun FoldersScreen(
     val canGoBack = selectedFolder != null
 
     val selectPath: (String) -> Unit = { rawTarget ->
-        val targetPath = normalizePath(rawTarget)
-        if (targetPath == "/storage/emulated/0" || targetPath.isEmpty() || targetPath == "/storage/emulated") {
+        val targetPath = FolderTreeManager.normalizePath(rawTarget)
+        if (targetPath == FolderTreeManager.INTERNAL_STORAGE_ROOT || targetPath.isEmpty() || targetPath == "/storage/emulated") {
             onSelectFolder(null)
         } else {
-            val match = folders.find {
-                normalizePath(it.path) == targetPath || it.path == targetPath
-            }
-            if (match != null) {
-                onSelectFolder(match.copy(path = targetPath))
+            val node = tree.nodesByPath[targetPath]
+            if (node != null) {
+                onSelectFolder(node.toFolder())
             } else {
-                val hasChildren = folders.any { normalizePath(it.path).startsWith("$targetPath/") }
-                if (hasChildren) {
+                val match = folders.find { FolderTreeManager.normalizePath(it.path) == targetPath }
+                if (match != null) {
+                    onSelectFolder(match.copy(path = targetPath))
+                } else {
                     onSelectFolder(
                         Folder(
-                            name = targetPath.substringAfterLast('/'),
+                            name = FolderTreeManager.formatDirectoryName(targetPath),
                             path = targetPath,
                             videoCount = 0,
                             totalSizeBytes = 0L
                         )
                     )
-                } else {
-                    onSelectFolder(null)
                 }
             }
         }
@@ -184,19 +157,11 @@ fun FoldersScreen(
 
     val navigateUp: () -> Unit = {
         if (canGoBack) {
-            val parentPath = normCurrent.substringBeforeLast('/', "")
-            if (parentPath.isEmpty() || parentPath == "/storage/emulated" || parentPath == "/storage/emulated/0") {
+            val parentPath = FolderTreeManager.getParentPath(normCurrent)
+            if (parentPath == null || parentPath == FolderTreeManager.INTERNAL_STORAGE_ROOT) {
                 onSelectFolder(null)
             } else {
-                val hasAncestorVideos = folders.any {
-                    val p = normalizePath(it.path)
-                    p == parentPath || p.startsWith("$parentPath/")
-                }
-                if (hasAncestorVideos) {
-                    selectPath(parentPath)
-                } else {
-                    onSelectFolder(null)
-                }
+                selectPath(parentPath)
             }
         }
     }
@@ -223,8 +188,12 @@ fun FoldersScreen(
             modifier = Modifier.fillMaxSize()
         ) { currentFolder ->
             if (currentFolder == null) {
-                // Root View: Display all Library Folders with thumbnail and pill badges
+                // Root View: Display top-level directories containing video files and any root videos
                 val hazeState = LocalHazeState.current
+                val rootSubfolders = remember(tree) { FolderTreeManager.getSubfolders(tree, null) }
+                val rootDirectVideos = remember(tree) { FolderTreeManager.getDirectVideos(tree, null) }
+                val rootPreviews = remember(tree) { FolderTreeManager.getSubfolderPreviews(tree, null) }
+
                 LazyVerticalGrid(
                     state = gridState,
                     columns = GridCells.Adaptive(160.dp),
@@ -235,11 +204,7 @@ fun FoldersScreen(
                         .fillMaxSize()
                         .hazeSource(state = hazeState)
                 ) {
-                    item(span = { GridItemSpan(maxLineSpan) }, contentType = "section_header") {
-                        SectionTitle(stringResource(R.string.folders))
-                    }
-
-                    if (folders.isEmpty()) {
+                    if (rootSubfolders.isEmpty() && rootDirectVideos.isEmpty()) {
                         item(span = { GridItemSpan(maxLineSpan) }) {
                             Box(
                                 modifier = Modifier
@@ -254,36 +219,92 @@ fun FoldersScreen(
                             }
                         }
                     } else {
-                        gridItems(folders, key = { "root_folder_${it.path}" }, contentType = { "folder_card" }) { folder ->
-                            val normP = remember(folder.path) { normalizePath(folder.path) }
-                            val folderVids = folderVideosMap[normP] ?: folderVideosMap[folder.name.lowercase()].orEmpty()
-                            val isFolderSelected = folder.path in selectedFolderPaths
+                        if (rootSubfolders.isNotEmpty()) {
+                            item(span = { GridItemSpan(maxLineSpan) }, contentType = "section_header") {
+                                SectionTitle(stringResource(R.string.folders))
+                            }
 
-                            FolderCard(
-                                folder = folder,
-                                videos = folderVids,
-                                isSelected = isFolderSelected,
-                                isSelectionMode = isSelectionMode,
-                                onClick = {
-                                    if (isSelectionMode) {
+                            gridItems(rootSubfolders, key = { "root_folder_${it.path}" }, contentType = { "folder_card" }) { folder ->
+                                val folderVids = rootPreviews[folder.path] ?: folderVideosMap[folder.path].orEmpty()
+                                val isFolderSelected = folder.path in selectedFolderPaths
+
+                                FolderCard(
+                                    folder = folder,
+                                    videos = folderVids,
+                                    isSelected = isFolderSelected,
+                                    isSelectionMode = isSelectionMode,
+                                    onClick = {
+                                        if (isSelectionMode) {
+                                            selectedFolderPaths = if (isFolderSelected) {
+                                                selectedFolderPaths - folder.path
+                                            } else {
+                                                selectedFolderPaths + folder.path
+                                            }
+                                        } else {
+                                            onSelectFolder(folder)
+                                        }
+                                    },
+                                    onLongClick = {
                                         selectedFolderPaths = if (isFolderSelected) {
                                             selectedFolderPaths - folder.path
                                         } else {
                                             selectedFolderPaths + folder.path
                                         }
-                                    } else {
-                                        onSelectFolder(folder)
+                                    },
+                                    modifier = Modifier.animateItem()
+                                )
+                            }
+                        }
+
+                        if (rootDirectVideos.isNotEmpty()) {
+                            item(span = { GridItemSpan(maxLineSpan) }, contentType = "videos_header") {
+                                SectionTitle(stringResource(R.string.videos))
+                            }
+
+                            gridItems(rootDirectVideos, key = { "root_video_${it.id}" }, span = { GridItemSpan(maxLineSpan) }, contentType = { "video_row" }) { video ->
+                                val isVideoSelected = video.id in selectedVideoIds
+                                ListVideoRow(
+                                    video = video,
+                                    isSelected = isVideoSelected,
+                                    isSelectionMode = isSelectionMode,
+                                    onClick = {
+                                        if (isSelectionMode) {
+                                            selectedVideoIds = if (isVideoSelected) {
+                                                selectedVideoIds - video.id
+                                            } else {
+                                                selectedVideoIds + video.id
+                                            }
+                                        } else {
+                                            onPlay(video, rootDirectVideos)
+                                        }
+                                    },
+                                    onLongClick = {
+                                        selectedVideoIds = if (isVideoSelected) {
+                                            selectedVideoIds - video.id
+                                        } else {
+                                            selectedVideoIds + video.id
+                                        }
+                                    },
+                                    modifier = Modifier.animateItem(),
+                                    onMoreClick = if (!isSelectionMode) { { selectedVideoForMenu = video } } else null,
+                                    dropdownMenu = {
+                                        if (!isSelectionMode && selectedVideoForMenu?.id == video.id) {
+                                            val isFav = favorites.any { it.id == video.id }
+                                            VideoOptionsMenu(
+                                                expanded = true,
+                                                video = video,
+                                                isFavorite = isFav,
+                                                onDismiss = { selectedVideoForMenu = null },
+                                                onToggleFavorite = { onToggleFavorite(video) },
+                                                onAddToPlaylist = { playlistVideoTarget = video },
+                                                onRename = { renameVideoTarget = video },
+                                                onProperties = { propertiesVideo = video },
+                                                onDelete = { onDeleteVideo(video) }
+                                            )
+                                        }
                                     }
-                                },
-                                onLongClick = {
-                                    selectedFolderPaths = if (isFolderSelected) {
-                                        selectedFolderPaths - folder.path
-                                    } else {
-                                        selectedFolderPaths + folder.path
-                                    }
-                                },
-                                modifier = Modifier.animateItem()
-                            )
+                                )
+                            }
                         }
                     }
 
@@ -294,27 +315,10 @@ fun FoldersScreen(
             } else {
                 // Selected Folder View: Display direct subfolders and individual videos in this directory
                 val hazeState = LocalHazeState.current
-                val currentNorm = remember(currentFolder.path) { normalizePath(currentFolder.path) }
-                val directVideos = activeFolderVideos
-                val directSubfolders = remember(folders, currentNorm) {
-                    folders.mapNotNull { f ->
-                        val fNorm = normalizePath(f.path)
-                        if (fNorm.startsWith("$currentNorm/") && fNorm != currentNorm) {
-                            val relative = fNorm.removePrefix("$currentNorm/")
-                            val nextSegment = relative.substringBefore('/')
-                            val directSubPath = "$currentNorm/$nextSegment"
-                            val isDirect = !relative.contains('/')
-                            if (isDirect) f else {
-                                Folder(
-                                    name = nextSegment,
-                                    path = directSubPath,
-                                    videoCount = 0,
-                                    totalSizeBytes = 0L
-                                )
-                            }
-                        } else null
-                    }.distinctBy { normalizePath(it.path) }
-                }
+                val currentNorm = remember(currentFolder.path) { FolderTreeManager.normalizePath(currentFolder.path) }
+                val directSubfolders = remember(tree, currentNorm) { FolderTreeManager.getSubfolders(tree, currentNorm) }
+                val directVideos = remember(tree, currentNorm) { FolderTreeManager.getDirectVideos(tree, currentNorm) }
+                val previews = remember(tree, currentNorm) { FolderTreeManager.getSubfolderPreviews(tree, currentNorm) }
 
                 val folderGridState = remember(currentFolder.path) { LazyGridState() }
 
@@ -335,8 +339,7 @@ fun FoldersScreen(
                         }
 
                         gridItems(directSubfolders, key = { "sub_folder_${it.path}" }, contentType = { "folder_card" }) { subFolder ->
-                            val normP = remember(subFolder.path) { normalizePath(subFolder.path) }
-                            val subFolderVids = folderVideosMap[normP] ?: folderVideosMap[subFolder.name.lowercase()].orEmpty()
+                            val subFolderVids = previews[subFolder.path] ?: folderVideosMap[subFolder.path].orEmpty()
                             val isFolderSelected = subFolder.path in selectedFolderPaths
 
                             FolderCard(
@@ -455,7 +458,7 @@ fun FoldersScreen(
             dropdownMenu = {
                 if (isSelectionMode) {
                     if (selectedFolder == null) {
-                        val selFolders = folders.filter { it.path in selectedFolderPaths }
+                        val selFolders = tree.rootVolumes.flatMap { it.subfolders.values }.map { it.toFolder() }.filter { it.path in selectedFolderPaths }.ifEmpty { folders.filter { it.path in selectedFolderPaths } }
                         val isFav = selFolders.size == 1 && favoriteFolders.any { it.path == selFolders.first().path }
                         val allFav = selFolders.isNotEmpty() && selFolders.all { f -> favoriteFolders.any { it.path == f.path } }
                         BatchFolderOptionsMenu(
@@ -482,7 +485,7 @@ fun FoldersScreen(
                             }
                         )
                     } else {
-                        val selVideos = activeFolderVideos.filter { it.id in selectedVideoIds }
+                        val selVideos = videos.filter { it.id in selectedVideoIds }
                         val allFav = selVideos.isNotEmpty() && selVideos.all { v -> favorites.any { it.id == v.id } || v.isFavorite }
                         BatchVideoOptionsMenu(
                             expanded = isOverflowMenuOpen,
@@ -586,7 +589,7 @@ fun FoldersScreen(
             playlists = playlists,
             onSelectPlaylist = { playlistId -> 
                 if (selectedVideoIds.isNotEmpty()) {
-                    val selVideos = activeFolderVideos.filter { it.id in selectedVideoIds }
+                    val selVideos = videos.filter { it.id in selectedVideoIds }
                     selVideos.forEach { onAddToPlaylist(playlistId, it) }
                     selectedVideoIds = emptySet()
                 } else {
