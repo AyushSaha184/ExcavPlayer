@@ -53,8 +53,12 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.animation.core.snap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -484,99 +488,146 @@ fun BottomNav(
             }
         } else {
             // SmoothBottomNavigation: unselected = icon only, selected = icon + text in active capsule
-            Row(
+            var tabPositions by remember { mutableStateOf(mapOf<MainTab, Pair<Float, Float>>()) }
+            val density = LocalDensity.current
+            val currentBounds = tabPositions[selected]
+            var hasInitialPosition by remember { mutableStateOf(false) }
+            if (currentBounds != null && !hasInitialPosition) {
+                hasInitialPosition = true
+            }
+
+            val targetOffsetDp = currentBounds?.let { with(density) { it.first.toDp() } } ?: 0.dp
+            val targetWidthDp = currentBounds?.let { with(density) { it.second.toDp() } } ?: 0.dp
+
+            val animatedOffset by animateDpAsState(
+                targetValue = targetOffsetDp,
+                animationSpec = if (!hasInitialPosition) snap() else spring(
+                    dampingRatio = 0.76f,
+                    stiffness = Spring.StiffnessMediumLow
+                ),
+                label = "indicatorOffset"
+            )
+            val animatedWidth by animateDpAsState(
+                targetValue = targetWidthDp,
+                animationSpec = if (!hasInitialPosition) snap() else spring(
+                    dampingRatio = 0.76f,
+                    stiffness = Spring.StiffnessMediumLow
+                ),
+                label = "indicatorWidth"
+            )
+
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 3.dp, vertical = 3.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(horizontal = 3.dp, vertical = 3.dp)
             ) {
-                entries.forEach { tab ->
-                    val isSelected = selected == tab
-                    val pillShape = CircleShape
-                    val contentAlpha by animateFloatAsState(
-                        targetValue = if (isSelected) 1.0f else 0.60f,
-                        animationSpec = tween(160),
-                        label = "tabAlpha"
-                    )
-                    val iconScale by animateFloatAsState(
-                        targetValue = if (isSelected) 1.10f else 1.0f,
-                        animationSpec = spring(
-                            dampingRatio = 0.70f,
-                            stiffness = Spring.StiffnessMediumLow
-                        ),
-                        label = "tabIconScale"
-                    )
-
-                    Row(
+                // Single sliding highlight capsule indicator
+                if (hasInitialPosition && animatedWidth > 0.dp) {
+                    Box(
                         modifier = Modifier
+                            .offset(x = animatedOffset)
+                            .width(animatedWidth)
                             .fillMaxHeight()
-                            .clip(pillShape)
-                            .then(
-                                if (isSelected) {
-                                    Modifier
-                                        .background(Color.White.copy(alpha = 0.18f))
-                                        .border(
-                                            width = 0.5.dp,
-                                            color = Color.White.copy(alpha = 0.30f),
-                                            shape = pillShape
-                                        )
-                                } else Modifier
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.18f))
+                            .border(
+                                width = 0.5.dp,
+                                color = Color.White.copy(alpha = 0.30f),
+                                shape = CircleShape
                             )
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ) { onSelect(tab) }
-                            .padding(
-                                horizontal = if (isSelected) 20.dp else 14.dp
-                            )
-                            .animateContentSize(
-                                animationSpec = spring(
-                                    dampingRatio = 0.72f,
-                                    stiffness = Spring.StiffnessMediumLow
-                                )
-                            ),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            imageVector = tab.icon,
-                            contentDescription = tab.label,
-                            tint = Color.White.copy(alpha = contentAlpha),
-                            modifier = Modifier
-                                .size(24.dp)
-                                .graphicsLayer {
-                                    scaleX = iconScale
-                                    scaleY = iconScale
-                                }
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    entries.forEach { tab ->
+                        val isSelected = selected == tab
+                        val pillShape = CircleShape
+                        val contentAlpha by animateFloatAsState(
+                            targetValue = if (isSelected) 1.0f else 0.60f,
+                            animationSpec = tween(160),
+                            label = "tabAlpha"
                         )
-                        AnimatedVisibility(
-                            visible = isSelected,
-                            enter = fadeIn(tween(160)) + expandHorizontally(
-                                animationSpec = spring(
-                                    dampingRatio = 0.72f,
-                                    stiffness = Spring.StiffnessMediumLow
-                                )
+                        val iconScale by animateFloatAsState(
+                            targetValue = if (isSelected) 1.10f else 1.0f,
+                            animationSpec = spring(
+                                dampingRatio = 0.70f,
+                                stiffness = Spring.StiffnessMediumLow
                             ),
-                            exit = fadeOut(tween(100)) + shrinkHorizontally(
-                                animationSpec = spring(
-                                    dampingRatio = 0.72f,
-                                    stiffness = Spring.StiffnessMediumLow
+                            label = "tabIconScale"
+                        )
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .clip(pillShape)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { onSelect(tab) }
+                                .padding(
+                                    horizontal = if (isSelected) 20.dp else 14.dp
                                 )
-                            )
+                                .animateContentSize(
+                                    animationSpec = spring(
+                                        dampingRatio = 0.72f,
+                                        stiffness = Spring.StiffnessMediumLow
+                                    )
+                                )
+                                .onGloballyPositioned { coordinates ->
+                                    val pos = coordinates.positionInParent()
+                                    val newX = pos.x
+                                    val newW = coordinates.size.width.toFloat()
+                                    val existing = tabPositions[tab]
+                                    if (existing == null || existing.first != newX || existing.second != newW) {
+                                        tabPositions = tabPositions + (tab to (newX to newW))
+                                    }
+                                },
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    text = tab.label,
-                                    color = Color.White.copy(alpha = contentAlpha),
-                                    style = MaterialTheme.typography.labelMedium.copy(
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Bold
-                                    ),
-                                    maxLines = 1,
-                                    softWrap = false
+                            Icon(
+                                imageVector = tab.icon,
+                                contentDescription = tab.label,
+                                tint = Color.White.copy(alpha = contentAlpha),
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .graphicsLayer {
+                                        scaleX = iconScale
+                                        scaleY = iconScale
+                                    }
+                            )
+                            AnimatedVisibility(
+                                visible = isSelected,
+                                enter = fadeIn(tween(160)) + expandHorizontally(
+                                    animationSpec = spring(
+                                        dampingRatio = 0.72f,
+                                        stiffness = Spring.StiffnessMediumLow
+                                    )
+                                ),
+                                exit = fadeOut(tween(100)) + shrinkHorizontally(
+                                    animationSpec = spring(
+                                        dampingRatio = 0.72f,
+                                        stiffness = Spring.StiffnessMediumLow
+                                    )
                                 )
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        text = tab.label,
+                                        color = Color.White.copy(alpha = contentAlpha),
+                                        style = MaterialTheme.typography.labelMedium.copy(
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Bold
+                                        ),
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                }
                             }
                         }
                     }
@@ -2718,6 +2769,7 @@ fun ExcavSleekSlider(
     onValueChange: (Float) -> Unit,
     valueRange: ClosedFloatingPointRange<Float>,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     onValueChangeStarted: (() -> Unit)? = null,
     onValueChangeFinished: (() -> Unit)? = null,
     bufferedFraction: Float = 0f,
@@ -2744,6 +2796,7 @@ fun ExcavSleekSlider(
                 onValueChangeFinished?.invoke()
             },
             valueRange = valueRange,
+            enabled = enabled,
             colors = SliderDefaults.colors(
                 thumbColor = Color.White,
                 activeTrackColor = ExcavPalette.Blue,
@@ -2754,15 +2807,15 @@ fun ExcavSleekSlider(
                     modifier = Modifier
                         .size(17.dp)
                         .clip(CircleShape)
-                        .background(Color.White)
-                        .border(2.5.dp, ExcavPalette.Blue, CircleShape),
+                        .background(if (enabled) Color.White else Color.White.copy(alpha = 0.35f))
+                        .border(2.5.dp, if (enabled) ExcavPalette.Blue else ExcavPalette.Blue.copy(alpha = 0.35f), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Box(
                         modifier = Modifier
                             .size(5.dp)
                             .clip(CircleShape)
-                            .background(ExcavPalette.Blue)
+                            .background(if (enabled) ExcavPalette.Blue else ExcavPalette.Blue.copy(alpha = 0.35f))
                     )
                 }
             },

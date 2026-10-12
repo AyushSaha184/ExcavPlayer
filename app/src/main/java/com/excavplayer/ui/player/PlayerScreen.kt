@@ -585,6 +585,7 @@ fun PlayerScreen(
                 }
             },
             update = { playerView ->
+                val currentVidId = state.currentVideo?.id
                 playerView.keepScreenOn = state.playback.isPlaying
                 playerView.resizeMode = resizeMode
                 applySubtitleStyles(playerView.subtitleView, settings)
@@ -3152,49 +3153,25 @@ private fun MoreOptionsSheet(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 16.dp)
+            .padding(horizontal = 16.dp, vertical = 14.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "More Options",
-                color = ExcavPalette.Text,
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
-                )
-            )
-            IconButton(
-                onClick = onDismiss,
-                modifier = Modifier.size(28.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "Close",
-                    tint = ExcavPalette.TextMuted,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-        }
+        Text(
+            text = "More Options",
+            color = ExcavPalette.Text,
+            style = MaterialTheme.typography.titleMedium.copy(
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp
+            ),
+            modifier = Modifier.padding(bottom = 6.dp)
+        )
 
         MoreOptionItem(
-            icon = Icons.Default.GraphicEq,
             title = "Volume Equalizer",
-            subtitle = "Custom, Balanced, Bass Boost",
             onClick = onOpenEqualizer
         )
 
-        Spacer(Modifier.height(8.dp))
-
         MoreOptionItem(
-            icon = Icons.Default.Subtitles,
             title = "Subtitle Customization",
-            subtitle = "Color, size, border & background",
             onClick = onOpenSubtitleCustomization
         )
     }
@@ -3202,58 +3179,24 @@ private fun MoreOptionsSheet(
 
 @Composable
 private fun MoreOptionItem(
-    icon: ImageVector,
     title: String,
-    subtitle: String,
     onClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(Color.White.copy(alpha = 0.05f))
-            .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(vertical = 11.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .clip(CircleShape)
-                .background(ExcavPalette.Primary.copy(alpha = 0.18f))
-                .border(1.dp, ExcavPalette.Primary.copy(alpha = 0.35f), CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = ExcavPalette.Primary,
-                modifier = Modifier.size(19.dp)
+        Text(
+            text = title,
+            color = ExcavPalette.Text,
+            style = MaterialTheme.typography.bodyLarge.copy(
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 14.5.sp
             )
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = title,
-                color = ExcavPalette.Text,
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp
-                )
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                text = subtitle,
-                color = ExcavPalette.TextMuted,
-                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 11.5.sp)
-            )
-        }
-        Icon(
-            imageVector = Icons.Default.ChevronRight,
-            contentDescription = null,
-            tint = ExcavPalette.TextMuted,
-            modifier = Modifier.size(20.dp)
         )
     }
 }
@@ -3540,7 +3483,7 @@ private fun CustomEqualizerTabContent(
                     ),
                     modifier = Modifier.width(62.dp)
                 )
-                Slider(
+                ExcavSleekSlider(
                     value = level.toFloat(),
                     onValueChange = { newVal ->
                         val updated = levels.toMutableList()
@@ -3548,16 +3491,8 @@ private fun CustomEqualizerTabContent(
                         onUpdateBandLevels(updated.joinToString(","))
                     },
                     valueRange = -10f..10f,
-                    steps = 19,
                     enabled = isEnabled,
-                    colors = SliderDefaults.colors(
-                        thumbColor = ExcavPalette.Primary,
-                        activeTrackColor = ExcavPalette.Primary,
-                        inactiveTrackColor = Color.White.copy(alpha = 0.15f),
-                        disabledThumbColor = ExcavPalette.TextMuted.copy(alpha = 0.4f),
-                        disabledActiveTrackColor = ExcavPalette.TextMuted.copy(alpha = 0.2f),
-                        disabledInactiveTrackColor = Color.White.copy(alpha = 0.08f)
-                    ),
+                    showZeroMarker = true,
                     modifier = Modifier.weight(1f)
                 )
                 Text(
@@ -3609,6 +3544,7 @@ private fun BalancedEqualizerTabContent(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
             .padding(vertical = 4.dp)
     ) {
         if (!isEnabled) {
@@ -3639,45 +3575,13 @@ private fun BalancedEqualizerTabContent(
                 .padding(14.dp)
         ) {
             Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .background(ExcavPalette.Primary.copy(alpha = 0.2f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.GraphicEq,
-                            contentDescription = null,
-                            tint = ExcavPalette.Primary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    Spacer(Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            text = "Balanced Acoustic Profile",
-                            color = ExcavPalette.Text,
-                            style = MaterialTheme.typography.bodyLarge.copy(
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 14.sp
-                            )
-                        )
-                        Text(
-                            text = "Optimized for all video genres",
-                            color = ExcavPalette.TextMuted,
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp)
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(12.dp))
-
                 Text(
-                    text = "Tuned for reference studio playback with pristine vocal clarity, natural background atmosphere, and balanced high-frequency sparkle without ear fatigue.",
-                    color = ExcavPalette.TextMuted,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp, lineHeight = 17.sp)
+                    text = "Balanced Acoustic Profile",
+                    color = ExcavPalette.Text,
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.5.sp
+                    )
                 )
 
                 Spacer(Modifier.height(14.dp))
@@ -3705,6 +3609,7 @@ private fun BassBoostEqualizerTabContent(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
             .padding(vertical = 4.dp)
     ) {
         if (!isEnabled) {
@@ -3735,45 +3640,13 @@ private fun BassBoostEqualizerTabContent(
                 .padding(14.dp)
         ) {
             Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .background(ExcavPalette.Primary.copy(alpha = 0.2f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.GraphicEq,
-                            contentDescription = null,
-                            tint = ExcavPalette.Primary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    Spacer(Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            text = "Cinema Bass Boost",
-                            color = ExcavPalette.Text,
-                            style = MaterialTheme.typography.bodyLarge.copy(
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 14.sp
-                            )
-                        )
-                        Text(
-                            text = "Heavy low-end resonance",
-                            color = ExcavPalette.TextMuted,
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp)
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(10.dp))
-
                 Text(
-                    text = "Delivers high-impact low-frequency punch, explosive movie rumbles, and warm acoustic fullness through deep bass frequency synthesis.",
-                    color = ExcavPalette.TextMuted,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp, lineHeight = 17.sp)
+                    text = "Cinema Bass Boost",
+                    color = ExcavPalette.Text,
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.5.sp
+                    )
                 )
 
                 Spacer(Modifier.height(14.dp))
@@ -3788,29 +3661,28 @@ private fun BassBoostEqualizerTabContent(
                     Text(
                         text = "Bass Intensity",
                         color = if (isEnabled) ExcavPalette.Text else ExcavPalette.TextMuted.copy(alpha = 0.6f),
-                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium)
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 12.sp
+                        )
                     )
                     Text(
                         text = "$strengthPercent%",
                         color = if (isEnabled) ExcavPalette.Primary else ExcavPalette.TextMuted.copy(alpha = 0.6f),
-                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold)
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
                     )
                 }
 
-                Slider(
+                Spacer(Modifier.height(4.dp))
+
+                ExcavSleekSlider(
                     value = strengthPercent.toFloat(),
                     onValueChange = { onUpdateBassStrength((it * 10).toInt()) },
                     valueRange = 0f..100f,
-                    steps = 9,
                     enabled = isEnabled,
-                    colors = SliderDefaults.colors(
-                        thumbColor = ExcavPalette.Primary,
-                        activeTrackColor = ExcavPalette.Primary,
-                        inactiveTrackColor = Color.White.copy(alpha = 0.15f),
-                        disabledThumbColor = ExcavPalette.TextMuted.copy(alpha = 0.4f),
-                        disabledActiveTrackColor = ExcavPalette.TextMuted.copy(alpha = 0.2f),
-                        disabledInactiveTrackColor = Color.White.copy(alpha = 0.08f)
-                    ),
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -3885,42 +3757,28 @@ private fun SubtitleCustomizationSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(
-                    onClick = onBack,
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
-                        tint = ExcavPalette.Text,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = "Subtitle Style",
-                    color = ExcavPalette.Text,
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
-                    )
-                )
-            }
             IconButton(
-                onClick = onDismiss,
+                onClick = onBack,
                 modifier = Modifier.size(28.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "Close",
-                    tint = ExcavPalette.TextMuted,
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = ExcavPalette.Text,
                     modifier = Modifier.size(18.dp)
                 )
             }
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = "Subtitle Style",
+                color = ExcavPalette.Text,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+            )
         }
 
         // Live Subtitle Preview Box
@@ -4049,27 +3907,16 @@ private fun SubtitleCustomizationSheet(
 
         Spacer(Modifier.height(16.dp))
 
-        // Border & Background Style Section (Strictly black only)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "BORDER & BACKGROUND",
-                color = ExcavPalette.TextMuted,
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp,
-                    letterSpacing = 0.5.sp
-                )
+        // Border & Background Style Section
+        Text(
+            text = "BORDER & BACKGROUND",
+            color = ExcavPalette.TextMuted,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.Bold,
+                fontSize = 11.sp,
+                letterSpacing = 0.5.sp
             )
-            Text(
-                text = "Black only",
-                color = ExcavPalette.Primary.copy(alpha = 0.85f),
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp)
-            )
-        }
+        )
         Spacer(Modifier.height(8.dp))
         val currentStyle = if (settings.subtitleBackgroundStyle.equals("Outline", ignoreCase = true)) "Border" else settings.subtitleBackgroundStyle
         val styleIndex = styles.indexOfFirst { it.first.equals(currentStyle, ignoreCase = true) }.coerceAtLeast(0)
@@ -4132,7 +3979,8 @@ private fun SegmentedAnimatedPillBar(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null
                             ) { onSelectIndex(index) }
-                            .padding(vertical = 7.dp),
+                            .defaultMinSize(minHeight = 36.dp)
+                            .padding(vertical = 8.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -4140,7 +3988,7 @@ private fun SegmentedAnimatedPillBar(
                             color = if (isSelected) Color.White else ExcavPalette.TextMuted,
                             style = MaterialTheme.typography.labelMedium.copy(
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                fontSize = 11.5.sp
+                                fontSize = 12.sp
                             ),
                             textAlign = TextAlign.Center
                         )
@@ -4154,7 +4002,14 @@ private fun SegmentedAnimatedPillBar(
             val tabWidth = constraints.maxWidth / tabCount
 
             val tabPlaceables = tabMeasurables.map {
-                it.measure(androidx.compose.ui.unit.Constraints.fixed(tabWidth, constraints.minHeight))
+                it.measure(
+                    androidx.compose.ui.unit.Constraints(
+                        minWidth = tabWidth,
+                        maxWidth = tabWidth,
+                        minHeight = 0,
+                        maxHeight = constraints.maxHeight
+                    )
+                )
             }
             val maxHeight = tabPlaceables.maxOfOrNull { it.height } ?: 0
 

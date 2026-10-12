@@ -421,13 +421,86 @@ fun BottomDock(
                             onCollapse = { isPlayerPillExpanded = false },
                             onOpenFullPlayer = {
                                 vm.setPlayerOpen(true)
-                                isPlayerPillExpanded = false
                             },
                             modifier = Modifier.fillMaxSize()
                         )
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun HorizontalSoundWaves(
+    isPlaying: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "horizontalWaves")
+    val t1 by infiniteTransition.animateFloat(
+        initialValue = 0.20f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(550, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "hWaveT1"
+    )
+    val t2 by infiniteTransition.animateFloat(
+        initialValue = 0.40f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(420, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "hWaveT2"
+    )
+    val t3 by infiniteTransition.animateFloat(
+        initialValue = 0.25f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(500, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "hWaveT3"
+    )
+    val t4 by infiniteTransition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 0.85f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(620, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "hWaveT4"
+    )
+    val playActivity by animateFloatAsState(
+        targetValue = if (isPlaying) 1f else 0.15f,
+        animationSpec = tween(300),
+        label = "hWaveActivity"
+    )
+
+    Canvas(modifier = modifier) {
+        val count = 4
+        val barWidthPx = 2.dp.toPx()
+        val barSpacingPx = 2.dp.toPx()
+        val totalWidth = count * barWidthPx + (count - 1) * barSpacingPx
+        val startX = (size.width - totalWidth) / 2f + barWidthPx / 2f
+        val centerY = size.height / 2f
+
+        val minH = 2.5.dp.toPx()
+        val maxH = size.height.coerceAtMost(10.dp.toPx())
+        val factors = listOf(t1, t2, t3, t4)
+
+        for (i in 0 until count) {
+            val x = startX + i * (barWidthPx + barSpacingPx)
+            val h = minH + (maxH - minH) * factors[i] * playActivity
+            drawLine(
+                color = Color.White,
+                start = Offset(x, centerY - h / 2f),
+                end = Offset(x, centerY + h / 2f),
+                strokeWidth = barWidthPx,
+                cap = StrokeCap.Round
+            )
         }
     }
 }
@@ -486,11 +559,6 @@ fun CircularAudioVisualizer(
         label = "visPlayActivity"
     )
 
-    val darkGrey = Color(0xFF454B58)
-    val mutedTrackGrey = Color(0xFF232730)
-    val deepDarkRed = Color(0xFF8B0000)
-    val crimsonRed = Color(0xFFC62828)
-
     Box(
         modifier = modifier.size(52.dp),
         contentAlignment = Alignment.Center
@@ -501,36 +569,44 @@ fun CircularAudioVisualizer(
 
             // 1. Minimal circular hairline track
             drawCircle(
-                color = mutedTrackGrey,
+                color = Color.White.copy(alpha = 0.20f),
                 radius = outerRadius,
                 center = center,
                 style = Stroke(width = 1.2.dp.toPx())
             )
 
-            // 2. Subtle dark red progress arc around the circumference
+            // 2. White circular progress indicator around the circumference showing elapsed time
             if (progress > 0.005f) {
                 drawArc(
-                    color = deepDarkRed,
+                    color = Color.White,
                     startAngle = -90f,
                     sweepAngle = 360f * progress,
                     useCenter = false,
                     topLeft = Offset(center.x - outerRadius, center.y - outerRadius),
                     size = androidx.compose.ui.geometry.Size(outerRadius * 2f, outerRadius * 2f),
-                    style = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round)
+                    style = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round)
                 )
             }
 
-            // 3. Central Minimal 4-Bar Soundwave
-            val barWidthPx = 3.dp.toPx()
-            val barSpacingPx = 3.5.dp.toPx()
+            // Inner white circle disc
+            val innerRadius = outerRadius - 4.dp.toPx()
+            drawCircle(
+                color = Color.White,
+                radius = innerRadius,
+                center = center
+            )
+
+            // 3. Central minimal 4-bar soundwave colored in black
+            val barWidthPx = 2.5.dp.toPx()
+            val barSpacingPx = 2.5.dp.toPx()
             val totalBarsWidth = 4 * barWidthPx + 3 * barSpacingPx
             val startX = center.x - totalBarsWidth / 2f + barWidthPx / 2f
 
-            val restingHeightPx = 3.5.dp.toPx()
-            val maxHeight1 = 14.dp.toPx()
-            val maxHeight2 = 22.dp.toPx()
-            val maxHeight3 = 18.dp.toPx()
-            val maxHeight4 = 12.dp.toPx()
+            val restingHeightPx = 3.dp.toPx()
+            val maxHeight1 = 10.dp.toPx()
+            val maxHeight2 = 16.dp.toPx()
+            val maxHeight3 = 13.dp.toPx()
+            val maxHeight4 = 9.dp.toPx()
 
             val heights = listOf(
                 restingHeightPx + (maxHeight1 - restingHeightPx) * t1 * playActivity,
@@ -539,18 +615,11 @@ fun CircularAudioVisualizer(
                 restingHeightPx + (maxHeight4 - restingHeightPx) * t4 * playActivity
             )
 
-            val barColors = listOf(
-                darkGrey,
-                crimsonRed,
-                deepDarkRed,
-                darkGrey
-            )
-
             for (i in 0 until 4) {
                 val x = startX + i * (barWidthPx + barSpacingPx)
                 val h = heights[i]
                 drawLine(
-                    color = barColors[i],
+                    color = Color.Black,
                     start = Offset(x, center.y - h / 2f),
                     end = Offset(x, center.y + h / 2f),
                     strokeWidth = barWidthPx,
@@ -596,7 +665,7 @@ fun BackgroundPlayPill(
         containerColor = Color(0x66141822)
     ) {
         if (!isExpanded) {
-            // Circular Pill: Minimalist animated audio visualizer (dark grey with dark red)
+            // Circular Pill: Minimalist animated audio visualizer (white ring, black waves)
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -608,27 +677,49 @@ fun BackgroundPlayPill(
                 )
             }
         } else {
-            // Expanded Pill: Displays video title, play/pause button, and close button
+            // Expanded Pill: Displays video title, elapsed time, horizontal soundwaves, play/pause and close
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(start = 18.dp, end = 8.dp),
+                    .padding(start = 16.dp, end = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Video Name
-                Text(
-                    text = currentVideo.displayName,
-                    color = Color.White,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 14.sp
-                    ),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
+                // Video Name and Elapsed Time + Horizontal Waves
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = currentVideo.displayName,
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp
+                        ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${formatDuration(playbackPos.currentPositionMs)} / ${formatDuration(playbackPos.durationMs)}",
+                            color = ExcavPalette.TextMuted,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        HorizontalSoundWaves(
+                            isPlaying = playback.isPlaying,
+                            modifier = Modifier.size(width = 18.dp, height = 10.dp)
+                        )
+                    }
+                }
 
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(6.dp))
 
                 // Play / Pause Button
                 IconButton(

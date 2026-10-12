@@ -887,8 +887,14 @@ class PlayerManager @Inject constructor(
 
     private fun releaseEqualizer() {
         try {
-            equalizer?.enabled = false
-            equalizer?.release()
+            equalizer?.let { eq ->
+                val numBands = eq.numberOfBands
+                for (i in 0 until numBands) {
+                    eq.setBandLevel(i.toShort(), 0)
+                }
+                eq.enabled = false
+                eq.release()
+            }
         } catch (e: Exception) {
             logger.w(TAG, "Failed to release Equalizer: ${e.message}")
         } finally {
@@ -899,8 +905,11 @@ class PlayerManager @Inject constructor(
 
     private fun releaseBassBoost() {
         try {
-            bassBoost?.enabled = false
-            bassBoost?.release()
+            bassBoost?.let { bb ->
+                bb.setStrength(0.toShort())
+                bb.enabled = false
+                bb.release()
+            }
         } catch (e: Exception) {
             logger.w(TAG, "Failed to release BassBoost: ${e.message}")
         } finally {

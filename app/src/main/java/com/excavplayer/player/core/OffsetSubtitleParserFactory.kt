@@ -29,8 +29,32 @@ class OffsetSubtitleParserFactory(
             ) {
                 val delayUs = getDelayUs()
                 baseParser.parse(data, offset, length, outputOptions) { cuesWithTiming ->
+                    val sanitizedCues = cuesWithTiming.cues.map { cue ->
+                        val rawText = cue.text
+                        if (rawText is android.text.Spanned) {
+                            val spannable = android.text.SpannableString(rawText)
+                            spannable.getSpans(0, spannable.length, android.text.style.ForegroundColorSpan::class.java)
+                                .forEach { spannable.removeSpan(it) }
+                            spannable.getSpans(0, spannable.length, android.text.style.BackgroundColorSpan::class.java)
+                                .forEach { spannable.removeSpan(it) }
+                            spannable.getSpans(0, spannable.length, android.text.style.AbsoluteSizeSpan::class.java)
+                                .forEach { spannable.removeSpan(it) }
+                            spannable.getSpans(0, spannable.length, android.text.style.RelativeSizeSpan::class.java)
+                                .forEach { spannable.removeSpan(it) }
+                            cue.buildUpon().setText(spannable).build()
+                        } else {
+                            cue
+                        }
+                    }
+
                     if (delayUs == 0L) {
-                        output.accept(cuesWithTiming)
+                        output.accept(
+                            CuesWithTiming(
+                                sanitizedCues,
+                                cuesWithTiming.startTimeUs,
+                                cuesWithTiming.durationUs
+                            )
+                        )
                     } else {
                         val shiftedStartTime = if (cuesWithTiming.startTimeUs >= 0) {
                             (cuesWithTiming.startTimeUs + delayUs).coerceAtLeast(0L)
@@ -38,7 +62,7 @@ class OffsetSubtitleParserFactory(
                             cuesWithTiming.startTimeUs
                         }
                         val shifted = CuesWithTiming(
-                            cuesWithTiming.cues,
+                            sanitizedCues,
                             shiftedStartTime,
                             cuesWithTiming.durationUs
                         )
