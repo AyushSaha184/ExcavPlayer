@@ -1900,9 +1900,9 @@ private fun TracksTabContent(
         // -------------------------------------------------------------------------
         // Subtitle Delay Control (Player Seekbar Style, Range: -5.0s .. +5.0s)
         // -------------------------------------------------------------------------
-        Spacer(Modifier.height(14.dp))
-        HorizontalDivider(color = ExcavPalette.Line.copy(alpha = 0.5f), thickness = 0.8.dp)
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(6.dp))
+        HorizontalDivider(color = ExcavPalette.Line.copy(alpha = 0.4f), thickness = 0.6.dp)
+        Spacer(Modifier.height(6.dp))
 
         var sliderValue by remember(state.subtitleDelayMs) {
             mutableFloatStateOf((state.subtitleDelayMs / 1000f).coerceIn(-5.0f, 5.0f))
@@ -1924,7 +1924,7 @@ private fun TracksTabContent(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             // Header Row: Label & Value / Reset
             Row(
@@ -1936,14 +1936,14 @@ private fun TracksTabContent(
                     text = "Subtitle Delay",
                     color = ExcavPalette.TextMuted,
                     style = MaterialTheme.typography.labelMedium.copy(
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Medium
                     )
                 )
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     val delayFormatted = if (currentDelaySec > 0) "+${"%.1f".format(currentDelaySec)}s"
                         else if (currentDelaySec < 0) "${"%.1f".format(currentDelaySec)}s"
@@ -1954,7 +1954,7 @@ private fun TracksTabContent(
                         color = if (currentDelaySec != 0.0) ExcavPalette.Primary else ExcavPalette.Text,
                         style = MaterialTheme.typography.labelMedium.copy(
                             fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
+                            fontSize = 12.sp
                         )
                     )
 
@@ -1964,20 +1964,23 @@ private fun TracksTabContent(
                             color = ExcavPalette.Primary,
                             style = MaterialTheme.typography.labelSmall.copy(
                                 fontWeight = FontWeight.SemiBold,
-                                fontSize = 11.sp
+                                fontSize = 10.sp
                             ),
                             modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
+                                .clip(RoundedCornerShape(6.dp))
                                 .clickable {
                                     debounceJob?.cancel()
                                     sliderValue = 0f
                                     vm.setSubtitleDelay(0L)
                                 }
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                .padding(horizontal = 5.dp, vertical = 1.dp)
                         )
                     }
                 }
             }
+
+            // Move the slider down a bit
+            Spacer(Modifier.height(4.dp))
 
             // Player seekbar style Slider (-5.0s .. +5.0s)
             ExcavSleekSlider(
@@ -2022,23 +2025,23 @@ private fun TracksTabContent(
             ) {
                 Text(
                     text = "-5s",
-                    color = ExcavPalette.TextMuted.copy(alpha = 0.6f),
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp)
+                    color = ExcavPalette.TextMuted.copy(alpha = 0.5f),
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 9.sp)
                 )
                 Text(
                     text = "0s",
-                    color = ExcavPalette.TextMuted.copy(alpha = 0.6f),
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp)
+                    color = ExcavPalette.TextMuted.copy(alpha = 0.5f),
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 9.sp)
                 )
                 Text(
                     text = "+5s",
-                    color = ExcavPalette.TextMuted.copy(alpha = 0.6f),
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp)
+                    color = ExcavPalette.TextMuted.copy(alpha = 0.5f),
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 9.sp)
                 )
             }
         }
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(6.dp))
 
         // Action Row: -0.1s, Add subtitles, +0.1s
         Row(
@@ -2048,8 +2051,8 @@ private fun TracksTabContent(
         ) {
             Surface(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .border(1.dp, ExcavPalette.Line, RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(10.dp))
+                    .border(1.dp, ExcavPalette.Line, RoundedCornerShape(10.dp))
                     .clickable {
                         debounceJob?.cancel()
                         val newMs = (state.subtitleDelayMs - 100L).coerceAtLeast(-5000L)
@@ -2063,49 +2066,49 @@ private fun TracksTabContent(
                     color = ExcavPalette.Text,
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontWeight = FontWeight.SemiBold,
-                        fontSize = 12.sp
+                        fontSize = 11.sp
                     ),
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                 )
             }
 
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(8.dp))
 
             Surface(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(16.dp))
-                    .border(1.dp, ExcavPalette.Line, RoundedCornerShape(16.dp))
+                    .clip(RoundedCornerShape(12.dp))
+                    .border(1.dp, ExcavPalette.Line, RoundedCornerShape(12.dp))
                     .clickable(onClick = onPickSubtitle),
                 color = ExcavPalette.SurfaceCard
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Add,
                         contentDescription = null,
                         tint = ExcavPalette.Text,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(14.dp)
                     )
                     Text(
                         text = "Add subtitles",
                         color = ExcavPalette.Text,
                         style = MaterialTheme.typography.labelMedium.copy(
                             fontWeight = FontWeight.SemiBold,
-                            fontSize = 13.sp
+                            fontSize = 11.5.sp
                         )
                     )
                 }
             }
 
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(8.dp))
 
             Surface(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .border(1.dp, ExcavPalette.Line, RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(10.dp))
+                    .border(1.dp, ExcavPalette.Line, RoundedCornerShape(10.dp))
                     .clickable {
                         debounceJob?.cancel()
                         val newMs = (state.subtitleDelayMs + 100L).coerceAtMost(5000L)
@@ -2119,9 +2122,9 @@ private fun TracksTabContent(
                     color = ExcavPalette.Text,
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontWeight = FontWeight.SemiBold,
-                        fontSize = 12.sp
+                        fontSize = 11.sp
                     ),
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                 )
             }
         }
@@ -2447,19 +2450,20 @@ private fun SubtitleRadioRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(vertical = 10.dp, horizontal = 4.dp),
+            .padding(vertical = 6.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         SleekRadioButton(
             selected = isSelected,
             onClick = onClick
         )
-        Spacer(Modifier.width(14.dp))
+        Spacer(Modifier.width(12.dp))
         Text(
             text = title,
             color = if (isSelected) Color.White else ExcavPalette.Text,
-            style = MaterialTheme.typography.bodyLarge.copy(
-                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                fontSize = 13.5.sp
             )
         )
     }

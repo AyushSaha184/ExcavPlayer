@@ -90,7 +90,12 @@ data class LibraryUiState(
 )
 
 fun normalizeFolderPath(raw: String?): String {
-    val trimmed = raw.orEmpty().trim().trimEnd('/')
+    var trimmed = raw.orEmpty().trim().trimEnd('/')
+    if (trimmed.startsWith("/sdcard")) {
+        trimmed = "/storage/emulated/0" + trimmed.removePrefix("/sdcard")
+    } else if (trimmed.startsWith("/mnt/sdcard")) {
+        trimmed = "/storage/emulated/0" + trimmed.removePrefix("/mnt/sdcard")
+    }
     return when {
         trimmed.isEmpty() || trimmed == "/storage/emulated/0" || trimmed == "/storage/emulated" || trimmed.equals("Internal Storage", ignoreCase = true) -> "/storage/emulated/0"
         trimmed.startsWith("/storage/emulated/0") -> trimmed
@@ -302,6 +307,17 @@ class ExcavViewModel @Inject constructor(
     private val _deleteRequestEvents = Channel<DeleteRequestEvent>(Channel.BUFFERED)
     val deleteRequestEvents = _deleteRequestEvents.receiveAsFlow()
 
+    init {
+        viewModelScope.launch {
+            try {
+                library.purgeCorruptedEntries()
+                library.refresh(force = true)
+            } catch (e: Throwable) {
+                logger.w(TAG, "Startup media purge/refresh warning: ${e.message}")
+            }
+        }
+    }
+
     private val query = MutableStateFlow("")
     private val selectedFolder = MutableStateFlow<Folder?>(null)
     private val _userMessage = MutableStateFlow<UserMessage?>(null)
@@ -424,18 +440,28 @@ class ExcavViewModel @Inject constructor(
         }
     }
 
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
     fun refreshLibrary() {
+        if (_isRefreshing.value) return
         viewModelScope.launch {
-            logger.i(TAG, "User requested media library refresh")
-            when (val result = library.refresh(force = true)) {
-                is ExcavResult.Success -> {
-                    // Refreshed silently without toast banner
+            _isRefreshing.value = true
+            try {
+                logger.i(TAG, "User requested media library refresh")
+                library.purgeCorruptedEntries()
+                when (val result = library.refresh(force = true)) {
+                    is ExcavResult.Success -> {
+                        // Refreshed silently without toast banner
+                    }
+                    is ExcavResult.Error -> {
+                        logger.e(TAG, "Failed to refresh library", result.exception)
+                        showMessage("Failed to sync media: ${result.message ?: result.exception.localizedMessage ?: "Unknown error"}", isError = true)
+                    }
+                    is ExcavResult.Loading -> Unit
                 }
-                is ExcavResult.Error -> {
-                    logger.e(TAG, "Failed to refresh library", result.exception)
-                    showMessage("Failed to sync media: ${result.message ?: result.exception.localizedMessage ?: "Unknown error"}", isError = true)
-                }
-                is ExcavResult.Loading -> Unit
+            } finally {
+                _isRefreshing.value = false
             }
         }
     }

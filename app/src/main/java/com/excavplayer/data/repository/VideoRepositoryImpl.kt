@@ -174,4 +174,8 @@ class VideoRepositoryImpl @Inject constructor(
     override suspend fun syncWithMediaStore(force: Boolean): ExcavResult<Int> {
         return mediaSyncManager.syncMediaStore(force)
     }
+
+    override suspend fun purgeCorruptedEntries() = withContext(dispatchers.io) {
+        videoDao.purgePrivateStorageVideos()
+    }
 }

@@ -52,7 +52,12 @@ object FolderTreeManager {
      * Normalizes directory and file paths to canonical absolute Unix paths.
      */
     fun normalizePath(raw: String?): String {
-        val trimmed = raw.orEmpty().trim().trimEnd('/')
+        var trimmed = raw.orEmpty().trim().trimEnd('/')
+        if (trimmed.startsWith("/sdcard")) {
+            trimmed = INTERNAL_STORAGE_ROOT + trimmed.removePrefix("/sdcard")
+        } else if (trimmed.startsWith("/mnt/sdcard")) {
+            trimmed = INTERNAL_STORAGE_ROOT + trimmed.removePrefix("/mnt/sdcard")
+        }
         return when {
             trimmed.isEmpty() ||
             trimmed == INTERNAL_STORAGE_ROOT ||
@@ -81,11 +86,26 @@ object FolderTreeManager {
             )
         }
 
-        // Filter out any corrupted or private storage videos
+        // Filter out any corrupted, system-private, or dummy external/SAF folders
         val validVideos = videos.filter { v ->
-            !v.folderPath.contains("/private") &&
+            !v.id.startsWith("saf_") &&
+            !v.id.startsWith("transient_") &&
+            !v.folderName.equals("External Videos", ignoreCase = true) &&
+            !v.folderPath.equals("External Videos", ignoreCase = true) &&
+            !v.folderPath.contains("External Videos", ignoreCase = true) &&
+            !v.folderName.equals("SAF Files", ignoreCase = true) &&
+            !v.folderPath.equals("SAF Files", ignoreCase = true) &&
+            !v.folderPath.contains("SAF Files", ignoreCase = true) &&
+            !v.folderName.equals("Selected Folder", ignoreCase = true) &&
+            !v.folderPath.equals("Selected Folder", ignoreCase = true) &&
+            !v.folderPath.contains("Selected Folder", ignoreCase = true) &&
             !v.folderName.equals("private", ignoreCase = true) &&
-            !v.uri.contains("/storage/private")
+            !v.folderPath.equals("private", ignoreCase = true) &&
+            !v.folderPath.endsWith("/private") &&
+            !v.folderPath.startsWith("/storage/private") &&
+            !v.uri.startsWith("/storage/private") &&
+            !v.uri.startsWith("content://com.android.providers.media.documents/") &&
+            !v.uri.startsWith("content://com.android.externalstorage.documents/")
         }
 
         // Group videos by their normalized immediate folder path

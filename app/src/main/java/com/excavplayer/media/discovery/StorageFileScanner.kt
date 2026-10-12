@@ -26,11 +26,12 @@ class StorageFileScanner @Inject constructor(
         private const val TAG = "StorageFileScanner"
         val VIDEO_EXTENSIONS = setOf(
             "mp4", "mkv", "webm", "avi", "mov", "flv", "wmv",
-            "3gp", "ts", "m4v", "vob", "ogv", "f4v", "rmvb", "asf"
+            "3gp", "ts", "m4v", "vob", "ogv", "f4v", "rmvb", "asf",
+            "m2ts", "mts", "divx", "mpg", "mpeg"
         )
         private val EXCLUDED_DIR_NAMES = setOf(
             "data", "obb", ".thumbnails", ".trashed", ".trash", "cache",
-            "private", "self", "knox", "enc_media", "lost.dir"
+            "self", "knox", "enc_media", "lost.dir"
         )
         private val SD_CARD_PATTERN = Regex("""^[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}$""")
     }
@@ -39,8 +40,15 @@ class StorageFileScanner @Inject constructor(
         val roots = mutableListOf<File>()
         try {
             val primary = Environment.getExternalStorageDirectory()
-            if (primary != null && primary.exists() && primary.canRead()) {
+            if (primary != null && primary.exists()) {
                 roots.add(primary)
+            }
+        } catch (_: Exception) {}
+
+        try {
+            val fallbackPrimary = File("/storage/emulated/0")
+            if (fallbackPrimary.exists() && !roots.contains(fallbackPrimary)) {
+                roots.add(fallbackPrimary)
             }
         } catch (_: Exception) {}
 
@@ -53,7 +61,7 @@ class StorageFileScanner @Inject constructor(
                         parent = parent.parentFile
                     }
                     val root = parent?.parentFile
-                    if (root != null && root.exists() && root.canRead() && !roots.contains(root)) {
+                    if (root != null && root.exists() && !roots.contains(root)) {
                         val name = root.name.lowercase()
                         if (name !in EXCLUDED_DIR_NAMES && !name.startsWith(".")) {
                             roots.add(root)
@@ -65,13 +73,16 @@ class StorageFileScanner @Inject constructor(
 
         try {
             val storageDir = File("/storage")
-            if (storageDir.exists() && storageDir.canRead()) {
+            if (storageDir.exists()) {
                 val children = storageDir.listFiles()
                 if (children != null) {
                     for (c in children) {
                         val name = c.name
-                        if (c.isDirectory && SD_CARD_PATTERN.matches(name) && c.canRead() && !roots.contains(c)) {
-                            roots.add(c)
+                        val lower = name.lowercase()
+                        if (c.isDirectory && !roots.contains(c)) {
+                            if (lower !in setOf("emulated", "self", "knox", "private", "lost.dir", "enc_media") && !name.startsWith(".")) {
+                                roots.add(c)
+                            }
                         }
                     }
                 }
@@ -123,7 +134,7 @@ class StorageFileScanner @Inject constructor(
         if (dirNameLower in EXCLUDED_DIR_NAMES || dir.name.startsWith(".")) {
             return
         }
-        if (dir.absolutePath.contains("/storage/private") || dirNameLower == "private") {
+        if (dir.absolutePath == "/storage/private" || dir.absolutePath.startsWith("/storage/private/")) {
             return
         }
 

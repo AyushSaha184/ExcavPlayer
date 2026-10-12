@@ -75,9 +75,9 @@ class MediaSyncManager @Inject constructor(
                 _syncStatus.value = SyncStatus.Syncing(totalCount)
             }
 
-            // Detect deleted / missing videos from MediaStore (exclude SAF and filesystem videos)
+            // Detect deleted / missing videos from MediaStore (exclude direct filesystem scanned videos)
             val removedIds = existingIds.filter { id ->
-                !id.startsWith("saf_") && !id.startsWith("fs_") && !discoveredIds.contains(id)
+                !id.startsWith("fs_") && !discoveredIds.contains(id)
             }
 
             if (removedIds.isNotEmpty()) {

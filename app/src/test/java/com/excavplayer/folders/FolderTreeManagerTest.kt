@@ -129,4 +129,33 @@ class FolderTreeManagerTest {
         assertThat(FolderTreeManager.isStorageRoot("/storage/private")).isFalse()
         assertThat(FolderTreeManager.isStorageRoot("/storage/self")).isFalse()
     }
+
+    @Test
+    fun testBuildTree_filtersOutSafAndExternalVideosAndPreservesFoldersWithSpaces() {
+        val validVideoWithSpace = createTestVideo("1", "rec.mp4", "/storage/emulated/0/Screen Recordings")
+        val whatsAppVideo = createTestVideo("2", "status.mp4", "/storage/emulated/0/WhatsApp Video")
+        val safVideo = createTestVideo("saf_doc_1", "doc.mp4", "External Videos").copy(
+            uri = "content://com.android.providers.media.documents/document/123",
+            folderName = "External Videos"
+        )
+        val safFolderVideo = createTestVideo("saf_tree_2", "saf.mp4", "SAF Files").copy(
+            uri = "content://com.android.externalstorage.documents/tree/123",
+            folderName = "SAF Files"
+        )
+
+        val tree = FolderTreeManager.buildTree(listOf(validVideoWithSpace, whatsAppVideo, safVideo, safFolderVideo))
+
+        val rootSubfolders = FolderTreeManager.getSubfolders(tree, null)
+        assertThat(rootSubfolders.map { it.name }).containsExactly("Screen Recordings", "WhatsApp Video")
+        assertThat(rootSubfolders.none { it.name.contains("External Videos", ignoreCase = true) }).isTrue()
+        assertThat(rootSubfolders.none { it.name.contains("SAF Files", ignoreCase = true) }).isTrue()
+    }
+
+    @Test
+    fun testNormalizePath_sdcardAliases() {
+        assertThat(FolderTreeManager.normalizePath("/sdcard/Movies"))
+            .isEqualTo("/storage/emulated/0/Movies")
+        assertThat(FolderTreeManager.normalizePath("/mnt/sdcard/DCIM"))
+            .isEqualTo("/storage/emulated/0/DCIM")
+    }
 }

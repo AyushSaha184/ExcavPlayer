@@ -45,6 +45,11 @@ class VideoLibrary @Inject constructor(
         return videoRepository.syncWithMediaStore(force)
     }
 
+    suspend fun purgeCorruptedEntries() {
+        logger.i(TAG, "Purging corrupted or transient external/SAF video entries")
+        videoRepository.purgeCorruptedEntries()
+    }
+
     suspend fun renameVideo(videoId: String, newName: String): ExcavResult<Unit> {
         logger.i(TAG, "Renaming video $videoId to $newName")
         return videoRepository.renameVideo(videoId, newName)

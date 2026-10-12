@@ -220,7 +220,7 @@ class MediaStoreDataSource @Inject constructor(
                 if (folderPath.isEmpty()) folderPath = "/storage/emulated/0/$folderName"
             }
 
-            if (folderPath.startsWith("/storage/private") || folderName.equals("private", ignoreCase = true) || folderPath.contains("/private")) {
+            if (folderPath == "/storage/private" || folderPath.startsWith("/storage/private/")) {
                 continue
             }
 

@@ -113,7 +113,10 @@ class MainActivity : ComponentActivity() {
             if (isExternalLaunch) {
                 handleIncomingIntent(intent)
             }
-            lifecycleScope.launch { videoLibrary.refresh() }
+            lifecycleScope.launch {
+                videoLibrary.purgeCorruptedEntries()
+                videoLibrary.refresh(force = true)
+            }
         } else {
             logger.w("MainActivity", "Some permissions were denied: $permissions")
         }
@@ -124,7 +127,10 @@ class MainActivity : ComponentActivity() {
     ) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && android.os.Environment.isExternalStorageManager()) {
             logger.i("MainActivity", "All files access granted, triggering media sync")
-            lifecycleScope.launch { videoLibrary.refresh() }
+            lifecycleScope.launch {
+                videoLibrary.purgeCorruptedEntries()
+                videoLibrary.refresh(force = true)
+            }
         }
     }
 
@@ -256,29 +262,24 @@ class MainActivity : ComponentActivity() {
 
             lifecycleScope.launch {
                 try {
-                    val entity = safDataSource.registerDocumentUri(dataUri)
-                    val video = entity?.toDomain() ?: run {
-                        val name = dataUri.lastPathSegment?.substringAfterLast('/')?.let { Uri.decode(it) } ?: "External Video"
-                        com.excavplayer.domain.model.Video(
-                            id = "saf_doc_${java.util.UUID.nameUUIDFromBytes(dataUri.toString().toByteArray())}",
-                            uri = dataUri.toString(),
-                            displayName = name,
-                            mimeType = intent.type ?: "video/*",
-                            durationMs = 0L,
-                            sizeBytes = 0L,
-                            dateAddedSeconds = System.currentTimeMillis() / 1000,
-                            dateModifiedSeconds = System.currentTimeMillis() / 1000,
-                            width = 0,
-                            height = 0,
-                            folderName = "External Videos",
-                            folderPath = "External Videos",
-                            relativePath = "",
-                            sourceType = com.excavplayer.domain.model.MediaSourceType.LOCAL_DOCUMENT,
-                            availability = com.excavplayer.domain.model.MediaAvailability.AVAILABLE
-                        ).also { fallbackVideo ->
-                            runCatching { safDataSource.ensureVideoSaved(fallbackVideo) }
-                        }
-                    }
+                    val name = dataUri.lastPathSegment?.substringAfterLast('/')?.let { Uri.decode(it) } ?: "External Video"
+                    val video = com.excavplayer.domain.model.Video(
+                        id = "transient_${java.util.UUID.nameUUIDFromBytes(dataUri.toString().toByteArray())}",
+                        uri = dataUri.toString(),
+                        displayName = name,
+                        mimeType = intent.type ?: "video/*",
+                        durationMs = 0L,
+                        sizeBytes = 0L,
+                        dateAddedSeconds = System.currentTimeMillis() / 1000,
+                        dateModifiedSeconds = System.currentTimeMillis() / 1000,
+                        width = 0,
+                        height = 0,
+                        folderName = "External",
+                        folderPath = "External",
+                        relativePath = "",
+                        sourceType = com.excavplayer.domain.model.MediaSourceType.LOCAL_DOCUMENT,
+                        availability = com.excavplayer.domain.model.MediaAvailability.AVAILABLE
+                    )
                     viewModel.play(video)
                     viewModel.setPlayerOpen(true)
                 } catch (e: Throwable) {
@@ -291,7 +292,10 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         if (checkHasStoragePermission()) {
-            lifecycleScope.launch { videoLibrary.refresh() }
+            lifecycleScope.launch {
+                videoLibrary.purgeCorruptedEntries()
+                videoLibrary.refresh(force = true)
+            }
         }
     }
 

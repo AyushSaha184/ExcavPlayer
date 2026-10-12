@@ -82,12 +82,20 @@ fun ExcavApp(
         if (!restoredFolder && library.folders.isNotEmpty()) {
             val lastPath = settings.lastOpenedFolder
             if (lastPath != null && library.selectedFolder == null) {
-                val matched = library.folders.find { it.path == lastPath }
-                if (matched != null) {
-                    vm.openFolder(matched)
+                val isSafOrExternal = lastPath.contains("SAF Files", ignoreCase = true) ||
+                        lastPath.contains("External Videos", ignoreCase = true) ||
+                        lastPath.contains("Selected Folder", ignoreCase = true) ||
+                        lastPath.startsWith("/storage/private")
+                if (!isSafOrExternal) {
+                    val matched = library.folders.find { it.path == lastPath }
+                    if (matched != null) {
+                        vm.openFolder(matched)
+                    } else {
+                        val name = lastPath.trimEnd('/').substringAfterLast('/')
+                        vm.openFolder(Folder(name = name, path = lastPath, videoCount = 0, totalSizeBytes = 0L))
+                    }
                 } else {
-                    val name = lastPath.trimEnd('/').substringAfterLast('/')
-                    vm.openFolder(Folder(name = name, path = lastPath, videoCount = 0, totalSizeBytes = 0L))
+                    vm.setLastOpenedFolder(null)
                 }
             }
             restoredFolder = true
@@ -330,6 +338,36 @@ fun ExcavApp(
                     onClose = { vm.setPlayerOpen(false) },
                     onPickSubtitle = onPickSubtitle
                 )
+            }
+
+            // Fullscreen Blocking Refresh Overlay with RoseThreeLoader
+            val isRefreshing by vm.isRefreshing.collectAsStateWithLifecycle()
+
+            if (isRefreshing) {
+                BackHandler { /* Disallow back navigation while refreshing */ }
+            }
+
+            AnimatedVisibility(
+                visible = isRefreshing,
+                enter = fadeIn(tween(200)),
+                exit = fadeOut(tween(200)),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(Unit) {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    event.changes.forEach { it.consume() }
+                                }
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    RoseThreeLoader(size = 48.dp)
+                }
             }
         }
     }

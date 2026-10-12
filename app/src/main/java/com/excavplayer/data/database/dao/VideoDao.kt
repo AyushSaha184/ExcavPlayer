@@ -18,6 +18,23 @@ interface VideoDao {
         LEFT JOIN favorites f ON v.id = f.video_id
         LEFT JOIN playback_states p ON v.id = p.video_id
         WHERE v.availability = 'AVAILABLE'
+          AND v.folder_name != 'External Videos'
+          AND v.folder_path != 'External Videos'
+          AND v.folder_path NOT LIKE '%External Videos%'
+          AND v.folder_name != 'SAF Files'
+          AND v.folder_path != 'SAF Files'
+          AND v.folder_path NOT LIKE '%SAF Files%'
+          AND v.folder_name != 'Selected Folder'
+          AND v.folder_path != 'Selected Folder'
+          AND v.folder_path NOT LIKE '%Selected Folder%'
+          AND v.folder_name != 'private'
+          AND v.folder_path != 'private'
+          AND v.folder_path != '/storage/private'
+          AND v.folder_path NOT LIKE '/storage/private/%'
+          AND v.folder_path NOT LIKE '%/private'
+          AND v.id NOT LIKE 'saf_%'
+          AND v.uri NOT LIKE '%com.android.providers.media.documents%'
+          AND v.uri NOT LIKE '%com.android.externalstorage.documents%'
         ORDER BY v.date_added DESC
     """)
     fun observeAllVideosWithMetadata(): Flow<List<VideoWithMetadataTuple>>
@@ -30,6 +47,23 @@ interface VideoDao {
         LEFT JOIN favorites f ON v.id = f.video_id
         LEFT JOIN playback_states p ON v.id = p.video_id
         WHERE v.availability = 'AVAILABLE'
+          AND v.folder_name != 'External Videos'
+          AND v.folder_path != 'External Videos'
+          AND v.folder_path NOT LIKE '%External Videos%'
+          AND v.folder_name != 'SAF Files'
+          AND v.folder_path != 'SAF Files'
+          AND v.folder_path NOT LIKE '%SAF Files%'
+          AND v.folder_name != 'Selected Folder'
+          AND v.folder_path != 'Selected Folder'
+          AND v.folder_path NOT LIKE '%Selected Folder%'
+          AND v.folder_name != 'private'
+          AND v.folder_path != 'private'
+          AND v.folder_path != '/storage/private'
+          AND v.folder_path NOT LIKE '/storage/private/%'
+          AND v.folder_path NOT LIKE '%/private'
+          AND v.id NOT LIKE 'saf_%'
+          AND v.uri NOT LIKE '%com.android.providers.media.documents%'
+          AND v.uri NOT LIKE '%com.android.externalstorage.documents%'
         ORDER BY v.date_added DESC
     """)
     fun pagingSourceAllVideos(): androidx.paging.PagingSource<Int, VideoWithMetadataTuple>
@@ -101,6 +135,23 @@ interface VideoDao {
         SELECT folder_path, folder_name, COUNT(*) AS video_count, SUM(size_bytes) AS total_size_bytes
         FROM videos
         WHERE availability = 'AVAILABLE'
+          AND folder_name != 'External Videos'
+          AND folder_path != 'External Videos'
+          AND folder_path NOT LIKE '%External Videos%'
+          AND folder_name != 'SAF Files'
+          AND folder_path != 'SAF Files'
+          AND folder_path NOT LIKE '%SAF Files%'
+          AND folder_name != 'Selected Folder'
+          AND folder_path != 'Selected Folder'
+          AND folder_path NOT LIKE '%Selected Folder%'
+          AND folder_name != 'private'
+          AND folder_path != 'private'
+          AND folder_path != '/storage/private'
+          AND folder_path NOT LIKE '/storage/private/%'
+          AND folder_path NOT LIKE '%/private'
+          AND id NOT LIKE 'saf_%'
+          AND uri NOT LIKE '%com.android.providers.media.documents%'
+          AND uri NOT LIKE '%com.android.externalstorage.documents%'
         GROUP BY folder_path, folder_name
         ORDER BY folder_name ASC
     """)
@@ -156,7 +207,27 @@ interface VideoDao {
     @Query("SELECT id, uri FROM videos WHERE id LIKE 'fs_%'")
     suspend fun getAllFsVideos(): List<IdUriTuple>
 
-    @Query("DELETE FROM videos WHERE folder_name = 'private' OR folder_path LIKE '%/private%' OR uri LIKE '%/storage/private%'")
+    @Query("""
+        DELETE FROM videos 
+        WHERE folder_name = 'private' 
+           OR folder_path = 'private'
+           OR folder_path = '/storage/private'
+           OR folder_path LIKE '/storage/private/%' 
+           OR folder_path LIKE '%/private'
+           OR uri LIKE '%/storage/private%'
+           OR folder_name = 'External Videos'
+           OR folder_path = 'External Videos'
+           OR folder_path LIKE '%External Videos%'
+           OR folder_name = 'SAF Files'
+           OR folder_path = 'SAF Files'
+           OR folder_path LIKE '%SAF Files%'
+           OR folder_name = 'Selected Folder'
+           OR folder_path = 'Selected Folder'
+           OR folder_path LIKE '%Selected Folder%'
+           OR id LIKE 'saf_%'
+           OR uri LIKE '%com.android.providers.media.documents%'
+           OR uri LIKE '%com.android.externalstorage.documents%'
+    """)
     suspend fun purgePrivateStorageVideos()
 
     @Query("UPDATE videos SET availability = :availability WHERE id = :videoId")
