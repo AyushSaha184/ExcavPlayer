@@ -6,19 +6,14 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
-import com.excavplayer.data.database.dao.FavoriteDao
 import com.excavplayer.data.database.dao.MediaSourceDao
 import com.excavplayer.data.database.dao.PlaybackDao
-import com.excavplayer.data.database.dao.PlaylistDao
 import com.excavplayer.data.database.dao.SubtitlePreferenceDao
 import com.excavplayer.data.database.dao.VideoDao
 import com.excavplayer.data.database.entity.DismissedContinueWatchingEntity
-import com.excavplayer.data.database.entity.FavoriteEntity
 import com.excavplayer.data.database.entity.FolderEntity
 import com.excavplayer.data.database.entity.MediaSourceEntity
 import com.excavplayer.data.database.entity.PlaybackEntity
-import com.excavplayer.data.database.entity.PlaylistEntity
-import com.excavplayer.data.database.entity.PlaylistItemEntity
 import com.excavplayer.data.database.entity.SubtitlePreferenceEntity
 import com.excavplayer.data.database.entity.VideoEntity
 
@@ -26,23 +21,18 @@ import com.excavplayer.data.database.entity.VideoEntity
     entities = [
         VideoEntity::class,
         PlaybackEntity::class,
-        FavoriteEntity::class,
-        PlaylistEntity::class,
-        PlaylistItemEntity::class,
         SubtitlePreferenceEntity::class,
         MediaSourceEntity::class,
         FolderEntity::class,
         DismissedContinueWatchingEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = true
 )
 abstract class ExcavDatabase : RoomDatabase() {
 
     abstract fun videoDao(): VideoDao
     abstract fun playbackDao(): PlaybackDao
-    abstract fun favoriteDao(): FavoriteDao
-    abstract fun playlistDao(): PlaylistDao
     abstract fun mediaSourceDao(): MediaSourceDao
     abstract fun subtitlePreferenceDao(): SubtitlePreferenceDao
 
@@ -67,13 +57,21 @@ abstract class ExcavDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP TABLE IF EXISTS favorites")
+                db.execSQL("DROP TABLE IF EXISTS playlist_items")
+                db.execSQL("DROP TABLE IF EXISTS playlists")
+            }
+        }
+
         fun buildDatabase(context: Context): ExcavDatabase {
             return Room.databaseBuilder(
                 context.applicationContext,
                 ExcavDatabase::class.java,
                 DATABASE_NAME
             )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .fallbackToDestructiveMigration()
                 .build()
         }

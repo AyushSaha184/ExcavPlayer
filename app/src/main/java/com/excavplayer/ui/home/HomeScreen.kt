@@ -54,7 +54,6 @@ import androidx.core.content.ContextCompat
 import com.excavplayer.R
 import com.excavplayer.domain.model.Folder
 import com.excavplayer.domain.model.NaturalVideoComparator
-import com.excavplayer.domain.model.Playlist
 import com.excavplayer.domain.model.Video
 import com.excavplayer.ui.VideoGroup
 import com.excavplayer.ui.components.*
@@ -77,15 +76,9 @@ fun HomeScreen(
     folders: List<Folder>,
     videos: List<Video> = emptyList(),
     pagedVideos: kotlinx.coroutines.flow.Flow<androidx.paging.PagingData<Video>>? = null,
-    playlists: List<Playlist>,
-    favorites: List<Video>,
     groups: List<VideoGroup> = emptyList(),
     onPlay: (Video, List<Video>?) -> Unit,
     onOpenFolder: (Folder) -> Unit,
-    onToggleFavorite: (Video) -> Unit,
-    onSetVideosFavorite: (List<Video>, Boolean) -> Unit = { _, _ -> },
-    onAddToPlaylist: (Long, Video) -> Unit,
-    onCreatePlaylist: (String) -> Unit,
     onRenameVideo: (Video, String) -> Unit,
     onDeleteVideo: (Video) -> Unit,
     onDeleteVideos: (List<Video>) -> Unit = {},
@@ -129,7 +122,6 @@ fun HomeScreen(
     var propertiesVideo by remember { mutableStateOf<Video?>(null) }
     var propertiesMultiVideos by remember { mutableStateOf<List<Video>?>(null) }
     var renameVideoTarget by remember { mutableStateOf<Video?>(null) }
-    var playlistVideoTarget by remember { mutableStateOf<Video?>(null) }
 
     BackHandler(enabled = isSelectionMode || selectedGroup != null) {
         if (isSelectionMode) {
@@ -200,14 +192,10 @@ fun HomeScreen(
                             onMoreClick = if (!isSelectionMode) { { selectedVideoForMenu = video } } else null,
                             dropdownMenu = {
                                 if (!isSelectionMode && selectedVideoForMenu?.id == video.id) {
-                                    val isFav = favorites.any { it.id == video.id }
                                     VideoOptionsMenu(
                                         expanded = true,
                                         video = video,
-                                        isFavorite = isFav,
                                         onDismiss = { selectedVideoForMenu = null },
-                                        onToggleFavorite = { onToggleFavorite(video) },
-                                        onAddToPlaylist = { playlistVideoTarget = video },
                                         onRename = { renameVideoTarget = video },
                                         onProperties = { propertiesVideo = video },
                                         onDelete = {
@@ -273,7 +261,6 @@ fun HomeScreen(
                                         tint = ExcavPalette.Text
                                     )
                                 }
-                                val allFav = selVideos.isNotEmpty() && selVideos.all { v -> favorites.any { it.id == v.id } || v.isFavorite }
                                 BatchVideoOptionsMenu(
                                     expanded = isOverflowMenuOpen,
                                     selectedVideos = selVideos,
@@ -283,15 +270,6 @@ fun HomeScreen(
                                             onPlay(selVideos.first(), selVideos)
                                             selectedVideoIds = emptySet()
                                         }
-                                    },
-                                    onAddToPlaylist = {
-                                        if (selVideos.isNotEmpty()) {
-                                            playlistVideoTarget = selVideos.first()
-                                        }
-                                    },
-                                    onToggleFavorites = {
-                                        onSetVideosFavorite(selVideos, !allFav)
-                                        selectedVideoIds = emptySet()
                                     },
                                     onShare = {
                                         val uris = ArrayList<Uri>()
@@ -462,14 +440,10 @@ fun HomeScreen(
                                             onMoreClick = if (!isSelectionMode) { { selectedVideoForMenu = video } } else null,
                                             dropdownMenu = {
                                                 if (!isSelectionMode && selectedVideoForMenu?.id == video.id) {
-                                                    val isFav = favorites.any { it.id == video.id }
                                                     VideoOptionsMenu(
                                                         expanded = true,
                                                         video = video,
-                                                        isFavorite = isFav,
                                                         onDismiss = { selectedVideoForMenu = null },
-                                                        onToggleFavorite = { onToggleFavorite(video) },
-                                                        onAddToPlaylist = { playlistVideoTarget = video },
                                                         onRename = { renameVideoTarget = video },
                                                         onProperties = { propertiesVideo = video },
                                                         onDelete = {
@@ -531,7 +505,6 @@ fun HomeScreen(
                         if (isSelectionMode) {
                             val allVideos = videos.ifEmpty { continueWatching + groups.flatMap { it.videos } }
                             val selVideos = allVideos.filter { it.id in selectedVideoIds }.distinctBy { it.id }
-                            val allFav = selVideos.isNotEmpty() && selVideos.all { v -> favorites.any { it.id == v.id } || v.isFavorite }
                             BatchVideoOptionsMenu(
                                 expanded = isOverflowMenuOpen,
                                 selectedVideos = selVideos,
@@ -541,15 +514,6 @@ fun HomeScreen(
                                         onPlay(selVideos.first(), selVideos)
                                         selectedVideoIds = emptySet()
                                     }
-                                },
-                                onAddToPlaylist = {
-                                    if (selVideos.isNotEmpty()) {
-                                        playlistVideoTarget = selVideos.first()
-                                    }
-                                },
-                                onToggleFavorites = {
-                                    onSetVideosFavorite(selVideos, !allFav)
-                                    selectedVideoIds = emptySet()
                                 },
                                 onShare = {
                                     val uris = ArrayList<Uri>()
@@ -608,27 +572,6 @@ fun HomeScreen(
                 selectedVideoIds = emptySet()
             },
             onDismiss = { renameVideoTarget = null }
-        )
-    }
-
-
-
-    playlistVideoTarget?.let { video ->
-        AddToPlaylistDialog(
-            video = video,
-            playlists = playlists,
-            onSelectPlaylist = { playlistId -> 
-                if (selectedVideoIds.isNotEmpty()) {
-                    val allVideos = videos.ifEmpty { continueWatching + groups.flatMap { it.videos } }
-                    val selVideos = allVideos.filter { it.id in selectedVideoIds }.distinctBy { it.id }
-                    selVideos.forEach { onAddToPlaylist(playlistId, it) }
-                    selectedVideoIds = emptySet()
-                } else {
-                    onAddToPlaylist(playlistId, video) 
-                }
-            },
-            onCreatePlaylist = { title -> onCreatePlaylist(title) },
-            onDismiss = { playlistVideoTarget = null }
         )
     }
 }

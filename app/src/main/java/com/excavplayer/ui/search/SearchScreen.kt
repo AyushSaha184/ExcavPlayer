@@ -18,7 +18,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.excavplayer.R
-import com.excavplayer.domain.model.Playlist
 import com.excavplayer.domain.model.Video
 import com.excavplayer.ui.components.*
 import com.excavplayer.ui.theme.ExcavPalette
@@ -28,20 +27,14 @@ import dev.chrisbanes.haze.hazeSource
 fun SearchScreen(
     query: String,
     results: List<Video>,
-    playlists: List<Playlist> = emptyList(),
-    favorites: List<Video> = emptyList(),
     onQueryChange: (String) -> Unit,
     onBack: () -> Unit,
     onPlay: (Video) -> Unit,
-    onToggleFavorite: (Video) -> Unit = {},
-    onAddToPlaylist: (Long, Video) -> Unit = { _, _ -> },
-    onCreatePlaylist: (String) -> Unit = {},
     onRenameVideo: (Video, String) -> Unit = { _, _ -> },
     onDeleteVideo: (Video) -> Unit = {}
 ) {
     var selectedVideoForMenu by remember { mutableStateOf<Video?>(null) }
     var renameVideoTarget by remember { mutableStateOf<Video?>(null) }
-    var playlistVideoTarget by remember { mutableStateOf<Video?>(null) }
     var propertiesVideo by remember { mutableStateOf<Video?>(null) }
 
     Box(
@@ -91,14 +84,10 @@ fun SearchScreen(
                         onMoreClick = { selectedVideoForMenu = video },
                         dropdownMenu = {
                             if (selectedVideoForMenu?.id == video.id) {
-                                val isFav = favorites.any { it.id == video.id }
                                 VideoOptionsMenu(
                                     expanded = true,
                                     video = video,
-                                    isFavorite = isFav,
                                     onDismiss = { selectedVideoForMenu = null },
-                                    onToggleFavorite = { onToggleFavorite(video) },
-                                    onAddToPlaylist = { playlistVideoTarget = video },
                                     onRename = { renameVideoTarget = video },
                                     onProperties = { propertiesVideo = video },
                                     onDelete = { onDeleteVideo(video) }
@@ -183,23 +172,6 @@ fun SearchScreen(
             video = video,
             onRename = { onRenameVideo(video, it) },
             onDismiss = { renameVideoTarget = null }
-        )
-    }
-
-
-
-    playlistVideoTarget?.let { video ->
-        AddToPlaylistDialog(
-            video = video,
-            playlists = playlists,
-            onSelectPlaylist = { playlistId ->
-                onAddToPlaylist(playlistId, video)
-                playlistVideoTarget = null
-            },
-            onCreatePlaylist = { name ->
-                onCreatePlaylist(name)
-            },
-            onDismiss = { playlistVideoTarget = null }
         )
     }
 }

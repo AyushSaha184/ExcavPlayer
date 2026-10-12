@@ -6,12 +6,10 @@ import com.excavplayer.core.logging.AppLogger
 import com.excavplayer.core.result.ExcavResult
 import com.excavplayer.domain.model.Folder
 import com.excavplayer.domain.model.PlayerCommand
-import com.excavplayer.domain.model.Playlist
 import com.excavplayer.domain.model.RepeatMode
 import com.excavplayer.domain.model.UserSettings
 import com.excavplayer.domain.model.Video
 import com.excavplayer.domain.model.NaturalVideoComparator
-import com.excavplayer.library.PlaylistManager
 import com.excavplayer.library.VideoLibrary
 import com.excavplayer.player.core.PlayerManager
 import com.excavplayer.player.queue.PlaybackQueue
@@ -76,9 +74,6 @@ data class LibraryUiState(
     val videos: List<Video> = emptyList(),
     val continueWatching: List<Video> = emptyList(),
     val folders: List<Folder> = emptyList(),
-    val favorites: List<Video> = emptyList(),
-    val favoriteFolders: List<Folder> = emptyList(),
-    val playlists: List<Playlist> = emptyList(),
     val groups: List<VideoGroup> = emptyList(),
     val folderVideosMap: Map<String, List<Video>> = emptyMap(),
     val searchQuery: String = "",
@@ -291,7 +286,6 @@ data class OnlineSubtitleUiState(
 class ExcavViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val library: VideoLibrary,
-    private val playlistManager: PlaylistManager,
     private val settingsManager: SettingsManager,
     val player: PlayerManager,
     val queue: PlaybackQueue,
@@ -352,8 +346,6 @@ class ExcavViewModel @Inject constructor(
         library.observeVideos(),
         library.observeContinueWatching(),
         library.observeFolders(),
-        library.observeFavorites(),
-        playlistManager.observePlaylists(),
         query,
         searchResults,
         selectedFolder,
@@ -363,13 +355,11 @@ class ExcavViewModel @Inject constructor(
         val videos = values[0] as List<Video>
         val continueWatching = values[1] as List<Video>
         val folders = values[2] as List<Folder>
-        val favorites = values[3] as List<Video>
-        val playlists = values[4] as List<Playlist>
-        val searchQuery = values[5] as String
-        val searchResultsList = values[6] as List<Video>
-        val currentFolder = values[7] as Folder?
-        val currentFolderVideos = values[8] as List<Video>
-        val settings = values[9] as UserSettings
+        val searchQuery = values[3] as String
+        val searchResultsList = values[4] as List<Video>
+        val currentFolder = values[5] as Folder?
+        val currentFolderVideos = values[6] as List<Video>
+        val settings = values[7] as UserSettings
 
         val groups: List<VideoGroup>
         val folderMap: Map<String, List<Video>>
@@ -386,8 +376,6 @@ class ExcavViewModel @Inject constructor(
             cachedFolderMap = folderMap
         }
 
-        val favoriteFolders = folders.filter { settings.favoriteFolderPaths.contains(it.path) }
-
         val resolvedFolderVideos = if (currentFolderVideos.isNotEmpty()) {
             currentFolderVideos
         } else if (currentFolder != null) {
@@ -401,9 +389,6 @@ class ExcavViewModel @Inject constructor(
             videos = videos,
             continueWatching = continueWatching,
             folders = folders,
-            favorites = favorites,
-            favoriteFolders = favoriteFolders,
-            playlists = playlists,
             groups = groups,
             folderVideosMap = folderMap,
             searchQuery = searchQuery,
@@ -508,25 +493,6 @@ class ExcavViewModel @Inject constructor(
         }
     }
 
-    fun toggleFavorite(video: Video) {
-        viewModelScope.launch {
-            logger.i(TAG, "toggleFavorite for: ${video.id}")
-            library.toggleFavorite(video.id)
-        }
-    }
-
-    fun addVideoToPlaylist(playlistId: Long, video: Video) {
-        viewModelScope.launch {
-            logger.i(TAG, "addVideoToPlaylist: ${video.id} -> $playlistId")
-            val added = playlistManager.addVideo(playlistId, video.id)
-            if (added) {
-                showMessage("Added to playlist")
-            } else {
-                showMessage("Video already in playlist or failed to add", isError = true)
-            }
-        }
-    }
-
     fun renameVideo(video: Video, newName: String) {
         viewModelScope.launch {
             if (newName.isBlank()) {
@@ -544,41 +510,6 @@ class ExcavViewModel @Inject constructor(
 
     fun deleteVideo(video: Video) {
         deleteVideos(listOf(video))
-    }
-
-    fun createPlaylist(title: String) {
-        viewModelScope.launch {
-            if (title.isBlank()) {
-                showMessage("Playlist name cannot be empty", isError = true)
-                return@launch
-            }
-            logger.i(TAG, "Creating playlist: $title")
-            val id = playlistManager.createPlaylist(title)
-            if (id > 0) {
-                showMessage("Created playlist \"$title\"")
-            } else {
-                showMessage("Failed to create playlist", isError = true)
-            }
-        }
-    }
-
-    fun renamePlaylist(id: Long, title: String) {
-        viewModelScope.launch {
-            if (title.isBlank()) {
-                showMessage("Playlist name cannot be empty", isError = true)
-                return@launch
-            }
-            logger.i(TAG, "Renaming playlist $id to: $title")
-            playlistManager.renamePlaylist(id, title)
-        }
-    }
-
-    fun deletePlaylist(id: Long) {
-        viewModelScope.launch {
-            logger.i(TAG, "Deleting playlist: $id")
-            playlistManager.deletePlaylist(id)
-            showMessage("Playlist deleted")
-        }
     }
 
     fun deleteVideos(videos: List<Video>) {
@@ -692,15 +623,6 @@ class ExcavViewModel @Inject constructor(
                     val newDir = java.io.File(parent, clean)
                     val renamed = oldDir.renameTo(newDir)
                     if (renamed) {
-                        val curFavs = userSettings.value.favoriteFolderPaths
-                        if (curFavs.contains(folder.path) || curFavs.contains(normalizeFolderPath(folder.path))) {
-                            val updated = curFavs.toMutableSet()
-                            updated.remove(folder.path)
-                            updated.remove(normalizeFolderPath(folder.path))
-                            updated.add(newDir.absolutePath)
-                            updated.add(normalizeFolderPath(newDir.absolutePath))
-                            settingsManager.setFavoriteFolders(updated)
-                        }
                         library.refresh()
                         showMessage("Folder renamed successfully")
                         return@launch
@@ -717,80 +639,7 @@ class ExcavViewModel @Inject constructor(
         }
     }
 
-    fun deletePlaylists(playlists: List<Playlist>) {
-        viewModelScope.launch {
-            if (playlists.isEmpty()) return@launch
-            logger.i(TAG, "deletePlaylists: ${playlists.size} playlists")
-            for (pl in playlists) {
-                playlistManager.deletePlaylist(pl.id)
-            }
-            showMessage("${playlists.size} ${if (playlists.size == 1) "playlist" else "playlists"} deleted")
-        }
-    }
 
-    fun setVideosFavorite(videos: List<Video>, isFavorite: Boolean) {
-        viewModelScope.launch {
-            if (videos.isEmpty()) return@launch
-            for (vid in videos) {
-                if (vid.isFavorite != isFavorite) {
-                    library.toggleFavorite(vid.id)
-                }
-            }
-            showMessage(
-                if (isFavorite) "Added ${videos.size} ${if (videos.size == 1) "video" else "videos"} to Favorites"
-                else "Removed ${videos.size} ${if (videos.size == 1) "video" else "videos"} from Favorites"
-            )
-        }
-    }
-
-    fun addVideosToFavorites(videos: List<Video>) {
-        setVideosFavorite(videos, true)
-    }
-
-    fun toggleFavoriteFolder(folder: Folder) {
-        viewModelScope.launch {
-            settingsManager.toggleFavoriteFolder(folder.path)
-            val isNowFav = !userSettings.value.favoriteFolderPaths.contains(folder.path)
-            showMessage(if (isNowFav) "Added folder to Favorites" else "Removed folder from Favorites")
-        }
-    }
-
-    fun setFoldersFavorite(folders: List<Folder>, isFavorite: Boolean) {
-        viewModelScope.launch {
-            if (folders.isEmpty()) return@launch
-            val current = userSettings.value.favoriteFolderPaths.toMutableSet()
-            for (f in folders) {
-                val norm = normalizeFolderPath(f.path)
-                if (isFavorite) {
-                    current.add(f.path)
-                    current.add(norm)
-                } else {
-                    current.remove(f.path)
-                    current.remove(norm)
-                }
-            }
-            settingsManager.setFavoriteFolders(current)
-            showMessage(
-                if (isFavorite) "Added ${folders.size} ${if (folders.size == 1) "folder" else "folders"} to Favorites"
-                else "Removed ${folders.size} ${if (folders.size == 1) "folder" else "folders"} from Favorites"
-            )
-        }
-    }
-
-    fun addFoldersToFavorites(folders: List<Folder>) {
-        setFoldersFavorite(folders, true)
-    }
-
-    fun observePlaylistItems(playlistId: Long): kotlinx.coroutines.flow.Flow<List<com.excavplayer.domain.model.PlaylistItem>> {
-        return playlistManager.observePlaylistItems(playlistId)
-    }
-
-    fun removeVideoFromPlaylist(playlistId: Long, videoId: String) {
-        viewModelScope.launch {
-            logger.i(TAG, "Removing video $videoId from playlist $playlistId")
-            playlistManager.removeVideo(playlistId, videoId)
-        }
-    }
 
     fun reorderQueue(from: Int, to: Int) {
         logger.d(TAG, "Reordering queue from $from to $to")

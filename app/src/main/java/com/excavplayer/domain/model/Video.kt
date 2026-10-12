@@ -23,7 +23,6 @@ data class Video(
     val relativePath: String = "",
     val sourceType: MediaSourceType = MediaSourceType.LOCAL_MEDIASTORE,
     val availability: MediaAvailability = MediaAvailability.AVAILABLE,
-    val isFavorite: Boolean = false,
     val resumePositionMs: Long? = null
 ) {
     val aspectRatio: Float

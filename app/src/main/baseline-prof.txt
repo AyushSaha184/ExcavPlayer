@@ -3,11 +3,10 @@ HSPLcom/excavplayer/ExcavPlayerApp;->onCreate()V
 HSPLcom/excavplayer/MainActivity;->onCreate(Landroid/os/Bundle;)V
 HSPLcom/excavplayer/MainActivity;->onResume()V
 HSPLcom/excavplayer/ui/navigation/ExcavAppKt;->ExcavApp(Lcom/excavplayer/ui/ExcavViewModel;Lkotlin/jvm/functions/Function0;Landroidx/compose/runtime/Composer;II)V
-HSPLcom/excavplayer/ui/ExcavViewModel;-><init>(Lcom/excavplayer/library/VideoLibrary;Lcom/excavplayer/library/PlaylistManager;Lcom/excavplayer/settings/SettingsManager;Lcom/excavplayer/player/core/PlayerManager;Lcom/excavplayer/player/queue/PlaybackQueue;Lcom/excavplayer/update/AppUpdateManager;Lcom/excavplayer/core/logging/AppLogger;)V
+HSPLcom/excavplayer/ui/ExcavViewModel;-><init>(Lcom/excavplayer/library/VideoLibrary;Lcom/excavplayer/settings/SettingsManager;Lcom/excavplayer/player/core/PlayerManager;Lcom/excavplayer/player/queue/PlaybackQueue;Lcom/excavplayer/update/AppUpdateManager;Lcom/excavplayer/core/logging/AppLogger;)V
 HSPLcom/excavplayer/library/VideoLibrary;->observeVideos()Lkotlinx/coroutines/flow/Flow;
 HSPLcom/excavplayer/library/VideoLibrary;->observeContinueWatching(F)Lkotlinx/coroutines/flow/Flow;
 HSPLcom/excavplayer/library/VideoLibrary;->observeFolders()Lkotlinx/coroutines/flow/Flow;
-HSPLcom/excavplayer/library/VideoLibrary;->observeFavorites()Lkotlinx/coroutines/flow/Flow;
 HSPLcom/excavplayer/library/VideoLibrary;->observePagedVideos()Lkotlinx/coroutines/flow/Flow;
 HSPLcom/excavplayer/data/repository/VideoRepositoryImpl;->observeVideos()Lkotlinx/coroutines/flow/Flow;
 HSPLcom/excavplayer/data/repository/VideoRepositoryImpl;->observePagedVideos()Lkotlinx/coroutines/flow/Flow;

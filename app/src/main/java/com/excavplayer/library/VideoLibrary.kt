@@ -4,7 +4,6 @@ import com.excavplayer.core.logging.AppLogger
 import com.excavplayer.core.result.ExcavResult
 import com.excavplayer.domain.model.Folder
 import com.excavplayer.domain.model.Video
-import com.excavplayer.domain.repository.FavoritesRepository
 import com.excavplayer.domain.repository.PlaybackRepository
 import com.excavplayer.domain.repository.VideoRepository
 import kotlinx.coroutines.flow.Flow
@@ -15,7 +14,6 @@ import javax.inject.Singleton
 class VideoLibrary @Inject constructor(
     private val videoRepository: VideoRepository,
     private val playbackRepository: PlaybackRepository,
-    private val favoritesRepository: FavoritesRepository,
     private val logger: AppLogger
 ) {
     companion object {
@@ -29,8 +27,6 @@ class VideoLibrary @Inject constructor(
     fun observeFolders(): Flow<List<Folder>> = videoRepository.observeFolders()
 
     fun observeVideosInFolder(folderPath: String): Flow<List<Video>> = videoRepository.observeVideosInFolder(folderPath)
-
-    fun observeFavorites(): Flow<List<Video>> = favoritesRepository.observeFavorites()
 
     fun observeContinueWatching(threshold: Float = 0.95f): Flow<List<Video>> =
         playbackRepository.observeContinueWatching(threshold)
@@ -63,10 +59,5 @@ class VideoLibrary @Inject constructor(
     suspend fun deleteVideosAfterConfirmation(videoIds: List<String>): ExcavResult<Unit> {
         logger.i(TAG, "Cleaning up confirmed deleted videos: $videoIds")
         return videoRepository.deleteVideosAfterConfirmation(videoIds)
-    }
-
-    suspend fun toggleFavorite(videoId: String) {
-        logger.i(TAG, "Toggling favorite status for: $videoId")
-        favoritesRepository.toggleFavorite(videoId)
     }
 }

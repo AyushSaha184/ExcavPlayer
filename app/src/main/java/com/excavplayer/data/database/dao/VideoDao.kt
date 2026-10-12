@@ -12,10 +12,8 @@ import kotlinx.coroutines.flow.Flow
 interface VideoDao {
     @Query("""
         SELECT v.*, 
-               (f.video_id IS NOT NULL) AS is_favorite,
                p.current_position_ms AS resume_position_ms
         FROM videos v
-        LEFT JOIN favorites f ON v.id = f.video_id
         LEFT JOIN playback_states p ON v.id = p.video_id
         WHERE v.availability = 'AVAILABLE'
           AND v.folder_name != 'External Videos'
@@ -41,10 +39,8 @@ interface VideoDao {
 
     @Query("""
         SELECT v.*, 
-               (f.video_id IS NOT NULL) AS is_favorite,
                p.current_position_ms AS resume_position_ms
         FROM videos v
-        LEFT JOIN favorites f ON v.id = f.video_id
         LEFT JOIN playback_states p ON v.id = p.video_id
         WHERE v.availability = 'AVAILABLE'
           AND v.folder_name != 'External Videos'
@@ -70,10 +66,8 @@ interface VideoDao {
 
     @Query("""
         SELECT v.*, 
-               (f.video_id IS NOT NULL) AS is_favorite,
                p.current_position_ms AS resume_position_ms
         FROM videos v
-        LEFT JOIN favorites f ON v.id = f.video_id
         LEFT JOIN playback_states p ON v.id = p.video_id
         WHERE v.id = :id AND v.availability = 'AVAILABLE'
     """)
@@ -81,10 +75,8 @@ interface VideoDao {
 
     @Query("""
         SELECT v.*, 
-               (f.video_id IS NOT NULL) AS is_favorite,
                p.current_position_ms AS resume_position_ms
         FROM videos v
-        LEFT JOIN favorites f ON v.id = f.video_id
         LEFT JOIN playback_states p ON v.id = p.video_id
         WHERE v.id = :id
     """)
@@ -95,10 +87,8 @@ interface VideoDao {
 
     @Query("""
         SELECT v.*, 
-               (f.video_id IS NOT NULL) AS is_favorite,
                p.current_position_ms AS resume_position_ms
         FROM videos v
-        LEFT JOIN favorites f ON v.id = f.video_id
         LEFT JOIN playback_states p ON v.id = p.video_id
         WHERE (
             v.folder_path = :path1 
@@ -121,10 +111,8 @@ interface VideoDao {
 
     @Query("""
         SELECT v.*, 
-               (f.video_id IS NOT NULL) AS is_favorite,
                p.current_position_ms AS resume_position_ms
         FROM videos v
-        LEFT JOIN favorites f ON v.id = f.video_id
         LEFT JOIN playback_states p ON v.id = p.video_id
         WHERE v.display_name LIKE '%' || :query || '%' AND v.availability = 'AVAILABLE'
         ORDER BY v.date_added DESC
@@ -159,11 +147,9 @@ interface VideoDao {
 
     @Query("""
         SELECT v.*, 
-               (f.video_id IS NOT NULL) AS is_favorite,
                p.current_position_ms AS resume_position_ms
         FROM videos v
         INNER JOIN playback_states p ON v.id = p.video_id
-        LEFT JOIN favorites f ON v.id = f.video_id
         LEFT JOIN dismissed_continue_watching d ON v.id = d.video_id
         WHERE p.current_position_ms >= 20000 
           AND p.duration_ms > 0

@@ -1,13 +1,9 @@
 package com.excavplayer.data.database.mapper
 
 import com.excavplayer.data.database.dao.FolderTuple
-import com.excavplayer.data.database.dao.PlaylistItemWithVideoTuple
-import com.excavplayer.data.database.dao.PlaylistWithCountTuple
 import com.excavplayer.data.database.dao.VideoWithMetadataTuple
 import com.excavplayer.data.database.entity.MediaSourceEntity
 import com.excavplayer.data.database.entity.PlaybackEntity
-import com.excavplayer.data.database.entity.PlaylistEntity
-import com.excavplayer.data.database.entity.PlaylistItemEntity
 import com.excavplayer.data.database.entity.VideoEntity
 import com.excavplayer.domain.model.Folder
 import com.excavplayer.domain.model.MediaAvailability
@@ -15,8 +11,6 @@ import com.excavplayer.domain.model.MediaSource
 import com.excavplayer.domain.model.MediaSourceType
 import com.excavplayer.domain.model.PlaybackState
 import com.excavplayer.domain.model.PlaybackStatus
-import com.excavplayer.domain.model.Playlist
-import com.excavplayer.domain.model.PlaylistItem
 import com.excavplayer.domain.model.RepeatMode
 import com.excavplayer.domain.model.Video
 
@@ -40,12 +34,11 @@ fun VideoWithMetadataTuple.toDomain(): Video {
         relativePath = video.relativePath,
         sourceType = runCatching { MediaSourceType.valueOf(video.sourceType) }.getOrDefault(MediaSourceType.LOCAL_MEDIASTORE),
         availability = runCatching { MediaAvailability.valueOf(video.availability) }.getOrDefault(MediaAvailability.AVAILABLE),
-        isFavorite = isFavorite,
         resumePositionMs = resumePositionMs
     )
 }
 
-fun VideoEntity.toDomain(isFavorite: Boolean = false, resumePositionMs: Long? = null): Video {
+fun VideoEntity.toDomain(resumePositionMs: Long? = null): Video {
     return Video(
         id = id,
         uri = uri,
@@ -65,7 +58,6 @@ fun VideoEntity.toDomain(isFavorite: Boolean = false, resumePositionMs: Long? = 
         relativePath = relativePath,
         sourceType = runCatching { MediaSourceType.valueOf(sourceType) }.getOrDefault(MediaSourceType.LOCAL_MEDIASTORE),
         availability = runCatching { MediaAvailability.valueOf(availability) }.getOrDefault(MediaAvailability.AVAILABLE),
-        isFavorite = isFavorite,
         resumePositionMs = resumePositionMs
     )
 }
@@ -131,36 +123,7 @@ fun PlaybackState.toEntity(): PlaybackEntity {
     )
 }
 
-fun PlaylistWithCountTuple.toDomain(): Playlist {
-    return Playlist(
-        id = id,
-        title = title,
-        createdAt = createdAt,
-        updatedAt = updatedAt,
-        itemCount = itemCount
-    )
-}
 
-fun PlaylistEntity.toDomain(itemCount: Int = 0): Playlist {
-    return Playlist(
-        id = id,
-        title = title,
-        createdAt = createdAt,
-        updatedAt = updatedAt,
-        itemCount = itemCount
-    )
-}
-
-fun PlaylistItemWithVideoTuple.toDomain(): PlaylistItem {
-    return PlaylistItem(
-        id = item.id,
-        playlistId = item.playlistId,
-        videoId = item.videoId,
-        orderIndex = item.orderIndex,
-        addedAt = item.addedAt,
-        video = video?.toDomain()
-    )
-}
 
 fun FolderTuple.toDomain(): Folder {
     return Folder(

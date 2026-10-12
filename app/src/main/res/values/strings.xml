@@ -9,8 +9,6 @@
     <string name="continue_watching">Continue Watching</string>
     <string name="all_videos">All Videos</string>
     <string name="folders">Folders</string>
-    <string name="playlists">Playlists</string>
-    <string name="favorites">Favorites</string>
     <string name="settings">Settings</string>
     <string name="search">Search</string>
     <string name="queue">Queue</string>
@@ -31,14 +29,10 @@
     <string name="empty_folders">No folders found</string>
     <string name="empty_videos">No videos found on device</string>
     <string name="empty_folder">No videos in this folder</string>
-    <string name="empty_playlists">No playlists created yet</string>
-    <string name="empty_favorites">No favorite videos yet</string>
     <string name="empty_search">No matching videos found</string>
     <string name="settings_empty">Settings unavailable</string>
-    <string name="new_playlist">New Playlist</string>
     <string name="rename">Rename</string>
     <string name="delete">Delete</string>
-    <string name="playlist_name">Playlist Name</string>
     <string name="loading">Scanning media library…</string>
     <string name="buffering">Buffering…</string>
     <string name="retry">Retry</string>
@@ -55,8 +49,6 @@
     <!-- Content Descriptions -->
     <string name="cd_search">Search library</string>
     <string name="cd_back">Navigate back</string>
-    <string name="cd_add_playlist">Create new playlist</string>
-    <string name="cd_remove_favorite">Remove from favorites</string>
     <string name="cd_unlock">Unlock controls</string>
     <string name="cd_lock">Lock screen controls</string>
     <string name="cd_subtitles">Open subtitles</string>
@@ -69,7 +61,6 @@
     <string name="cd_logo">ExcavPlayer logo</string>
     <string name="cd_folder">Folder</string>
     <string name="cd_open">Open item</string>
-    <string name="cd_playlist">Playlist item</string>
     <string name="cd_close">Close sheet</string>
     <string name="cd_previous">Play previous video</string>
     <string name="cd_next">Play next video</string>

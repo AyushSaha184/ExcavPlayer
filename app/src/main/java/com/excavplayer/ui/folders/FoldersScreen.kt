@@ -42,9 +42,7 @@ import androidx.compose.ui.unit.dp
 import com.excavplayer.R
 import com.excavplayer.domain.model.Folder
 import com.excavplayer.domain.model.NaturalVideoComparator
-import com.excavplayer.domain.model.Playlist
 import com.excavplayer.domain.model.Video
-import com.excavplayer.ui.components.AddToPlaylistDialog
 import com.excavplayer.ui.components.BatchFolderOptionsMenu
 import com.excavplayer.ui.components.BatchVideoOptionsMenu
 import com.excavplayer.ui.components.EmptyState
@@ -69,17 +67,8 @@ fun FoldersScreen(
     folderVideos: List<Video>,
     videos: List<Video> = emptyList(),
     folderVideosMap: Map<String, List<Video>> = emptyMap(),
-    playlists: List<Playlist>,
-    favorites: List<Video>,
-    favoriteFolders: List<Folder> = emptyList(),
     onSelectFolder: (Folder?) -> Unit,
     onPlay: (Video, List<Video>) -> Unit,
-    onToggleFavorite: (Video) -> Unit,
-    onToggleFavoriteFolder: (Folder) -> Unit = {},
-    onSetVideosFavorite: (List<Video>, Boolean) -> Unit = { _, _ -> },
-    onSetFoldersFavorite: (List<Folder>, Boolean) -> Unit = { _, _ -> },
-    onAddToPlaylist: (Long, Video) -> Unit,
-    onCreatePlaylist: (String) -> Unit,
     onRenameVideo: (Video, String) -> Unit,
     onDeleteVideo: (Video) -> Unit,
     onDeleteVideos: (List<Video>) -> Unit = {},
@@ -103,7 +92,6 @@ fun FoldersScreen(
     var propertiesFolder by remember { mutableStateOf<Folder?>(null) }
     var renameVideoTarget by remember { mutableStateOf<Video?>(null) }
     var renameFolderTarget by remember { mutableStateOf<Folder?>(null) }
-    var playlistVideoTarget by remember { mutableStateOf<Video?>(null) }
 
     // Clear selection when navigating into/out of folder
     LaunchedEffect(selectedFolder) {
@@ -289,14 +277,10 @@ fun FoldersScreen(
                                     onMoreClick = if (!isSelectionMode) { { selectedVideoForMenu = video } } else null,
                                     dropdownMenu = {
                                         if (!isSelectionMode && selectedVideoForMenu?.id == video.id) {
-                                            val isFav = favorites.any { it.id == video.id }
                                             VideoOptionsMenu(
                                                 expanded = true,
                                                 video = video,
-                                                isFavorite = isFav,
                                                 onDismiss = { selectedVideoForMenu = null },
-                                                onToggleFavorite = { onToggleFavorite(video) },
-                                                onAddToPlaylist = { playlistVideoTarget = video },
                                                 onRename = { renameVideoTarget = video },
                                                 onProperties = { propertiesVideo = video },
                                                 onDelete = { onDeleteVideo(video) }
@@ -419,14 +403,10 @@ fun FoldersScreen(
                                 onMoreClick = if (!isSelectionMode) { { selectedVideoForMenu = video } } else null,
                                 dropdownMenu = {
                                     if (!isSelectionMode && selectedVideoForMenu?.id == video.id) {
-                                        val isFav = favorites.any { it.id == video.id }
                                         VideoOptionsMenu(
                                             expanded = true,
                                             video = video,
-                                            isFavorite = isFav,
                                             onDismiss = { selectedVideoForMenu = null },
-                                            onToggleFavorite = { onToggleFavorite(video) },
-                                            onAddToPlaylist = { playlistVideoTarget = video },
                                             onRename = { renameVideoTarget = video },
                                             onProperties = { propertiesVideo = video },
                                             onDelete = { onDeleteVideo(video) }
@@ -459,18 +439,10 @@ fun FoldersScreen(
                 if (isSelectionMode) {
                     if (selectedFolder == null) {
                         val selFolders = tree.rootVolumes.flatMap { it.subfolders.values }.map { it.toFolder() }.filter { it.path in selectedFolderPaths }.ifEmpty { folders.filter { it.path in selectedFolderPaths } }
-                        val isFav = selFolders.size == 1 && favoriteFolders.any { it.path == selFolders.first().path }
-                        val allFav = selFolders.isNotEmpty() && selFolders.all { f -> favoriteFolders.any { it.path == f.path } }
                         BatchFolderOptionsMenu(
                             expanded = isOverflowMenuOpen,
                             selectedFolders = selFolders,
-                            favoriteFolderPaths = favoriteFolders.map { it.path }.toSet(),
-                            isFavorite = isFav,
                             onDismiss = { isOverflowMenuOpen = false },
-                            onToggleFavorites = {
-                                onSetFoldersFavorite(selFolders, !allFav)
-                                selectedFolderPaths = emptySet()
-                            },
                             onRename = if (selFolders.size == 1) {
                                 { renameFolderTarget = selFolders.first() }
                             } else null,
@@ -486,7 +458,6 @@ fun FoldersScreen(
                         )
                     } else {
                         val selVideos = videos.filter { it.id in selectedVideoIds }
-                        val allFav = selVideos.isNotEmpty() && selVideos.all { v -> favorites.any { it.id == v.id } || v.isFavorite }
                         BatchVideoOptionsMenu(
                             expanded = isOverflowMenuOpen,
                             selectedVideos = selVideos,
@@ -496,15 +467,6 @@ fun FoldersScreen(
                                     onPlay(selVideos.first(), selVideos)
                                     selectedVideoIds = emptySet()
                                 }
-                            },
-                            onAddToPlaylist = {
-                                if (selVideos.isNotEmpty()) {
-                                    playlistVideoTarget = selVideos.first()
-                                }
-                            },
-                            onToggleFavorites = {
-                                onSetVideosFavorite(selVideos, !allFav)
-                                selectedVideoIds = emptySet()
                             },
                             onShare = {
                                 val uris = ArrayList<android.net.Uri>()
@@ -580,24 +542,6 @@ fun FoldersScreen(
                 selectedFolderPaths = emptySet()
             },
             onDismiss = { renameFolderTarget = null }
-        )
-    }
-
-    playlistVideoTarget?.let { video ->
-        AddToPlaylistDialog(
-            video = video,
-            playlists = playlists,
-            onSelectPlaylist = { playlistId -> 
-                if (selectedVideoIds.isNotEmpty()) {
-                    val selVideos = videos.filter { it.id in selectedVideoIds }
-                    selVideos.forEach { onAddToPlaylist(playlistId, it) }
-                    selectedVideoIds = emptySet()
-                } else {
-                    onAddToPlaylist(playlistId, video) 
-                }
-            },
-            onCreatePlaylist = { title -> onCreatePlaylist(title) },
-            onDismiss = { playlistVideoTarget = null }
         )
     }
 }
