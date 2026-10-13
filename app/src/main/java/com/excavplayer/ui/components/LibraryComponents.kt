@@ -483,149 +483,143 @@ fun BottomNav(
                     imageVector = selected.icon,
                     contentDescription = selected.label,
                     tint = Color.White,
-                    modifier = Modifier.size(26.dp)
+                    modifier = Modifier.size(32.dp)
                 )
             }
         } else {
-            // SmoothBottomNavigation: unselected = icon only, selected = icon + text in active capsule
-            var tabPositions by remember { mutableStateOf(mapOf<MainTab, Pair<Float, Float>>()) }
-            val density = LocalDensity.current
-            val currentBounds = tabPositions[selected]
-            var hasInitialPosition by remember { mutableStateOf(false) }
-            if (currentBounds != null && !hasInitialPosition) {
-                hasInitialPosition = true
-            }
-
-            val targetOffsetDp = currentBounds?.let { with(density) { it.first.toDp() } } ?: 0.dp
-            val targetWidthDp = currentBounds?.let { with(density) { it.second.toDp() } } ?: 0.dp
-
-            val animatedOffset by animateDpAsState(
-                targetValue = targetOffsetDp,
-                animationSpec = if (!hasInitialPosition) snap() else tween(
-                    durationMillis = 240,
-                    easing = FastOutSlowInEasing
-                ),
-                label = "indicatorOffset"
-            )
-            val animatedWidth by animateDpAsState(
-                targetValue = targetWidthDp,
-                animationSpec = if (!hasInitialPosition) snap() else tween(
-                    durationMillis = 240,
-                    easing = FastOutSlowInEasing
-                ),
-                label = "indicatorWidth"
-            )
-
-            Box(
+            // SmoothBottomNavigation: fixed-size sliding capsule indicator without bouncy size changes
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 3.dp, vertical = 3.dp)
             ) {
-                // Single sliding highlight capsule indicator
-                if (hasInitialPosition && animatedWidth > 0.dp) {
-                    Box(
-                        modifier = Modifier
-                            .offset(x = animatedOffset)
-                            .width(animatedWidth)
-                            .fillMaxHeight()
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.18f))
-                            .border(
-                                width = 0.5.dp,
-                                color = Color.White.copy(alpha = 0.30f),
-                                shape = CircleShape
-                            )
-                    )
+                val totalWidth = maxWidth
+                val tabCount = entries.size
+                val selectedIndex = entries.indexOf(selected).coerceAtLeast(0)
+                val pillWidth = 110.dp.coerceAtMost(totalWidth)
+                val pillHalfWidth = pillWidth / 2f
+                val availableRemaining = (totalWidth - pillWidth).coerceAtLeast(0.dp)
+
+                val selectedTabCenter = when (selectedIndex) {
+                    0 -> pillHalfWidth
+                    1 -> totalWidth / 2f
+                    else -> totalWidth - pillHalfWidth
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    entries.forEach { tab ->
+                val animatedPillCenter by animateDpAsState(
+                    targetValue = selectedTabCenter,
+                    animationSpec = tween(
+                        durationMillis = 240,
+                        easing = FastOutSlowInEasing
+                    ),
+                    label = "indicatorCenter"
+                )
+
+                // Single sliding highlight capsule indicator
+                Box(
+                    modifier = Modifier
+                        .offset(x = (animatedPillCenter - pillHalfWidth).coerceAtLeast(0.dp))
+                        .width(pillWidth)
+                        .fillMaxHeight()
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.18f))
+                        .border(
+                            width = 0.5.dp,
+                            color = Color.White.copy(alpha = 0.30f),
+                            shape = CircleShape
+                        )
+                )
+
+                // Tabs and interactive touch targets
+                Box(modifier = Modifier.fillMaxSize()) {
+                    // Tab visual contents dynamically shifted to give space to selected pill
+                    entries.forEachIndexed { index, tab ->
                         val isSelected = selected == tab
-                        val pillShape = CircleShape
+                        val targetCenterDp = when (selectedIndex) {
+                            0 -> when (index) {
+                                0 -> pillHalfWidth
+                                1 -> pillWidth + availableRemaining * 0.25f
+                                else -> pillWidth + availableRemaining * 0.75f
+                            }
+                            1 -> when (index) {
+                                0 -> availableRemaining * 0.25f
+                                1 -> totalWidth / 2f
+                                else -> totalWidth - availableRemaining * 0.25f
+                            }
+                            else -> when (index) {
+                                0 -> availableRemaining * 0.25f
+                                1 -> availableRemaining * 0.75f
+                                else -> totalWidth - pillHalfWidth
+                            }
+                        }
+
+                        val animatedTabCenter by animateDpAsState(
+                            targetValue = targetCenterDp,
+                            animationSpec = tween(
+                                durationMillis = 240,
+                                easing = FastOutSlowInEasing
+                            ),
+                            label = "tabCenter_$index"
+                        )
+
                         val contentAlpha by animateFloatAsState(
                             targetValue = if (isSelected) 1.0f else 0.60f,
                             animationSpec = tween(160),
                             label = "tabAlpha"
                         )
-                        val iconScale by animateFloatAsState(
-                            targetValue = if (isSelected) 1.10f else 1.0f,
-                            animationSpec = tween(180, easing = FastOutSlowInEasing),
-                            label = "tabIconScale"
-                        )
 
-                        Row(
+                        Box(
                             modifier = Modifier
-                                .fillMaxHeight()
-                                .onGloballyPositioned { coordinates ->
-                                    val pos = coordinates.positionInParent()
-                                    val newX = pos.x
-                                    val newW = coordinates.size.width.toFloat()
-                                    val existing = tabPositions[tab]
-                                    if (existing == null || existing.first != newX || existing.second != newW) {
-                                        tabPositions = tabPositions + (tab to (newX to newW))
-                                    }
-                                }
-                                .clip(pillShape)
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null
-                                ) { onSelect(tab) }
-                                .padding(
-                                    horizontal = if (isSelected) 20.dp else 14.dp
-                                )
-                                .animateContentSize(
-                                    animationSpec = tween(
-                                        durationMillis = 240,
-                                        easing = FastOutSlowInEasing
-                                    )
-                                ),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
+                                .offset(x = animatedTabCenter - pillHalfWidth)
+                                .width(pillWidth)
+                                .fillMaxHeight(),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                imageVector = tab.icon,
-                                contentDescription = tab.label,
-                                tint = Color.White.copy(alpha = contentAlpha),
-                                modifier = Modifier
-                                    .size(24.dp)
-                                    .graphicsLayer {
-                                        scaleX = iconScale
-                                        scaleY = iconScale
-                                    }
-                            )
-                            AnimatedVisibility(
-                                visible = isSelected,
-                                enter = fadeIn(tween(140)) + expandHorizontally(
-                                    animationSpec = tween(
-                                        durationMillis = 240,
-                                        easing = FastOutSlowInEasing
-                                    )
-                                ),
-                                exit = fadeOut(tween(90)) + shrinkHorizontally(
-                                    animationSpec = tween(
-                                        durationMillis = 240,
-                                        easing = FastOutSlowInEasing
-                                    )
-                                )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(
-                                        text = tab.label,
-                                        color = Color.White.copy(alpha = contentAlpha),
-                                        style = MaterialTheme.typography.labelMedium.copy(
-                                            fontSize = 14.sp,
-                                            fontWeight = FontWeight.Bold
-                                        ),
-                                        maxLines = 1,
-                                        softWrap = false
-                                    )
+                                Icon(
+                                    imageVector = tab.icon,
+                                    contentDescription = tab.label,
+                                    tint = Color.White.copy(alpha = contentAlpha),
+                                    modifier = Modifier.size(30.dp)
+                                )
+                                AnimatedVisibility(
+                                    visible = isSelected,
+                                    enter = fadeIn(tween(160, delayMillis = 60)),
+                                    exit = fadeOut(tween(90))
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(
+                                            text = tab.label,
+                                            color = Color.White.copy(alpha = contentAlpha),
+                                            style = MaterialTheme.typography.labelMedium.copy(
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Bold
+                                            ),
+                                            maxLines = 1,
+                                            softWrap = false
+                                        )
+                                    }
                                 }
                             }
+                        }
+                    }
+
+                    // Clickable partition row spanning entire width for comfortable touch targeting
+                    Row(modifier = Modifier.fillMaxSize()) {
+                        entries.forEach { tab ->
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) { onSelect(tab) }
+                            )
                         }
                     }
                 }
