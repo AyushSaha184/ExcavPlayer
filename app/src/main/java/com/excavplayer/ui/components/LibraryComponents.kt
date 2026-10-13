@@ -501,17 +501,17 @@ fun BottomNav(
 
             val animatedOffset by animateDpAsState(
                 targetValue = targetOffsetDp,
-                animationSpec = if (!hasInitialPosition) snap() else spring(
-                    dampingRatio = 0.76f,
-                    stiffness = Spring.StiffnessMediumLow
+                animationSpec = if (!hasInitialPosition) snap() else tween(
+                    durationMillis = 240,
+                    easing = FastOutSlowInEasing
                 ),
                 label = "indicatorOffset"
             )
             val animatedWidth by animateDpAsState(
                 targetValue = targetWidthDp,
-                animationSpec = if (!hasInitialPosition) snap() else spring(
-                    dampingRatio = 0.76f,
-                    stiffness = Spring.StiffnessMediumLow
+                animationSpec = if (!hasInitialPosition) snap() else tween(
+                    durationMillis = 240,
+                    easing = FastOutSlowInEasing
                 ),
                 label = "indicatorWidth"
             )
@@ -553,16 +553,22 @@ fun BottomNav(
                         )
                         val iconScale by animateFloatAsState(
                             targetValue = if (isSelected) 1.10f else 1.0f,
-                            animationSpec = spring(
-                                dampingRatio = 0.70f,
-                                stiffness = Spring.StiffnessMediumLow
-                            ),
+                            animationSpec = tween(180, easing = FastOutSlowInEasing),
                             label = "tabIconScale"
                         )
 
                         Row(
                             modifier = Modifier
                                 .fillMaxHeight()
+                                .onGloballyPositioned { coordinates ->
+                                    val pos = coordinates.positionInParent()
+                                    val newX = pos.x
+                                    val newW = coordinates.size.width.toFloat()
+                                    val existing = tabPositions[tab]
+                                    if (existing == null || existing.first != newX || existing.second != newW) {
+                                        tabPositions = tabPositions + (tab to (newX to newW))
+                                    }
+                                }
                                 .clip(pillShape)
                                 .clickable(
                                     interactionSource = remember { MutableInteractionSource() },
@@ -572,20 +578,11 @@ fun BottomNav(
                                     horizontal = if (isSelected) 20.dp else 14.dp
                                 )
                                 .animateContentSize(
-                                    animationSpec = spring(
-                                        dampingRatio = 0.72f,
-                                        stiffness = Spring.StiffnessMediumLow
+                                    animationSpec = tween(
+                                        durationMillis = 240,
+                                        easing = FastOutSlowInEasing
                                     )
-                                )
-                                .onGloballyPositioned { coordinates ->
-                                    val pos = coordinates.positionInParent()
-                                    val newX = pos.x
-                                    val newW = coordinates.size.width.toFloat()
-                                    val existing = tabPositions[tab]
-                                    if (existing == null || existing.first != newX || existing.second != newW) {
-                                        tabPositions = tabPositions + (tab to (newX to newW))
-                                    }
-                                },
+                                ),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
@@ -602,16 +599,16 @@ fun BottomNav(
                             )
                             AnimatedVisibility(
                                 visible = isSelected,
-                                enter = fadeIn(tween(160)) + expandHorizontally(
-                                    animationSpec = spring(
-                                        dampingRatio = 0.72f,
-                                        stiffness = Spring.StiffnessMediumLow
+                                enter = fadeIn(tween(140)) + expandHorizontally(
+                                    animationSpec = tween(
+                                        durationMillis = 240,
+                                        easing = FastOutSlowInEasing
                                     )
                                 ),
-                                exit = fadeOut(tween(100)) + shrinkHorizontally(
-                                    animationSpec = spring(
-                                        dampingRatio = 0.72f,
-                                        stiffness = Spring.StiffnessMediumLow
+                                exit = fadeOut(tween(90)) + shrinkHorizontally(
+                                    animationSpec = tween(
+                                        durationMillis = 240,
+                                        easing = FastOutSlowInEasing
                                     )
                                 )
                             ) {
@@ -2867,7 +2864,10 @@ fun ExcavSleekSlider(
                             .clip(RoundedCornerShape(3.dp))
                             .background(
                                 Brush.horizontalGradient(
-                                    listOf(ExcavPalette.Silver, ExcavPalette.Blue)
+                                    listOf(
+                                        if (enabled) ExcavPalette.Silver else ExcavPalette.Silver.copy(alpha = 0.35f),
+                                        if (enabled) ExcavPalette.Blue else ExcavPalette.Blue.copy(alpha = 0.35f)
+                                    )
                                 )
                             )
                     )

@@ -3153,18 +3153,9 @@ private fun MoreOptionsSheet(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 14.dp)
     ) {
-        Text(
-            text = "More Options",
-            color = ExcavPalette.Text,
-            style = MaterialTheme.typography.titleMedium.copy(
-                fontWeight = FontWeight.Bold,
-                fontSize = 16.sp
-            ),
-            modifier = Modifier.padding(bottom = 6.dp)
-        )
-
         MoreOptionItem(
             title = "Volume Equalizer",
             onClick = onOpenEqualizer
@@ -3210,7 +3201,8 @@ private enum class EqualizerPreset { CUSTOM, BALANCED, BASS_BOOST }
 private fun EqualizerPillTabBar(
     selectedPreset: EqualizerPreset,
     onPresetSelected: (EqualizerPreset) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
 ) {
     val tabs = remember {
         listOf(
@@ -3232,6 +3224,7 @@ private fun EqualizerPillTabBar(
 
     Box(
         modifier = modifier
+            .graphicsLayer { alpha = if (enabled) 1f else 0.45f }
             .clip(RoundedCornerShape(20.dp))
             .background(Color.White.copy(alpha = 0.08f))
             .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
@@ -3255,6 +3248,7 @@ private fun EqualizerPillTabBar(
                         modifier = Modifier
                             .clip(RoundedCornerShape(17.dp))
                             .clickable(
+                                enabled = enabled,
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null
                             ) { onPresetSelected(preset) }
@@ -3317,11 +3311,15 @@ private fun EqualizerSheet(
     onBack: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val selectedPreset = remember(equalizerState.preset) {
-        when (equalizerState.preset) {
-            "Balanced" -> EqualizerPreset.BALANCED
-            "Bass Boost" -> EqualizerPreset.BASS_BOOST
-            else -> EqualizerPreset.CUSTOM
+    val selectedPreset = remember(equalizerState.preset, equalizerState.enabled) {
+        if (!equalizerState.enabled) {
+            EqualizerPreset.CUSTOM
+        } else {
+            when (equalizerState.preset) {
+                "Balanced" -> EqualizerPreset.BALANCED
+                "Bass Boost" -> EqualizerPreset.BASS_BOOST
+                else -> EqualizerPreset.CUSTOM
+            }
         }
     }
 
@@ -3385,13 +3383,16 @@ private fun EqualizerSheet(
             EqualizerPillTabBar(
                 selectedPreset = selectedPreset,
                 onPresetSelected = { preset ->
-                    val presetStr = when (preset) {
-                        EqualizerPreset.CUSTOM -> "Custom"
-                        EqualizerPreset.BALANCED -> "Balanced"
-                        EqualizerPreset.BASS_BOOST -> "Bass Boost"
+                    if (equalizerState.enabled) {
+                        val presetStr = when (preset) {
+                            EqualizerPreset.CUSTOM -> "Custom"
+                            EqualizerPreset.BALANCED -> "Balanced"
+                            EqualizerPreset.BASS_BOOST -> "Bass Boost"
+                        }
+                        vm.setEqualizerPreset(presetStr)
                     }
-                    vm.setEqualizerPreset(presetStr)
-                }
+                },
+                enabled = equalizerState.enabled
             )
         }
 
@@ -3492,7 +3493,7 @@ private fun CustomEqualizerTabContent(
                     },
                     valueRange = -10f..10f,
                     enabled = isEnabled,
-                    showZeroMarker = true,
+                    showZeroMarker = false,
                     modifier = Modifier.weight(1f)
                 )
                 Text(
@@ -3698,20 +3699,21 @@ private fun EqBadge(
 ) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
+            .clip(CircleShape)
             .background(if (active) ExcavPalette.Primary.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.04f))
             .border(
                 1.dp,
                 if (active) ExcavPalette.Primary.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.08f),
-                RoundedCornerShape(8.dp)
+                CircleShape
             )
-            .padding(vertical = 6.dp),
+            .padding(horizontal = 8.dp, vertical = 7.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = label,
             color = if (active) ExcavPalette.Primary else ExcavPalette.TextMuted,
-            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold, fontSize = 10.5.sp)
+            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold, fontSize = 10.5.sp),
+            textAlign = TextAlign.Center
         )
     }
 }
@@ -3741,7 +3743,6 @@ private fun SubtitleCustomizationSheet(
         listOf(
             "Border" to "Border",
             "Background" to "Background",
-            "Both" to "Both",
             "None" to "None"
         )
     }
@@ -3918,7 +3919,7 @@ private fun SubtitleCustomizationSheet(
             )
         )
         Spacer(Modifier.height(8.dp))
-        val currentStyle = if (settings.subtitleBackgroundStyle.equals("Outline", ignoreCase = true)) "Border" else settings.subtitleBackgroundStyle
+        val currentStyle = if (settings.subtitleBackgroundStyle.equals("Outline", ignoreCase = true) || settings.subtitleBackgroundStyle.equals("Both", ignoreCase = true)) "Border" else settings.subtitleBackgroundStyle
         val styleIndex = styles.indexOfFirst { it.first.equals(currentStyle, ignoreCase = true) }.coerceAtLeast(0)
         SegmentedAnimatedPillBar(
             options = styles.map { it.second },
@@ -3952,9 +3953,9 @@ private fun SegmentedAnimatedPillBar(
 
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(20.dp))
             .background(Color.White.copy(alpha = 0.05f))
-            .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(12.dp))
+            .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(20.dp))
             .padding(3.dp)
     ) {
         Layout(
@@ -3962,7 +3963,7 @@ private fun SegmentedAnimatedPillBar(
                 // Animated Highlight Pill Background with spring glide
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(9.dp))
+                        .clip(RoundedCornerShape(17.dp))
                         .background(
                             Brush.horizontalGradient(
                                 listOf(ExcavPalette.Primary, ExcavPalette.Primary.copy(alpha = 0.85f))
@@ -3974,7 +3975,7 @@ private fun SegmentedAnimatedPillBar(
                     val isSelected = selectedIndex == index
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(9.dp))
+                            .clip(RoundedCornerShape(17.dp))
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null

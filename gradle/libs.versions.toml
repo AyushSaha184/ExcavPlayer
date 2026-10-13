@@ -3,7 +3,7 @@ agp = "8.6.1"
 kotlin = "2.0.21"
 ksp = "2.0.21-1.0.28"
 hilt = "2.58"
-media3 = "1.4.1"
+media3 = "1.5.0"
 room = "2.6.1"
 paging = "3.3.2"
 profileinstaller = "1.4.1"
@@ -61,6 +61,7 @@ androidx-media3-session = { group = "androidx.media3", name = "media3-session", 
 androidx-media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3" }
 androidx-media3-common = { group = "androidx.media3", name = "media3-common", version.ref = "media3" }
 androidx-media3-extractor = { group = "androidx.media3", name = "media3-extractor", version.ref = "media3" }
+media3-ffmpeg-decoder = { group = "org.jellyfin.media3", name = "media3-ffmpeg-decoder", version = "1.5.0+1" }
 
 # Room
 androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }

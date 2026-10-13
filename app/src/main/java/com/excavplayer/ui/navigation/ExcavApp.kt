@@ -588,15 +588,7 @@ fun CircularAudioVisualizer(
                 )
             }
 
-            // Inner white circle disc
-            val innerRadius = outerRadius - 4.dp.toPx()
-            drawCircle(
-                color = Color.White,
-                radius = innerRadius,
-                center = center
-            )
-
-            // 3. Central minimal 4-bar soundwave colored in black
+            // 3. Central minimal 4-bar soundwave
             val barWidthPx = 2.5.dp.toPx()
             val barSpacingPx = 2.5.dp.toPx()
             val totalBarsWidth = 4 * barWidthPx + 3 * barSpacingPx
@@ -619,7 +611,7 @@ fun CircularAudioVisualizer(
                 val x = startX + i * (barWidthPx + barSpacingPx)
                 val h = heights[i]
                 drawLine(
-                    color = Color.Black,
+                    color = Color.White,
                     start = Offset(x, center.y - h / 2f),
                     end = Offset(x, center.y + h / 2f),
                     strokeWidth = barWidthPx,
