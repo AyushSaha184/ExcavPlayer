@@ -140,10 +140,11 @@ fun SettingsScreen(
                 SettingsDivider()
                 SettingsNavRow(
                     icon = Icons.Default.Timer,
-                    title = "Resume Threshold",
+                    title = "Select seek duration",
                     subtitle = when {
                         settings.resumeThresholdPercent >= 0.99f -> "5 seconds"
                         settings.resumeThresholdPercent >= 0.95f -> "10 seconds"
+                        settings.resumeThresholdPercent >= 0.92f -> "20 seconds"
                         settings.resumeThresholdPercent >= 0.90f -> "30 seconds"
                         else -> "1 minute"
                     },
@@ -364,13 +365,14 @@ fun SettingsScreen(
         }
         SettingDialog.THRESHOLD -> {
             RadioChoiceDialog(
-                title = "Resume Threshold",
-                options = listOf(0.99f, 0.95f, 0.90f, 0.80f),
+                title = "Select seek duration",
+                options = listOf(0.99f, 0.95f, 0.92f, 0.90f, 0.80f),
                 selected = settings.resumeThresholdPercent,
                 labelFor = {
                     when {
                         it >= 0.99f -> "5 seconds"
                         it >= 0.95f -> "10 seconds"
+                        it >= 0.92f -> "20 seconds"
                         it >= 0.90f -> "30 seconds"
                         else -> "1 minute"
                     }

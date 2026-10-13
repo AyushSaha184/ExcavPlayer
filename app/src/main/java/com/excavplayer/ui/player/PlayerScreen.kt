@@ -352,7 +352,7 @@ fun PlayerScreen(
                     }
                 }
             }
-            .pointerInput(isLocked, zoomScale, isPip, activeSheet) {
+            .pointerInput(isLocked, zoomScale, isPip, activeSheet, settings.seekDurationSeconds) {
                 if (!isLocked && !isPip && activeSheet == null) {
                     detectTapGestures(
                         onTap = {
@@ -372,26 +372,28 @@ fun PlayerScreen(
                             }
                             val width = size.width
                             val now = android.os.SystemClock.uptimeMillis()
+                            val seekStep = settings.seekDurationSeconds
+                            val seekStepMs = settings.seekDurationMs
                             when {
                                 offset.x < width * 0.35f -> {
                                     if (doubleTapSeekSide == DoubleTapSide.LEFT && now - lastDoubleTapSeekTime < 750) {
-                                        doubleTapSeekAccumulatedSeconds += 10
+                                        doubleTapSeekAccumulatedSeconds += seekStep
                                     } else {
-                                        doubleTapSeekAccumulatedSeconds = 10
+                                        doubleTapSeekAccumulatedSeconds = seekStep
                                     }
                                     lastDoubleTapSeekTime = now
                                     doubleTapSeekSide = DoubleTapSide.LEFT
-                                    vm.player.seekBackward(10_000)
+                                    vm.player.seekBackward(seekStepMs)
                                 }
                                 offset.x > width * 0.65f -> {
                                     if (doubleTapSeekSide == DoubleTapSide.RIGHT && now - lastDoubleTapSeekTime < 750) {
-                                        doubleTapSeekAccumulatedSeconds += 10
+                                        doubleTapSeekAccumulatedSeconds += seekStep
                                     } else {
-                                        doubleTapSeekAccumulatedSeconds = 10
+                                        doubleTapSeekAccumulatedSeconds = seekStep
                                     }
                                     lastDoubleTapSeekTime = now
                                     doubleTapSeekSide = DoubleTapSide.RIGHT
-                                    vm.player.seekForward(10_000)
+                                    vm.player.seekForward(seekStepMs)
                                 }
                                 else -> {
                                     if (state.playback.isPlaying) {

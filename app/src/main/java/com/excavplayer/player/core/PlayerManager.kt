@@ -360,6 +360,7 @@ class PlayerManager @Inject constructor(
             val thresholdMs = when {
                 settings.resumeThresholdPercent >= 0.99f -> 5_000L
                 settings.resumeThresholdPercent >= 0.95f -> 10_000L
+                settings.resumeThresholdPercent >= 0.92f -> 20_000L
                 settings.resumeThresholdPercent >= 0.90f -> 30_000L
                 else -> 60_000L
             }
