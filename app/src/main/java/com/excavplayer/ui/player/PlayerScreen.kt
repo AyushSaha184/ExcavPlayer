@@ -189,6 +189,7 @@ fun PlayerScreen(
 
     var lastDoubleTapSeekTime by remember { mutableLongStateOf(0L) }
     var activeSurfaceView by remember { mutableStateOf<android.view.SurfaceView?>(null) }
+    var activePlayerView by remember { mutableStateOf<PlayerView?>(null) }
 
     // Subtle background blur when an option sheet is opened
     val sheetBlurRadius by animateDpAsState(
@@ -234,6 +235,8 @@ fun PlayerScreen(
         }
     }
 
+    val isPip = (activity?.isInPictureInPictureMode == true) || state.isInPictureInPicture
+
     // Set initial screen orientation based on user settings
     LaunchedEffect(Unit) {
         val initialOrientation = when (settings.defaultScreenOrientation) {
@@ -242,7 +245,24 @@ fun PlayerScreen(
             "Sensor" -> ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
             else -> ActivityInfo.SCREEN_ORIENTATION_SENSOR
         }
-        activity?.requestedOrientation = initialOrientation
+        if (!isPip) {
+            activity?.requestedOrientation = initialOrientation
+        }
+    }
+
+    // Reset orientation lock while in PiP so the system PiP window is not clipped or constrained
+    LaunchedEffect(isPip) {
+        if (isPip) {
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        } else {
+            val targetOrientation = when (settings.defaultScreenOrientation) {
+                "Landscape" -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                "Portrait" -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                "Sensor" -> ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+                else -> ActivityInfo.SCREEN_ORIENTATION_SENSOR
+            }
+            activity?.requestedOrientation = targetOrientation
+        }
     }
 
     // Hide system status & navigation bars for immersive video playback, restore on disposal
@@ -317,8 +337,6 @@ fun PlayerScreen(
         gestureHudText = label
         gestureHudIcon = Icons.Default.AspectRatio
     }
-
-    val isPip = (activity?.isInPictureInPictureMode == true) || state.isInPictureInPicture
 
     BoxWithConstraints(
         modifier = Modifier
@@ -573,6 +591,7 @@ fun PlayerScreen(
         AndroidView(
             factory = { ctx ->
                 PlayerView(ctx).apply {
+                    activePlayerView = this
                     this.player = vm.player.exoPlayer
                     useController = false
                     keepScreenOn = state.playback.isPlaying
@@ -582,14 +601,15 @@ fun PlayerScreen(
                     )
                     setBackgroundColor(android.graphics.Color.BLACK)
                     setShutterBackgroundColor(android.graphics.Color.BLACK)
-                    this.resizeMode = resizeMode
+                    this.resizeMode = if (isPip) AspectRatioFrameLayout.RESIZE_MODE_FIT else resizeMode
                     applySubtitleStyles(subtitleView, settings)
                 }
             },
             update = { playerView ->
+                activePlayerView = playerView
                 val currentVidId = state.currentVideo?.id
                 playerView.keepScreenOn = state.playback.isPlaying
-                playerView.resizeMode = resizeMode
+                playerView.resizeMode = if (isPip) AspectRatioFrameLayout.RESIZE_MODE_FIT else resizeMode
                 applySubtitleStyles(playerView.subtitleView, settings)
 
                 // Display Refresh Rate Optimization (Judder-Free Playback)
@@ -625,10 +645,11 @@ fun PlayerScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer {
-                    scaleX = zoomScale
-                    scaleY = zoomScale
-                    translationX = panOffset.x
-                    translationY = panOffset.y
+                    val s = if (isPip) 1f else zoomScale
+                    scaleX = s
+                    scaleY = s
+                    translationX = if (isPip) 0f else panOffset.x
+                    translationY = if (isPip) 0f else panOffset.y
                 }
         )
 
@@ -939,9 +960,17 @@ fun PlayerScreen(
                             if (currentActivity != null) {
                                 controlsVisible = false
                                 activeSheet = null
-                                val entered = pipHelper.enterPictureInPicture(currentActivity, state.currentVideo, state.playback.isPlaying)
+                                val targetView = activeSurfaceView ?: activePlayerView
+                                val entered = pipHelper.enterPictureInPicture(
+                                    currentActivity,
+                                    state.currentVideo,
+                                    state.playback.isPlaying,
+                                    sourceView = targetView
+                                )
                                 if (entered) {
                                     vm.player.dispatch(PlayerCommand.SetInPictureInPicture(true))
+                                } else {
+                                    controlsVisible = true
                                 }
                             }
                         },
@@ -1176,6 +1205,24 @@ private fun PlayerControlsOverlay(
                 }
 
 
+
+                // Mute Button (toggles audio mute for the current session without pausing/stopping)
+                IconButton(
+                    onClick = {
+                        onInteraction()
+                        player.setMuted(!state.isMuted)
+                    },
+                    modifier = Modifier
+                        .size(topBtnSize)
+                        .playerGlass(CircleShape)
+                ) {
+                    Icon(
+                        imageVector = if (state.isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+                        contentDescription = if (state.isMuted) stringResource(R.string.cd_unmute) else stringResource(R.string.cd_mute),
+                        tint = if (state.isMuted) Color(0xFFFF5252) else Color.White,
+                        modifier = Modifier.size(topIconSize)
+                    )
+                }
 
                 Spacer(Modifier.width(topBtnSpacing))
 

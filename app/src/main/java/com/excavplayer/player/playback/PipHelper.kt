@@ -4,8 +4,10 @@ import android.app.Activity
 import android.app.PictureInPictureParams
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Rect
 import android.os.Build
 import android.util.Rational
+import android.view.View
 import androidx.annotation.RequiresApi
 import com.excavplayer.core.logging.AppLogger
 import com.excavplayer.domain.model.Video
@@ -23,9 +25,15 @@ class PipHelper @Inject constructor(
     }
 
     val isPipSupported: Boolean
-        get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+        get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                context.packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
 
-    fun enterPictureInPicture(activity: Activity, video: Video?, isPlaying: Boolean): Boolean {
+    fun enterPictureInPicture(
+        activity: Activity,
+        video: Video?,
+        isPlaying: Boolean,
+        sourceView: View? = null
+    ): Boolean {
         if (activity.isFinishing || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1 && activity.isDestroyed)) {
             logger.w(TAG, "Activity is finishing or destroyed, skipping PiP")
             return false
@@ -35,8 +43,14 @@ class PipHelper @Inject constructor(
             return false
         }
 
+        val sourceRectHint = if (sourceView != null && sourceView.isAttachedToWindow) {
+            val rect = Rect()
+            sourceView.getGlobalVisibleRect(rect)
+            if (!rect.isEmpty) rect else null
+        } else null
+
         return try {
-            val params = buildPipParams(activity, video, isPlaying)
+            val params = buildPipParams(activity, video, isPlaying, sourceRectHint = sourceRectHint)
             activity.enterPictureInPictureMode(params)
         } catch (e: Exception) {
             logger.e(TAG, "Error entering Picture-in-Picture mode", e)
@@ -55,10 +69,16 @@ class PipHelper @Inject constructor(
         }
     }
 
-    fun updateAutoPipParams(activity: Activity, video: Video?, isPlaying: Boolean, autoEnter: Boolean) {
+    fun updateAutoPipParams(
+        activity: Activity,
+        video: Video?,
+        isPlaying: Boolean,
+        autoEnter: Boolean,
+        sourceRectHint: Rect? = null
+    ) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             try {
-                val params = buildPipParams(activity, video, isPlaying, autoEnter = autoEnter)
+                val params = buildPipParams(activity, video, isPlaying, autoEnter = autoEnter, sourceRectHint = sourceRectHint)
                 activity.setPictureInPictureParams(params)
             } catch (e: Exception) {
                 logger.w(TAG, "Failed to update PictureInPictureParams: ${e.message}")
@@ -71,19 +91,29 @@ class PipHelper @Inject constructor(
         activity: Activity,
         video: Video?,
         isPlaying: Boolean,
-        autoEnter: Boolean = false
+        autoEnter: Boolean = false,
+        sourceRectHint: Rect? = null
     ): PictureInPictureParams {
         val builder = PictureInPictureParams.Builder()
 
-        // Calculate aspect ratio clamped to Android's allowed range (0.418 to 2.39)
+        // Calculate aspect ratio clamped to Android's allowed range (0.4184 to 2.3900)
         val width = video?.width ?: 16
         val height = video?.height ?: 9
         if (width > 0 && height > 0) {
-            val ratio = (width.toFloat() / height.toFloat()).coerceIn(0.42f, 2.38f)
-            val num = (ratio * 1000).toInt()
-            builder.setAspectRatio(Rational(num, 1000))
+            val ratio = width.toFloat() / height.toFloat()
+            val clampedRatio = ratio.coerceIn(0.42f, 2.38f)
+            if (ratio == clampedRatio) {
+                builder.setAspectRatio(Rational(width, height))
+            } else {
+                val num = (clampedRatio * 1000).toInt()
+                builder.setAspectRatio(Rational(num, 1000))
+            }
         } else {
             builder.setAspectRatio(Rational(16, 9))
+        }
+
+        if (sourceRectHint != null && !sourceRectHint.isEmpty) {
+            builder.setSourceRectHint(sourceRectHint)
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {

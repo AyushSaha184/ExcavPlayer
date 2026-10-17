@@ -151,6 +151,15 @@ class PlayerManager @Inject constructor(
 
             return false
         }
+
+        fun parseSavedAudioTrack(savedPref: String?): Triple<String?, String?, String?> {
+            if (savedPref.isNullOrBlank()) return Triple(null, null, null)
+            val parts = savedPref.split("|")
+            val id = parts.getOrNull(0)?.takeIf { it.isNotBlank() }
+            val lang = parts.getOrNull(1)?.takeIf { it.isNotBlank() }
+            val label = parts.getOrNull(2)?.takeIf { it.isNotBlank() }
+            return Triple(id, lang, label)
+        }
     }
 
     private val coroutineExceptionHandler = CoroutineExceptionHandler { _, throwable ->
@@ -173,6 +182,9 @@ class PlayerManager @Inject constructor(
 
     private var currentSettings = UserSettings()
     private var userDisabledSubtitlesForSession = false
+    private var audioTrackInitializedForSession = false
+    private var userSelectedAudioTrackForSession: String? = null
+    private var savedAudioPreferenceForVideo: String? = null
     private val activeExternalSubtitles = mutableListOf<MediaItem.SubtitleConfiguration>()
 
     override val exoPlayer: ExoPlayer by lazy {
@@ -349,11 +361,14 @@ class PlayerManager @Inject constructor(
             userDisabledSubtitlesForSession = false
             activeExternalSubtitles.clear()
             pausedByHeadset = false
+            audioTrackInitializedForSession = false
+            userSelectedAudioTrackForSession = null
+            val savedPlayback = playbackRepository.getPlaybackState(video.id)
+            savedAudioPreferenceForVideo = savedPlayback?.selectedAudioTrackId
             val rawPos = if (!settings.autoResume) {
                 0L
             } else {
-                val savedState = playbackRepository.getPlaybackState(video.id)
-                startPositionMs ?: savedState?.currentPositionMs ?: 0L
+                startPositionMs ?: savedPlayback?.currentPositionMs ?: 0L
             }
 
             val duration = video.durationMs
@@ -445,6 +460,7 @@ class PlayerManager @Inject constructor(
                     currentVideo = video,
                     error = null,
                     isBackgroundAudio = false,
+                    isMuted = false,
                     chapters = emptyList(),
                     subtitleDelayMs = initialDelay,
                     equalizerState = initialEqState,
@@ -455,6 +471,14 @@ class PlayerManager @Inject constructor(
                     )
                 )
             }
+
+            val currentVol = _state.value.playback.volume.coerceIn(0f, 2.0f)
+            if (currentVol <= 1.0f) {
+                exoPlayer.volume = currentVol
+            } else {
+                exoPlayer.volume = 1.0f
+            }
+            applyLoudnessEnhancer(currentVol)
 
             exoPlayer.setPlaybackParameters(PlaybackParameters(settings.defaultPlaybackSpeed))
             exoPlayer.setMediaItem(mediaItem)
@@ -935,6 +959,9 @@ class PlayerManager @Inject constructor(
 
     override fun setVolume(volume: Float) {
         val clampedVolume = volume.coerceIn(0f, 2.0f)
+        if (_state.value.isMuted) {
+            _state.update { it.copy(isMuted = false) }
+        }
         if (clampedVolume <= 1.0f) {
             exoPlayer.volume = clampedVolume
         } else {
@@ -943,6 +970,24 @@ class PlayerManager @Inject constructor(
         applyLoudnessEnhancer(clampedVolume)
         _state.update {
             it.copy(playback = it.playback.copy(volume = clampedVolume))
+        }
+    }
+
+    override fun setMuted(muted: Boolean) {
+        logger.d(TAG, "setMuted: $muted")
+        if (muted) {
+            exoPlayer.volume = 0f
+            applyLoudnessEnhancer(0f)
+            _state.update { it.copy(isMuted = true) }
+        } else {
+            val vol = _state.value.playback.volume.coerceIn(0f, 2.0f)
+            if (vol <= 1.0f) {
+                exoPlayer.volume = vol
+            } else {
+                exoPlayer.volume = 1.0f
+            }
+            applyLoudnessEnhancer(vol)
+            _state.update { it.copy(isMuted = false) }
         }
     }
 
@@ -970,9 +1015,48 @@ class PlayerManager @Inject constructor(
 
     override fun selectAudioTrack(trackId: String?) {
         logger.d(TAG, "selectAudioTrack: $trackId")
+        audioTrackInitializedForSession = true
+        userSelectedAudioTrackForSession = trackId
         trackManager.selectTrack(exoPlayer, C.TRACK_TYPE_AUDIO, trackId)
-        _state.update {
-            it.copy(playback = it.playback.copy(selectedAudioTrackId = trackId))
+
+        val matchingTrack = _state.value.availableAudioTracks.find { it.id == trackId }
+        val compositePref = if (matchingTrack != null) {
+            "${matchingTrack.id}|${matchingTrack.language.orEmpty()}|${matchingTrack.label}"
+        } else {
+            trackId
+        }
+        savedAudioPreferenceForVideo = compositePref
+
+        _state.update { current ->
+            val updatedAudio = current.availableAudioTracks.map {
+                it.copy(isSelected = it.id == trackId)
+            }
+            current.copy(
+                availableAudioTracks = updatedAudio,
+                playback = current.playback.copy(selectedAudioTrackId = compositePref)
+            )
+        }
+
+        val currentVid = _state.value.currentVideo
+        if (currentVid != null) {
+            playerScope.launch(dispatchers.io) {
+                try {
+                    val existing = playbackRepository.getPlaybackState(currentVid.id)
+                    val stateToSave = existing?.copy(
+                        videoId = currentVid.id,
+                        selectedAudioTrackId = compositePref,
+                        lastUpdatedTimestamp = System.currentTimeMillis()
+                    ) ?: PlaybackState(
+                        videoId = currentVid.id,
+                        selectedAudioTrackId = compositePref,
+                        durationMs = currentVid.durationMs,
+                        lastUpdatedTimestamp = System.currentTimeMillis()
+                    )
+                    playbackRepository.savePlaybackState(stateToSave)
+                } catch (e: Exception) {
+                    logger.w(TAG, "Failed to persist audio track preference: ${e.message}")
+                }
+            }
         }
     }
 
@@ -1090,7 +1174,7 @@ class PlayerManager @Inject constructor(
         } catch (e: Exception) {
             logger.w(TAG, "Error stopping exoPlayer: ${e.message}")
         }
-        _state.update { it.copy(currentVideo = null, isBackgroundAudio = false) }
+        _state.update { it.copy(currentVideo = null, isBackgroundAudio = false, isMuted = false) }
     }
 
     override fun release() {
@@ -1135,6 +1219,7 @@ class PlayerManager @Inject constructor(
             is PlayerCommand.SeekRelative -> seekForward(command.offsetMs)
             is PlayerCommand.SetSpeed -> setPlaybackSpeed(command.speed)
             is PlayerCommand.SetVolume -> setVolume(command.volume)
+            is PlayerCommand.SetMuted -> setMuted(command.muted)
             is PlayerCommand.SetRepeatMode -> setRepeatMode(command.mode)
             is PlayerCommand.SetShuffle -> setShuffle(command.enabled)
             is PlayerCommand.SelectAudioTrack -> selectAudioTrack(command.trackId)
@@ -1268,24 +1353,54 @@ class PlayerManager @Inject constructor(
             val selectedVideo = video.find { it.isSelected }?.id
             var selectedSubs = subs.find { it.isSelected }?.id
 
-            // Match preferred audio language if configured
-            val preferredAudioLanguage = currentSettings.preferredAudioLanguage
-            if (!preferredAudioLanguage.isNullOrBlank()) {
-                val matchingAudio = audio.firstOrNull { track ->
-                    matchesLanguage(
-                        language = track.language,
-                        label = track.label,
-                        preferred = preferredAudioLanguage
-                    )
+            // Match remembered or preferred audio language if not yet initialized for this video session
+            if (!audioTrackInitializedForSession && audio.isNotEmpty()) {
+                var matched = false
+                if (!savedAudioPreferenceForVideo.isNullOrBlank()) {
+                    val (savedId, savedLang, savedLabel) = parseSavedAudioTrack(savedAudioPreferenceForVideo)
+                    val matchingAudio = audio.firstOrNull { it.id == savedId }
+                        ?: if (!savedLang.isNullOrBlank()) {
+                            audio.firstOrNull { matchesLanguage(it.language, it.label, savedLang) }
+                        } else null
+                        ?: if (!savedLabel.isNullOrBlank()) {
+                            audio.firstOrNull { it.label.equals(savedLabel, ignoreCase = true) }
+                        } else null
+
+                    if (matchingAudio != null) {
+                        logger.i(
+                            TAG,
+                            "Restoring remembered audio for video: ${matchingAudio.label} (${matchingAudio.language})"
+                        )
+                        if (matchingAudio.id != selectedAudio) {
+                            trackManager.selectTrack(exoPlayer, C.TRACK_TYPE_AUDIO, matchingAudio.id)
+                            selectedAudio = matchingAudio.id
+                        }
+                        userSelectedAudioTrackForSession = matchingAudio.id
+                        matched = true
+                    }
                 }
-                if (matchingAudio != null && matchingAudio.id != selectedAudio) {
-                    logger.i(
-                        TAG,
-                        "Selecting preferred audio: $preferredAudioLanguage -> ${matchingAudio.label} (${matchingAudio.language})"
-                    )
-                    trackManager.selectTrack(exoPlayer, C.TRACK_TYPE_AUDIO, matchingAudio.id)
-                    selectedAudio = matchingAudio.id
+
+                if (!matched) {
+                    val preferredAudioLanguage = currentSettings.preferredAudioLanguage
+                    if (!preferredAudioLanguage.isNullOrBlank()) {
+                        val matchingAudio = audio.firstOrNull { track ->
+                            matchesLanguage(
+                                language = track.language,
+                                label = track.label,
+                                preferred = preferredAudioLanguage
+                            )
+                        }
+                        if (matchingAudio != null && matchingAudio.id != selectedAudio) {
+                            logger.i(
+                                TAG,
+                                "Selecting default preferred audio: $preferredAudioLanguage -> ${matchingAudio.label} (${matchingAudio.language})"
+                            )
+                            trackManager.selectTrack(exoPlayer, C.TRACK_TYPE_AUDIO, matchingAudio.id)
+                            selectedAudio = matchingAudio.id
+                        }
+                    }
                 }
+                audioTrackInitializedForSession = true
             }
 
             // Auto-enable subtitles if enabled in user settings and not explicitly turned off for this video
@@ -1318,7 +1433,7 @@ class PlayerManager @Inject constructor(
                     availableVideoTracks = video,
                     availableSubtitleTracks = finalSubs,
                     playback = it.playback.copy(
-                        selectedAudioTrackId = selectedAudio,
+                        selectedAudioTrackId = savedAudioPreferenceForVideo ?: selectedAudio,
                         selectedVideoTrackId = selectedVideo,
                         selectedSubtitleTrackId = selectedSubs
                     )

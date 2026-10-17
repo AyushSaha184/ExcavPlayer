@@ -69,4 +69,8 @@
     <string name="cd_volume">Audio volume</string>
     <string name="cd_playing">Now playing</string>
     <string name="cd_reorder">Drag to reorder</string>
+    <string name="mute">Mute</string>
+    <string name="unmute">Unmute</string>
+    <string name="cd_mute">Mute audio</string>
+    <string name="cd_unmute">Unmute audio</string>
 </resources>

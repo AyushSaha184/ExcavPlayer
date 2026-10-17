@@ -21,6 +21,7 @@ interface PlayerController {
     fun seekBackward(offsetMs: Long = 10000L)
     fun setPlaybackSpeed(speed: Float)
     fun setVolume(volume: Float)
+    fun setMuted(muted: Boolean)
     fun setRepeatMode(mode: RepeatMode)
     fun setShuffle(enabled: Boolean)
     fun selectAudioTrack(trackId: String?)

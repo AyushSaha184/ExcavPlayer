@@ -347,6 +347,14 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        val state = playerManager.state.value
+        if (viewModel.isPlayerOpen.value && state.playback.isPlaying && state.currentVideo != null) {
+            pipHelper.enterPictureInPicture(this, state.currentVideo, state.playback.isPlaying)
+        }
+    }
+
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         playerManager.dispatch(PlayerCommand.SetInPictureInPicture(isInPictureInPictureMode))

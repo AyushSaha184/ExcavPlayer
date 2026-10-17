@@ -28,7 +28,8 @@ data class PlayerState(
     val isScreenLocked: Boolean = false,
     val isInPictureInPicture: Boolean = false,
     val isBackgroundAudio: Boolean = false,
-    val equalizerState: EqualizerState = EqualizerState()
+    val equalizerState: EqualizerState = EqualizerState(),
+    val isMuted: Boolean = false
 )
 
 sealed interface PlayerCommand {
@@ -39,6 +40,7 @@ sealed interface PlayerCommand {
     data class SeekRelative(val offsetMs: Long) : PlayerCommand
     data class SetSpeed(val speed: Float) : PlayerCommand
     data class SetVolume(val volume: Float) : PlayerCommand
+    data class SetMuted(val muted: Boolean) : PlayerCommand
     data class SetRepeatMode(val mode: RepeatMode) : PlayerCommand
     data class SetShuffle(val enabled: Boolean) : PlayerCommand
     data class SelectAudioTrack(val trackId: String?) : PlayerCommand
