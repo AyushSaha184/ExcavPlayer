@@ -17,7 +17,9 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
@@ -139,20 +141,7 @@ fun ExcavApp(
                         .fillMaxSize()
                         .hazeSource(state = hazeState)
                 ) {
-                    if (searchOpen) {
-                        SearchScreen(
-                            query = library.searchQuery,
-                            results = library.searchResults,
-                            onQueryChange = vm::setSearchQuery,
-                            onBack = { searchOpen = false },
-                            onPlay = {
-                                vm.play(it)
-                            },
-                            onRenameVideo = vm::renameVideo,
-                            onDeleteVideo = vm::deleteVideo
-                        )
-                    } else {
-                        if (library.loading) {
+                    if (library.loading) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
@@ -167,7 +156,15 @@ fun ExcavApp(
                         } else {
                             AnimatedContent(
                                 targetState = tab,
-                                transitionSpec = { fadeIn() togetherWith fadeOut() },
+                                transitionSpec = {
+                                    if (targetState.ordinal > initialState.ordinal) {
+                                        (slideInHorizontally(tween(220, easing = FastOutSlowInEasing)) { it / 4 } + fadeIn(tween(200)))
+                                            .togetherWith(slideOutHorizontally(tween(180, easing = FastOutSlowInEasing)) { -it / 4 } + fadeOut(tween(160)))
+                                    } else {
+                                        (slideInHorizontally(tween(220, easing = FastOutSlowInEasing)) { -it / 4 } + fadeIn(tween(200)))
+                                            .togetherWith(slideOutHorizontally(tween(180, easing = FastOutSlowInEasing)) { it / 4 } + fadeOut(tween(160)))
+                                    }
+                                },
                                 label = "tab_content"
                             ) { currentTab ->
                                 when (currentTab) {
@@ -220,19 +217,41 @@ fun ExcavApp(
                             }
                         }
                     }
-                }
-            }
 
-            // Coordinated Floating Bottom Dock (Navbar + Dynamic Background Play Pill)
-            if (!searchOpen) {
-                BottomDock(
-                    vm = vm,
-                    tab = tab,
-                    onSelectTab = { tab = it },
-                    playerOpen = playerOpen,
+                    AnimatedVisibility(
+                        visible = searchOpen,
+                        enter = slideInVertically(tween(220, easing = FastOutSlowInEasing)) { -it / 6 } + fadeIn(tween(180)),
+                        exit = slideOutVertically(tween(180, easing = FastOutSlowInEasing)) { -it / 6 } + fadeOut(tween(160)),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        SearchScreen(
+                            query = library.searchQuery,
+                            results = library.searchResults,
+                            onQueryChange = vm::setSearchQuery,
+                            onBack = { searchOpen = false },
+                            onPlay = {
+                                vm.play(it)
+                            },
+                            onRenameVideo = vm::renameVideo,
+                            onDeleteVideo = vm::deleteVideo
+                        )
+                    }
+                }
+
+                // Coordinated Floating Bottom Dock (Navbar + Dynamic Background Play Pill)
+                AnimatedVisibility(
+                    visible = !searchOpen,
+                    enter = fadeIn(tween(180)),
+                    exit = fadeOut(tween(140)),
                     modifier = Modifier.align(Alignment.BottomCenter)
-                )
-            }
+                ) {
+                    BottomDock(
+                        vm = vm,
+                        tab = tab,
+                        onSelectTab = { tab = it },
+                        playerOpen = playerOpen
+                    )
+                }
 
             // Top Floating Message / Error Banner
             Box(

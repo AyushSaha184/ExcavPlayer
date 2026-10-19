@@ -1334,12 +1334,21 @@ private fun PlayerControlsOverlay(
                             scaleY = playPauseScale
                         }
                 ) {
-                    Icon(
-                        imageVector = if (state.playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = stringResource(R.string.cd_play_pause),
-                        tint = Color.White,
-                        modifier = Modifier.size(centerPlayIconSize)
-                    )
+                    AnimatedContent(
+                        targetState = state.playback.isPlaying,
+                        transitionSpec = {
+                            (fadeIn(tween(160)) + scaleIn(initialScale = 0.82f))
+                                .togetherWith(fadeOut(tween(120)) + scaleOut(targetScale = 0.82f))
+                        },
+                        label = "play_pause_icon"
+                    ) { isPlaying ->
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = stringResource(R.string.cd_play_pause),
+                            tint = Color.White,
+                            modifier = Modifier.size(centerPlayIconSize)
+                        )
+                    }
                 }
 
                 IconButton(

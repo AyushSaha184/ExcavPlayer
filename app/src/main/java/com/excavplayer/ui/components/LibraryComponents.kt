@@ -1,7 +1,10 @@
 package com.excavplayer.ui.components
 
 import android.graphics.Bitmap
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode as AnimRepeatMode
 import androidx.compose.animation.core.animateDpAsState
@@ -202,24 +205,33 @@ fun BrandHeader(
                 )
             }
             Spacer(Modifier.width(12.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (isSelectionMode) {
-                    Text(
-                        text = "$selectedCount selected",
-                        color = ExcavPalette.Text,
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                    )
-                } else {
-                    Text(
-                        text = "Excav",
-                        color = ExcavPalette.Text,
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                    )
-                    Text(
-                        text = "Player",
-                        color = ExcavPalette.TextMuted,
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                    )
+            AnimatedContent(
+                targetState = isSelectionMode,
+                transitionSpec = {
+                    (fadeIn(tween(180)) + scaleIn(initialScale = 0.95f))
+                        .togetherWith(fadeOut(tween(140)))
+                },
+                label = "header_selection_title"
+            ) { inSelection ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (inSelection) {
+                        Text(
+                            text = "$selectedCount selected",
+                            color = ExcavPalette.Text,
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        )
+                    } else {
+                        Text(
+                            text = "Excav",
+                            color = ExcavPalette.Text,
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                        )
+                        Text(
+                            text = "Player",
+                            color = ExcavPalette.TextMuted,
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                        )
+                    }
                 }
             }
             Spacer(Modifier.weight(1f))
@@ -348,24 +360,33 @@ fun FoldersBrandHeader(
                     )
                 }
                 Spacer(Modifier.width(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (isSelectionMode) {
-                        Text(
-                            text = "$selectedCount selected",
-                            color = ExcavPalette.Text,
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        )
-                    } else {
-                        Text(
-                            text = "Excav",
-                            color = ExcavPalette.Text,
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                        )
-                        Text(
-                            text = "Player",
-                            color = ExcavPalette.TextMuted,
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                        )
+                AnimatedContent(
+                    targetState = isSelectionMode,
+                    transitionSpec = {
+                        (fadeIn(tween(180)) + scaleIn(initialScale = 0.95f))
+                            .togetherWith(fadeOut(tween(140)))
+                    },
+                    label = "folders_header_selection_title"
+                ) { inSelection ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (inSelection) {
+                            Text(
+                                text = "$selectedCount selected",
+                                color = ExcavPalette.Text,
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                            )
+                        } else {
+                            Text(
+                                text = "Excav",
+                                color = ExcavPalette.Text,
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                            )
+                            Text(
+                                text = "Player",
+                                color = ExcavPalette.TextMuted,
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                            )
+                        }
                     }
                 }
                 Spacer(Modifier.weight(1f))
@@ -2772,6 +2793,24 @@ fun ExcavSleekSlider(
 ) {
     var isDragging by remember { mutableStateOf(false) }
 
+    val thumbScale by animateFloatAsState(
+        targetValue = if (isDragging) 1.30f else 1f,
+        animationSpec = spring(
+            dampingRatio = 0.72f,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "scrubberThumbScale"
+    )
+
+    val trackHeight by animateDpAsState(
+        targetValue = if (isDragging) 8.dp else 6.dp,
+        animationSpec = spring(
+            dampingRatio = 0.72f,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "scrubberTrackHeight"
+    )
+
     Column(modifier = modifier.fillMaxWidth()) {
         Slider(
             value = value.coerceIn(valueRange.start, valueRange.endInclusive),
@@ -2796,6 +2835,10 @@ fun ExcavSleekSlider(
             thumb = {
                 Box(
                     modifier = Modifier
+                        .graphicsLayer {
+                            scaleX = thumbScale
+                            scaleY = thumbScale
+                        }
                         .size(17.dp)
                         .clip(CircleShape)
                         .background(if (enabled) Color.White else Color.White.copy(alpha = 0.35f))
@@ -2818,8 +2861,8 @@ fun ExcavSleekSlider(
                 BoxWithConstraints(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(6.dp)
-                        .clip(RoundedCornerShape(3.dp))
+                        .height(trackHeight)
+                        .clip(RoundedCornerShape(trackHeight / 2f))
                         .background(Color(0xFF232A3B))
                 ) {
                     val fullWidth = maxWidth

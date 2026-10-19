@@ -38,7 +38,9 @@ fun SearchScreen(
     var propertiesVideo by remember { mutableStateOf<Video?>(null) }
 
     Box(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .fillMaxSize()
+            .background(ExcavPalette.Ink)
     ) {
         val searchListState = androidx.compose.foundation.lazy.rememberLazyListState()
         val isScrolled by remember {

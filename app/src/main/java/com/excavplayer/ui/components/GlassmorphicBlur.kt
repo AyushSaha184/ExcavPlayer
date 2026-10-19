@@ -37,6 +37,11 @@ import dev.chrisbanes.haze.blur.materials.CupertinoMaterials
 import androidx.compose.animation.core.EaseInCubic
 import androidx.compose.animation.core.EaseIn
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -116,67 +121,76 @@ fun GlassmorphicHeaderActions(
     hazeState: HazeState = LocalHazeState.current,
     dropdownMenu: (@Composable () -> Unit)? = null
 ) {
-    Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        if (isSelectionMode) {
-            Box {
+    AnimatedContent(
+        targetState = isSelectionMode,
+        transitionSpec = {
+            (fadeIn(tween(180)) + scaleIn(initialScale = 0.95f))
+                .togetherWith(fadeOut(tween(140)))
+        },
+        label = "header_actions_mode"
+    ) { inSelection ->
+        Row(
+            modifier = modifier,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (inSelection) {
+                Box {
+                    GlassmorphicItem(
+                        modifier = Modifier.size(40.dp),
+                        cornerRadius = 20,
+                        hazeState = hazeState
+                    ) {
+                        IconButton(
+                            onClick = { onMoreClick?.invoke() },
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = stringResource(R.string.cd_more),
+                                tint = ExcavPalette.Text,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                    dropdownMenu?.invoke()
+                }
+            } else {
                 GlassmorphicItem(
                     modifier = Modifier.size(40.dp),
                     cornerRadius = 20,
                     hazeState = hazeState
                 ) {
                     IconButton(
-                        onClick = { onMoreClick?.invoke() },
+                        onClick = onSearch,
                         modifier = Modifier.fillMaxSize()
                     ) {
                         Icon(
-                            imageVector = Icons.Default.MoreVert,
-                            contentDescription = stringResource(R.string.cd_more),
+                            imageVector = Icons.Default.Search,
+                            contentDescription = stringResource(R.string.cd_search),
                             tint = ExcavPalette.Text,
                             modifier = Modifier.size(20.dp)
                         )
                     }
                 }
-                dropdownMenu?.invoke()
-            }
-        } else {
-            GlassmorphicItem(
-                modifier = Modifier.size(40.dp),
-                cornerRadius = 20,
-                hazeState = hazeState
-            ) {
-                IconButton(
-                    onClick = onSearch,
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = stringResource(R.string.cd_search),
-                        tint = ExcavPalette.Text,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
 
-            if (onRefresh != null) {
-                GlassmorphicItem(
-                    modifier = Modifier.size(40.dp),
-                    cornerRadius = 20,
-                    hazeState = hazeState
-                ) {
-                    IconButton(
-                        onClick = onRefresh,
-                        modifier = Modifier.fillMaxSize()
+                if (onRefresh != null) {
+                    GlassmorphicItem(
+                        modifier = Modifier.size(40.dp),
+                        cornerRadius = 20,
+                        hazeState = hazeState
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = stringResource(R.string.refresh),
-                            tint = ExcavPalette.Text,
-                            modifier = Modifier.size(20.dp)
-                        )
+                        IconButton(
+                            onClick = onRefresh,
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = stringResource(R.string.refresh),
+                                tint = ExcavPalette.Text,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
                 }
             }

@@ -36,6 +36,7 @@ import com.excavplayer.ui.components.SleekRadioButton
 import com.excavplayer.ui.components.darkUltraThinBlur
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.excavplayer.ui.components.AnimatedDialogContainer
 import com.excavplayer.ui.components.LocalHazeState
 import com.excavplayer.ui.components.SleekSwitch
 import com.excavplayer.ui.theme.ExcavPalette
@@ -607,7 +608,7 @@ private fun <T> RadioChoiceDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Box(
+        AnimatedDialogContainer(
             modifier = Modifier
                 .fillMaxWidth(0.90f)
                 .wrapContentHeight()
