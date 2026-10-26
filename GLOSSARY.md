@@ -26,6 +26,10 @@ _Avoid_: collection, playlist (playlists were removed)
 The rule deciding which folders/Videos never appear in the library: trash folders, SAF Files, private/external sources.
 _Avoid_: filter, hidden
 
+**Library derivation**:
+The pure computation that turns discovered media into the Library's shape: series grouping, folder stats, continue-watching rows.
+_Avoid_: post-processing, normalization
+
 ### Playback
 
 **Playback state**:
@@ -43,6 +47,22 @@ _Avoid_: bookmark, cue
 **Watched**:
 A Video whose watched fraction passed the completion threshold; it leaves continue-watching.
 _Avoid_: finished, played
+
+**Video lifecycle**:
+The one owner of refresh, delete, and post-approval cleanup for Videos — the module every add/change/remove flow routes through.
+_Avoid_: sync manager (overloaded with media sync), delete flow
+
+**Playback clock**:
+The single live source of playback position; every reader takes one snapshot from it rather than keeping a parallel copy.
+_Avoid_: position store (redundant now), timer
+
+**Threshold policy**:
+The policy separating two time concepts: completion (fixed fraction marks a Video watched) and resume (the user threshold driving the near-end reset and the seek-step size).
+_Avoid_: threshold (alone — ambiguous between the two)
+
+**Scrub math**:
+The pure mapping from a scrub gesture to a committed position: drag fraction to target, origin selection, release commit.
+_Avoid_: seek calculation, gesture math
 
 ### Subtitles & audio
 
