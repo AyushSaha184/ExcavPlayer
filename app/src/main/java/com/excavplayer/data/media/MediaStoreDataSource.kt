@@ -162,7 +162,7 @@ class MediaStoreDataSource @Inject constructor(
                 cursor.getString(nameColumn)
             } else "Video_$mediaStoreId"
 
-            if (LibraryDerivation.isTrashOrHiddenVideo(displayName, displayName, contentUri)) {
+            if (LibraryDerivation.isTrashOrHiddenVideo(displayName, contentUri)) {
                 continue
             }
 

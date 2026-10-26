@@ -114,17 +114,16 @@ object LibraryDerivation {
     }
 
     /**
-     * Checks if a video's displayName, title, or uri indicates it has been trashed, deleted, or is hidden.
+     * Checks if a video's displayName or uri indicates it has been trashed, deleted, or is hidden.
      */
-    fun isTrashOrHiddenVideo(displayName: String?, title: String?, uri: String? = null): Boolean {
+    fun isTrashOrHiddenVideo(displayName: String?, uri: String? = null): Boolean {
         val name = displayName.orEmpty()
-        val t = title.orEmpty()
         val u = uri.orEmpty()
-        if (name.startsWith(".") || t.startsWith(".")) return true
-        if (name.contains(".trashed", ignoreCase = true) || t.contains(".trashed", ignoreCase = true)) return true
-        if (name.contains("trashed-", ignoreCase = true) || t.contains("trashed-", ignoreCase = true)) return true
-        if (name.contains(".pending", ignoreCase = true) || t.contains(".pending", ignoreCase = true)) return true
-        if (name.contains("pending-", ignoreCase = true) || t.contains("pending-", ignoreCase = true)) return true
+        if (name.startsWith(".")) return true
+        if (name.contains(".trashed", ignoreCase = true)) return true
+        if (name.contains("trashed-", ignoreCase = true)) return true
+        if (name.contains(".pending", ignoreCase = true)) return true
+        if (name.contains("pending-", ignoreCase = true)) return true
         if (u.contains(".trashed") || u.contains("trashed-")) return true
         return false
     }
@@ -140,7 +139,7 @@ object LibraryDerivation {
             isExcludedFolderPath(video.folderPath) ||
             isExcludedFolderName(video.folderName) ||
             isTrashSegment(video.folderName) ||
-            isTrashOrHiddenVideo(video.displayName, video.title, video.uri) ||
+            isTrashOrHiddenVideo(video.displayName, video.uri) ||
             video.uri.startsWith("/storage/private") ||
             video.uri.startsWith("content://com.android.providers.media.documents/") ||
             video.uri.startsWith("content://com.android.externalstorage.documents/")

@@ -162,7 +162,7 @@ class StorageFileScanner @Inject constructor(
             if (file.isDirectory) {
                 scanDirectory(file, existingKeys, outList, depth + 1)
             } else if (file.isFile && file.length() > 0) {
-                if (LibraryDerivation.isTrashOrHiddenVideo(file.name, file.name, file.absolutePath)) {
+                if (LibraryDerivation.isTrashOrHiddenVideo(file.name, file.absolutePath)) {
                     continue
                 }
                 val ext = file.extension.lowercase()
