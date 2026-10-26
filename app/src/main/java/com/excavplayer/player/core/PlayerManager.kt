@@ -37,6 +37,7 @@ import com.excavplayer.player.chapters.ChapterExtractor
 import com.excavplayer.player.chapters.RawChapter
 import com.excavplayer.player.playback.PlaybackPersistenceManager
 import com.excavplayer.player.policy.AutoAdvancePolicy
+import com.excavplayer.player.policy.PlaybackFallbackSelection
 import com.excavplayer.player.policy.TrackSelectionPolicy
 import com.excavplayer.player.queue.PlaybackQueue
 import com.excavplayer.player.tracks.TrackManager
@@ -296,13 +297,7 @@ class PlayerManager @Inject constructor(
             }
 
             val duration = video.durationMs
-            val thresholdMs = when {
-                settings.resumeThresholdPercent >= 0.99f -> 5_000L
-                settings.resumeThresholdPercent >= 0.95f -> 10_000L
-                settings.resumeThresholdPercent >= 0.92f -> 20_000L
-                settings.resumeThresholdPercent >= 0.90f -> 30_000L
-                else -> 60_000L
-            }
+            val thresholdMs = com.excavplayer.domain.policy.PlaybackThresholdPolicy.seekStepMs(settings.resumeThresholdPercent)
             val isCompleted = duration > 0 && (
                 rawPos < 3_000L ||
                 (duration - rawPos) <= thresholdMs ||
@@ -456,17 +451,15 @@ class PlayerManager @Inject constructor(
     }
 
     private fun getLivePlaybackState(): PlaybackState {
-        val pos = try { exoPlayer.currentPosition.coerceAtLeast(0L) } catch (_: Exception) { 0L }
-        val dur = try { exoPlayer.duration.coerceAtLeast(0L) } catch (_: Exception) { 0L }
-        val buf = try { exoPlayer.bufferedPosition.coerceAtLeast(0L) } catch (_: Exception) { 0L }
-        val currentPos = if (pos > 0) pos else _playbackPosition.value.currentPositionMs
-        val duration = if (dur > 0) dur else _playbackPosition.value.durationMs
-        val buffered = if (buf > 0) buf else _playbackPosition.value.bufferedPositionMs
+        val pos = runCatching { exoPlayer.currentPosition.coerceAtLeast(0L) }.getOrDefault(0L)
+        val dur = runCatching { exoPlayer.duration.coerceAtLeast(0L) }.getOrDefault(0L)
+        val buf = runCatching { exoPlayer.bufferedPosition.coerceAtLeast(0L) }.getOrDefault(0L)
+        val ticked = _playbackPosition.value
 
         return _state.value.playback.copy(
-            currentPositionMs = currentPos,
-            durationMs = duration,
-            bufferedPositionMs = buffered
+            currentPositionMs = PlaybackFallbackSelection.pick(pos, ticked.currentPositionMs),
+            durationMs = PlaybackFallbackSelection.pick(dur, ticked.durationMs),
+            bufferedPositionMs = PlaybackFallbackSelection.pick(buf, ticked.bufferedPositionMs)
         )
     }
 
@@ -577,7 +570,7 @@ class PlayerManager @Inject constructor(
     }
 
     override fun seekTo(positionMs: Long) {
-        val dur = exoPlayer.duration.takeIf { it > 0 } ?: _state.value.playback.durationMs.coerceAtLeast(0L)
+        val dur = exoPlayer.duration.takeIf { it > 0 } ?: _playbackPosition.value.durationMs.coerceAtLeast(0L)
         val target = positionMs.coerceIn(0L, dur.coerceAtLeast(0L))
         logger.d(TAG, "seekTo: $target ms")
         if (exoPlayer.playbackState == Player.STATE_IDLE) {
@@ -918,10 +911,15 @@ class PlayerManager @Inject constructor(
     override fun setRepeatMode(mode: RepeatMode) {
         logger.d(TAG, "setRepeatMode: $mode")
         queue.setRepeatMode(mode)
-        exoPlayer.repeatMode = when (mode) {
-            RepeatMode.OFF -> Player.REPEAT_MODE_OFF
-            RepeatMode.REPEAT_ONE -> Player.REPEAT_MODE_ONE
-            RepeatMode.REPEAT_ALL -> Player.REPEAT_MODE_ALL
+        // The queue is the real repeat engine for OFF/REPEAT_ALL (it advances
+        // to the next media item itself). The one mirror that must stay is
+        // REPEAT_ONE: ExoPlayer's internal loop is the actual mechanism for a
+        // single media item — STATE_ENDED never fires, so the queue path can't
+        // advance anyway. OFF is mirrored back to clear a lingering REPEAT_ONE.
+        exoPlayer.repeatMode = if (mode == RepeatMode.REPEAT_ONE) {
+            Player.REPEAT_MODE_ONE
+        } else {
+            Player.REPEAT_MODE_OFF
         }
         _state.update {
             it.copy(playback = it.playback.copy(repeatMode = mode))
@@ -931,7 +929,7 @@ class PlayerManager @Inject constructor(
     override fun setShuffle(enabled: Boolean) {
         logger.d(TAG, "setShuffle: $enabled")
         queue.setShuffle(enabled)
-        exoPlayer.shuffleModeEnabled = enabled
+        // No ExoPlayer mirror: ordering is the queue engine's job.
         _state.update {
             it.copy(playback = it.playback.copy(isShuffleEnabled = enabled))
         }
@@ -963,23 +961,12 @@ class PlayerManager @Inject constructor(
 
         val currentVid = _state.value.currentVideo
         if (currentVid != null) {
-            playerScope.launch(dispatchers.io) {
-                try {
-                    val existing = playbackRepository.getPlaybackState(currentVid.id)
-                    val stateToSave = existing?.copy(
-                        videoId = currentVid.id,
-                        selectedAudioTrackId = compositePref,
-                        lastUpdatedTimestamp = System.currentTimeMillis()
-                    ) ?: PlaybackState(
-                        videoId = currentVid.id,
-                        selectedAudioTrackId = compositePref,
-                        durationMs = currentVid.durationMs,
-                        lastUpdatedTimestamp = System.currentTimeMillis()
-                    )
-                    playbackRepository.savePlaybackState(stateToSave)
-                } catch (e: Exception) {
-                    logger.w(TAG, "Failed to persist audio track preference: ${e.message}")
-                }
+            playerScope.launch {
+                persistenceManager.saveTrackSelection(
+                    videoId = currentVid.id,
+                    audioTrackId = compositePref,
+                    videoDurationMs = currentVid.durationMs
+                )
             }
         }
     }
@@ -1143,9 +1130,7 @@ class PlayerManager @Inject constructor(
             _state.update {
                 it.copy(
                     playback = it.playback.copy(
-                        playbackStatus = status,
-                        durationMs = exoPlayer.duration.coerceAtLeast(0L),
-                        bufferedPositionMs = exoPlayer.bufferedPosition.coerceAtLeast(0L)
+                        playbackStatus = status
                     )
                 )
             }
@@ -1325,13 +1310,13 @@ class PlayerManager @Inject constructor(
 
         override fun onPlayerError(error: PlaybackException) {
             val duration = exoPlayer.duration.takeIf { it > 0 }
-                ?: _state.value.playback.durationMs.takeIf { it > 0 }
+                ?: _playbackPosition.value.durationMs.takeIf { it > 0 }
                 ?: _state.value.currentVideo?.durationMs?.takeIf { it > 0 }
                 ?: 0L
             val currentPos = exoPlayer.currentPosition.coerceAtLeast(0L).takeIf { it > 0 }
-                ?: _state.value.playback.currentPositionMs
+                ?: _playbackPosition.value.currentPositionMs
             val bufferedPos = exoPlayer.bufferedPosition.coerceAtLeast(0L).takeIf { it > 0 }
-                ?: _state.value.playback.bufferedPositionMs
+                ?: _playbackPosition.value.bufferedPositionMs
 
             val remainingMs = if (duration > 0) (duration - currentPos).coerceAtLeast(0L) else Long.MAX_VALUE
             val progressPercent = if (duration > 0) (currentPos.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else 0f
@@ -1363,6 +1348,8 @@ class PlayerManager @Inject constructor(
                 becomingNoisyReceiver.unregister()
                 persistenceManager.stopPeriodicSave()
 
+                // The completed position (duration) is a persistence fact only;
+                // the UI state keeps status/flags. Position lives in the one flow.
                 val completedPlayback = _state.value.playback.copy(
                     playbackStatus = PlaybackStatus.ENDED,
                     isPlaying = false,
@@ -1374,7 +1361,11 @@ class PlayerManager @Inject constructor(
                 _state.update {
                     it.copy(
                         error = null,
-                        playback = completedPlayback
+                        playback = it.playback.copy(
+                            playbackStatus = PlaybackStatus.ENDED,
+                            isPlaying = false,
+                            lastUpdatedTimestamp = System.currentTimeMillis()
+                        )
                     )
                 }
 

@@ -105,6 +105,7 @@ import com.excavplayer.R
 import com.excavplayer.domain.model.*
 import com.excavplayer.player.core.PlayerController
 import com.excavplayer.player.playback.PipHelper
+import com.excavplayer.player.policy.ScrubMath
 import androidx.compose.ui.graphics.asImageBitmap
 import com.excavplayer.ui.ExcavViewModel
 import com.excavplayer.ui.components.*
@@ -473,7 +474,7 @@ fun PlayerScreen(
                             startTouch = startOffset
                             totalDragDelta = Offset.Zero
                             val pos = player.playbackPosition.value
-                            originPositionMs = (scrubState?.targetMs ?: pos.currentPositionMs).coerceAtLeast(0L)
+                            originPositionMs = ScrubMath.scrubOrigin(scrubState?.targetMs, pos.currentPositionMs)
                             currentDurationMs = pos.durationMs.coerceAtLeast(0L)
 
                             audioManager?.let { am ->
@@ -537,12 +538,13 @@ fun PlayerScreen(
 
                             if (dragMode == DragClassifierMode.HORIZONTAL_SEEK) {
                                 controlsVisible = true
-                                // Medium sensitivity:
-                                val maxSwipeSpan = (currentDurationMs / 2.2f).coerceIn(60_000f, 180_000f)
+                                // Medium sensitivity: drag fraction of screen width → target
                                 val deltaX = change.position.x - startTouch.x
-                                val targetMs = (originPositionMs + (deltaX / size.width) * maxSwipeSpan)
-                                    .toLong()
-                                    .coerceIn(0L, currentDurationMs)
+                                val targetMs = ScrubMath.targetFromSwipe(
+                                    originPositionMs = originPositionMs,
+                                    dragFraction = deltaX / size.width,
+                                    durationMs = currentDurationMs
+                                )
 
                                 scrubState = ScrubState(targetMs, ScrubSource.SWIPE)
                                 // Do not set gestureHudText for seek so middle box does not show
@@ -1029,7 +1031,7 @@ fun PlayerScreen(
                         onScrubStart = {
                             if (activeSheet != null) return@PlayerControlsOverlay
                             onUserInteraction()
-                            val cur = (scrubState?.targetMs ?: vm.player.playbackPosition.value.currentPositionMs).coerceAtLeast(0L)
+                            val cur = ScrubMath.scrubOrigin(scrubState?.targetMs, vm.player.playbackPosition.value.currentPositionMs)
                             scrubState = ScrubState(cur, ScrubSource.SLIDER)
                         },
                         onScrubChange = { targetMs ->
@@ -1041,7 +1043,10 @@ fun PlayerScreen(
                             if (activeSheet != null) return@PlayerControlsOverlay
                             onUserInteraction()
                             scrubState?.let { s ->
-                                vm.player.seekTo(s.targetMs)
+                                val pos = vm.player.playbackPosition.value
+                                vm.player.seekTo(
+                                    ScrubMath.commitTarget(s.targetMs, pos.currentPositionMs, pos.durationMs)
+                                )
                             }
                             scrubState = null
                         },
@@ -1130,6 +1135,9 @@ private fun PlayerControlsOverlay(
     onPlayNext: () -> Unit,
     onInteraction: () -> Unit = {}
 ) {
+    // One collected position snapshot for the whole overlay
+    val position by player.playbackPosition.collectAsStateWithLifecycle()
+
     CompositionLocalProvider(
         LocalRippleConfiguration provides null,
         LocalMinimumInteractiveComponentSize provides Dp.Unspecified
@@ -1388,7 +1396,7 @@ private fun PlayerControlsOverlay(
                 SeekbarPreviewPopup(
                     scrubState = scrubState,
                     video = state.currentVideo,
-                    durationMs = player.playbackPosition.value.durationMs,
+                    durationMs = position.durationMs,
                     isVeryCompact = isVeryCompact,
                     isCompact = isCompact,
                     modifier = Modifier.padding(bottom = 6.dp)
@@ -1396,7 +1404,7 @@ private fun PlayerControlsOverlay(
 
                 // Bottom Progress Bar and Clean Action Buttons (isolated timeline scrubber)
                 PlayerTimelineSection(
-                    playbackPositionFlow = player.playbackPosition,
+                    position = position,
                     scrubState = scrubState,
                     onScrubStart = onScrubStart,
                     onScrubChange = onScrubChange,
@@ -2983,7 +2991,7 @@ fun SeekbarPreviewPopup(
 
 @Composable
 fun PlayerTimelineSection(
-    playbackPositionFlow: StateFlow<PlaybackPosition>,
+    position: PlaybackPosition,
     scrubState: ScrubState? = null,
     onScrubStart: () -> Unit = {},
     onScrubChange: (Long) -> Unit = {},
@@ -2993,10 +3001,9 @@ fun PlayerTimelineSection(
     onInteraction: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val posState by playbackPositionFlow.collectAsStateWithLifecycle()
-    val duration = posState.durationMs.coerceAtLeast(0L)
-    val displayPos = (scrubState?.targetMs ?: posState.currentPositionMs).coerceIn(0L, duration.coerceAtLeast(1L))
-    val bufferedFrac = if (duration > 0L) (posState.bufferedPositionMs.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else 0f
+    val duration = position.durationMs.coerceAtLeast(0L)
+    val displayPos = (scrubState?.targetMs ?: position.currentPositionMs).coerceIn(0L, duration.coerceAtLeast(1L))
+    val bufferedFrac = if (duration > 0L) (position.bufferedPositionMs.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else 0f
 
     var isRemainingTime by rememberSaveable { mutableStateOf(false) }
 

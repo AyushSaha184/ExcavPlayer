@@ -56,6 +56,39 @@ class PlaybackPersistenceManager @Inject constructor(
         }
     }
 
+    /**
+     * Persists a track preference without touching the position fields:
+     * merges into the existing row when there is one, otherwise creates the
+     * bare preference row. The one writer for track selections.
+     */
+    suspend fun saveTrackSelection(
+        videoId: String,
+        audioTrackId: String?,
+        subtitleTrackId: String? = null,
+        videoDurationMs: Long = 0L
+    ) {
+        withContext(dispatchers.io) {
+            try {
+                val existing = playbackRepository.getPlaybackState(videoId)
+                val stateToSave = existing?.copy(
+                    videoId = videoId,
+                    selectedAudioTrackId = audioTrackId,
+                    selectedSubtitleTrackId = subtitleTrackId ?: existing.selectedSubtitleTrackId,
+                    lastUpdatedTimestamp = System.currentTimeMillis()
+                ) ?: PlaybackState(
+                    videoId = videoId,
+                    selectedAudioTrackId = audioTrackId,
+                    selectedSubtitleTrackId = subtitleTrackId,
+                    durationMs = videoDurationMs,
+                    lastUpdatedTimestamp = System.currentTimeMillis()
+                )
+                playbackRepository.savePlaybackState(stateToSave)
+            } catch (e: Exception) {
+                logger.w(TAG, "Failed to persist track preference: ${e.message}")
+            }
+        }
+    }
+
     private suspend fun saveProgress(state: PlaybackState, video: Video?, isImmediate: Boolean) {
         try {
             val videoId = video?.id ?: state.videoId ?: return
@@ -65,13 +98,7 @@ class PlaybackPersistenceManager @Inject constructor(
             val currentPos = state.currentPositionMs
             val duration = state.durationMs
             val remainingMs = (duration - currentPos).coerceAtLeast(0L)
-            val thresholdMs = when {
-                settings.resumeThresholdPercent >= 0.99f -> 5_000L
-                settings.resumeThresholdPercent >= 0.95f -> 10_000L
-                settings.resumeThresholdPercent >= 0.92f -> 20_000L
-                settings.resumeThresholdPercent >= 0.90f -> 30_000L
-                else -> 60_000L
-            }
+            val thresholdMs = com.excavplayer.domain.policy.PlaybackThresholdPolicy.seekStepMs(settings.resumeThresholdPercent)
             val isCompleted = duration > 0 && (
                 remainingMs <= thresholdMs ||
                 (currentPos.toFloat() / duration.toFloat()) >= settings.resumeThresholdPercent

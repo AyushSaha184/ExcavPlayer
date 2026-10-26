@@ -27,5 +27,5 @@ data class PlaybackState(
         get() = if (durationMs > 0) (currentPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
 
     val isCompleted: Boolean
-        get() = progressPercentage >= 0.95f
+        get() = com.excavplayer.domain.policy.PlaybackThresholdPolicy.isCompleted(currentPositionMs, durationMs)
 }

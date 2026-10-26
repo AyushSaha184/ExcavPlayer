@@ -28,13 +28,7 @@ data class UserSettings(
     val dialogueBoostEnabled: Boolean = false,
     val matchDisplayRefreshRate: Boolean = false) {
     val seekDurationSeconds: Int
-        get() = when {
-            resumeThresholdPercent >= 0.99f -> 5
-            resumeThresholdPercent >= 0.95f -> 10
-            resumeThresholdPercent >= 0.92f -> 20
-            resumeThresholdPercent >= 0.90f -> 30
-            else -> 60
-        }
+        get() = com.excavplayer.domain.policy.PlaybackThresholdPolicy.seekStepSeconds(resumeThresholdPercent)
 
     val seekDurationMs: Long
         get() = seekDurationSeconds * 1000L
