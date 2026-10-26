@@ -150,7 +150,10 @@ class RoomDatabaseTest {
                 excludedVideo("ex6", "Movies", "/storage/private/sub"),
                 excludedVideo("ex7", "Movies", "/x", uri = "content://com.android.providers.media.documents/document/1"),
                 excludedVideo("ex8", "Movies", "/x", uri = "content://com.android.externalstorage.documents/tree/1"),
-                excludedVideo("ex9", "Movies", "/x").copy(id = "saf_doc_1")
+                excludedVideo("ex9", "Movies", "/x").copy(id = "saf_doc_1"),
+                excludedVideo("ex10", "Camera", "/storage/emulated/0/DCIM/Camera").copy(displayName = ".trashed-12345.mp4"),
+                excludedVideo("ex11", "trashBin", "/storage/emulated/0/MIUI/Gallery/cloud/.trashBin"),
+                excludedVideo("ex12", ".globalTrash", "/storage/emulated/0/DCIM/.globalTrash")
             )
         )
 
@@ -163,7 +166,9 @@ class RoomDatabaseTest {
         videoDao.insertVideos(
             listOf(
                 createVideoEntity("normal").copy(folderName = "Movies", folderPath = "/storage/emulated/0/Movies"),
-                excludedVideo("ex1", "SAF Files", "SAF Files")
+                excludedVideo("ex1", "SAF Files", "SAF Files"),
+                excludedVideo("ex2", "trashBin", "/storage/emulated/0/MIUI/Gallery/cloud/.trashBin"),
+                excludedVideo("ex3", ".globalTrash", "/storage/emulated/0/DCIM/.globalTrash")
             )
         )
 
@@ -179,7 +184,9 @@ class RoomDatabaseTest {
                 excludedVideo("ex1", "private", "private"),
                 excludedVideo("ex2", "Movies", "/storage/private/x"),
                 excludedVideo("ex3", "SAF Files", "SAF Files"),
-                excludedVideo("ex4", "External Videos", "External Videos")
+                excludedVideo("ex4", "External Videos", "External Videos"),
+                excludedVideo("ex5", "trashBin", "/storage/emulated/0/MIUI/Gallery/cloud/.trashBin"),
+                excludedVideo("ex6", "Camera", "/storage/emulated/0/DCIM/Camera").copy(displayName = ".trashed-123.mp4")
             )
         )
 

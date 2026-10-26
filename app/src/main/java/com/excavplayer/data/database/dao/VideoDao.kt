@@ -36,6 +36,21 @@ interface VideoDao {
           AND v.id NOT LIKE 'saf_%'
           AND v.uri NOT LIKE '%com.android.providers.media.documents%'
           AND v.uri NOT LIKE '%com.android.externalstorage.documents%'
+          AND v.display_name NOT LIKE '.%'
+          AND v.display_name NOT LIKE '%.trashed%'
+          AND v.display_name NOT LIKE '%trashed-%'
+          AND v.display_name NOT LIKE '%.pending%'
+          AND v.display_name NOT LIKE '%pending-%'
+          AND v.folder_name NOT LIKE '.%'
+          AND v.folder_path NOT LIKE '%/.%'
+          AND LOWER(v.folder_path) NOT LIKE '%trash%'
+          AND LOWER(v.folder_path) NOT LIKE '%recycle%'
+          AND LOWER(v.folder_name) NOT LIKE '%trash%'
+          AND LOWER(v.folder_name) NOT LIKE '%recycle%'
+          AND LOWER(v.folder_path) NOT LIKE '%recently_deleted%'
+          AND LOWER(v.folder_name) NOT LIKE '%recently_deleted%'
+          AND LOWER(v.folder_path) NOT LIKE '%rubbish%'
+          AND LOWER(v.folder_path) NOT LIKE '%deleterecord%'
         ORDER BY v.date_added DESC
     """)
     fun observeAllVideosWithMetadata(): Flow<List<VideoWithMetadataTuple>>
@@ -65,6 +80,21 @@ interface VideoDao {
           AND v.id NOT LIKE 'saf_%'
           AND v.uri NOT LIKE '%com.android.providers.media.documents%'
           AND v.uri NOT LIKE '%com.android.externalstorage.documents%'
+          AND v.display_name NOT LIKE '.%'
+          AND v.display_name NOT LIKE '%.trashed%'
+          AND v.display_name NOT LIKE '%trashed-%'
+          AND v.display_name NOT LIKE '%.pending%'
+          AND v.display_name NOT LIKE '%pending-%'
+          AND v.folder_name NOT LIKE '.%'
+          AND v.folder_path NOT LIKE '%/.%'
+          AND LOWER(v.folder_path) NOT LIKE '%trash%'
+          AND LOWER(v.folder_path) NOT LIKE '%recycle%'
+          AND LOWER(v.folder_name) NOT LIKE '%trash%'
+          AND LOWER(v.folder_name) NOT LIKE '%recycle%'
+          AND LOWER(v.folder_path) NOT LIKE '%recently_deleted%'
+          AND LOWER(v.folder_name) NOT LIKE '%recently_deleted%'
+          AND LOWER(v.folder_path) NOT LIKE '%rubbish%'
+          AND LOWER(v.folder_path) NOT LIKE '%deleterecord%'
         ORDER BY v.date_added DESC
     """)
     fun pagingSourceAllVideos(): androidx.paging.PagingSource<Int, VideoWithMetadataTuple>
@@ -103,6 +133,21 @@ interface VideoDao {
             OR v.relative_path = :relPath1 
             OR v.relative_path = :relPath2
         ) AND v.availability = 'AVAILABLE'
+          AND v.display_name NOT LIKE '.%'
+          AND v.display_name NOT LIKE '%.trashed%'
+          AND v.display_name NOT LIKE '%trashed-%'
+          AND v.display_name NOT LIKE '%.pending%'
+          AND v.display_name NOT LIKE '%pending-%'
+          AND v.folder_name NOT LIKE '.%'
+          AND v.folder_path NOT LIKE '%/.%'
+          AND LOWER(v.folder_path) NOT LIKE '%trash%'
+          AND LOWER(v.folder_path) NOT LIKE '%recycle%'
+          AND LOWER(v.folder_name) NOT LIKE '%trash%'
+          AND LOWER(v.folder_name) NOT LIKE '%recycle%'
+          AND LOWER(v.folder_path) NOT LIKE '%recently_deleted%'
+          AND LOWER(v.folder_name) NOT LIKE '%recently_deleted%'
+          AND LOWER(v.folder_path) NOT LIKE '%rubbish%'
+          AND LOWER(v.folder_path) NOT LIKE '%deleterecord%'
         ORDER BY v.date_added DESC
     """)
     fun observeVideosInFolder(
@@ -147,6 +192,21 @@ interface VideoDao {
           AND id NOT LIKE 'saf_%'
           AND uri NOT LIKE '%com.android.providers.media.documents%'
           AND uri NOT LIKE '%com.android.externalstorage.documents%'
+          AND display_name NOT LIKE '.%'
+          AND display_name NOT LIKE '%.trashed%'
+          AND display_name NOT LIKE '%trashed-%'
+          AND display_name NOT LIKE '%.pending%'
+          AND display_name NOT LIKE '%pending-%'
+          AND folder_name NOT LIKE '.%'
+          AND folder_path NOT LIKE '%/.%'
+          AND LOWER(folder_path) NOT LIKE '%trash%'
+          AND LOWER(folder_path) NOT LIKE '%recycle%'
+          AND LOWER(folder_name) NOT LIKE '%trash%'
+          AND LOWER(folder_name) NOT LIKE '%recycle%'
+          AND LOWER(folder_path) NOT LIKE '%recently_deleted%'
+          AND LOWER(folder_name) NOT LIKE '%recently_deleted%'
+          AND LOWER(folder_path) NOT LIKE '%rubbish%'
+          AND LOWER(folder_path) NOT LIKE '%deleterecord%'
         GROUP BY folder_path, folder_name
         ORDER BY folder_name ASC
     """)
@@ -222,6 +282,21 @@ interface VideoDao {
            OR id LIKE 'saf_%'
            OR uri LIKE '%com.android.providers.media.documents%'
            OR uri LIKE '%com.android.externalstorage.documents%'
+           OR display_name LIKE '.%'
+           OR display_name LIKE '%.trashed%'
+           OR display_name LIKE '%trashed-%'
+           OR display_name LIKE '%.pending%'
+           OR display_name LIKE '%pending-%'
+           OR folder_name LIKE '.%'
+           OR folder_path LIKE '%/.%'
+           OR LOWER(folder_path) LIKE '%trash%'
+           OR LOWER(folder_path) LIKE '%recycle%'
+           OR LOWER(folder_name) LIKE '%trash%'
+           OR LOWER(folder_name) LIKE '%recycle%'
+           OR LOWER(folder_path) LIKE '%recently_deleted%'
+           OR LOWER(folder_name) LIKE '%recently_deleted%'
+           OR LOWER(folder_path) LIKE '%rubbish%'
+           OR LOWER(folder_path) LIKE '%deleterecord%'
     """)
     suspend fun purgePrivateStorageVideos()
 

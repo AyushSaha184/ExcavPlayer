@@ -73,12 +73,17 @@ object FolderTreeManager {
 
         // Filter out anything the exclusion rule rejects (system-private, trash/recycle,
         // dummy external/SAF folders) — single owner: LibraryDerivation
-        val validVideos = videos.filter { !LibraryDerivation.isExcludedFromLibrary(it) }
+        val validVideos = videos.filter { 
+            !LibraryDerivation.isExcludedFromLibrary(it) && 
+            !LibraryDerivation.isExcludedFolderPath(it.folderPath) && 
+            !LibraryDerivation.isExcludedFolderName(it.folderName) 
+        }
 
         // Group videos by their normalized immediate folder path
         val directVideosByFolder = mutableMapOf<String, MutableList<Video>>()
         for (v in validVideos) {
             val normFolder = normalizePath(v.folderPath)
+            if (LibraryDerivation.isExcludedFolderPath(normFolder)) continue
             directVideosByFolder.getOrPut(normFolder) { mutableListOf() }.add(v)
         }
 
@@ -87,8 +92,10 @@ object FolderTreeManager {
         val allPaths = mutableSetOf<String>()
 
         for (folderPath in allFolders) {
+            if (LibraryDerivation.isExcludedFolderPath(folderPath)) continue
             var curr: String? = folderPath
             while (curr != null && curr.isNotEmpty()) {
+                if (LibraryDerivation.isExcludedFolderPath(curr)) break
                 allPaths.add(curr)
                 val parent = getParentPath(curr)
                 if (parent == curr) break

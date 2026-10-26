@@ -2756,22 +2756,6 @@ fun FloatingSkipChapterPill(
                     ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Circular chip echoing the player's glass transport controls
-                Box(
-                    modifier = Modifier
-                        .size(if (isCompact) 28.dp else 34.dp)
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.10f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.FastForward,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(if (isCompact) 16.dp else 19.dp)
-                    )
-                }
-                Spacer(Modifier.width(if (isCompact) 9.dp else 12.dp))
                 Text(
                     text = skipLabel,
                     color = Color.White,
@@ -2855,22 +2839,6 @@ fun FloatingNextEpisodePill(
                     ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Circular chip echoing the player's glass transport controls
-                Box(
-                    modifier = Modifier
-                        .size(if (isVeryCompact) 24.dp else if (isCompact) 28.dp else 34.dp)
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.10f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.SkipNext,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(if (isVeryCompact) 14.dp else if (isCompact) 16.dp else 19.dp)
-                    )
-                }
-                Spacer(Modifier.width(if (isVeryCompact) 7.dp else if (isCompact) 9.dp else 12.dp))
                 Column(verticalArrangement = Arrangement.Center) {
                     Text(
                         text = "Up next",
@@ -3716,13 +3684,13 @@ private fun SubtitleCustomizationSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(84.dp)
-                .clip(RoundedCornerShape(14.dp))
+                .clip(ExcavShapes.CardInner)
                 .background(
                     Brush.verticalGradient(
                         listOf(Color(0xFF1B2333), Color(0xFF0E131F))
                     )
                 )
-                .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(14.dp)),
+                .border(1.dp, Color.White.copy(alpha = 0.12f), ExcavShapes.CardInner),
             contentAlignment = Alignment.Center
         ) {
             Box(
@@ -3745,7 +3713,9 @@ private fun SubtitleCustomizationSheet(
                             blurRadius = 3f
                         ) else null
                     ),
-                    textAlign = TextAlign.Center
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    softWrap = false
                 )
             }
         }
@@ -3874,9 +3844,9 @@ private fun SegmentedAnimatedPillBar(
 
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(Color.White.copy(alpha = if (compact) 0.08f else 0.05f))
-            .border(1.dp, Color.White.copy(alpha = if (compact) 0.12f else 0.10f), RoundedCornerShape(20.dp))
+            .clip(ExcavShapes.Pill)
+            .background(ExcavPalette.SurfaceCard.copy(alpha = if (compact) 0.85f else 0.65f))
+            .border(1.dp, ExcavPalette.LineSubtle, ExcavShapes.Pill)
             .padding(3.dp)
     ) {
         Layout(
@@ -3884,7 +3854,7 @@ private fun SegmentedAnimatedPillBar(
                 // Animated Highlight Pill Background with spring glide
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(17.dp))
+                        .clip(ExcavShapes.Pill)
                         .background(
                             Brush.horizontalGradient(
                                 listOf(ExcavPalette.Primary, ExcavPalette.Primary.copy(alpha = 0.85f))
@@ -3896,23 +3866,44 @@ private fun SegmentedAnimatedPillBar(
                     val isSelected = selectedIndex == index
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(17.dp))
+                            .clip(ExcavShapes.Pill)
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null
                             ) { onSelectIndex(index) }
                             .defaultMinSize(minHeight = if (compact) 30.dp else 36.dp)
-                            .padding(horizontal = if (compact) 10.dp else 12.dp, vertical = if (compact) 5.dp else 8.dp),
+                            .padding(
+                                horizontal = if (compact || options.size >= 4) 4.dp else 8.dp,
+                                vertical = if (compact) 5.dp else 8.dp
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
+                        var fontSize by remember(label, options.size, compact) {
+                            val initial = when {
+                                compact -> 11.sp
+                                options.size >= 4 -> 11.sp
+                                else -> 12.sp
+                            }
+                            mutableStateOf(initial)
+                        }
+
                         Text(
                             text = label,
                             color = if (isSelected) Color.White else ExcavPalette.TextMuted,
                             style = MaterialTheme.typography.labelMedium.copy(
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                fontSize = if (compact) 11.5.sp else 12.sp
+                                fontSize = fontSize,
+                                letterSpacing = (-0.2).sp
                             ),
-                            textAlign = TextAlign.Center
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center,
+                            onTextLayout = { textLayoutResult ->
+                                if (textLayoutResult.hasVisualOverflow && fontSize.value > 8f) {
+                                    fontSize = (fontSize.value - 0.5f).sp
+                                }
+                            }
                         )
                     }
                 }

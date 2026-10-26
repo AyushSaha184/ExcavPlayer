@@ -28,11 +28,17 @@ object LibraryDerivation {
     const val INTERNAL_STORAGE_LABEL = "Internal Storage"
 
     /** OEM trash/recycle folder segments (Xiaomi, Samsung, Huawei, Oppo, Vivo, etc.). */
-    private val TRASH_SEGMENTS = setOf(
-        ".trash", ".trashed", "trash", ".trashbin", "trashbin",
-        ".recycle", "recycle", ".recycler", "recycler",
-        ".securetrash", "recently_deleted", ".recently_deleted",
-        ".gallery_trash", "gallery_trash"
+    val TRASH_SEGMENTS = setOf(
+        ".trash", ".trashed", "trash", ".trashbin", "trashbin", ".trash_bin", "trash_bin",
+        ".recycle", "recycle", ".recycler", "recycler", ".recycle_bin", "recycle_bin",
+        ".recyclebin", "recyclebin", ".recycled", "recycled",
+        ".securetrash", "securetrash", ".sectrash", "sectrash",
+        "recently_deleted", ".recently_deleted", "recent_deleted", ".recent_deleted",
+        "deleted_items", ".deleted_items", "deleted", ".deleted",
+        ".gallery_trash", "gallery_trash", ".gallery_recycle", "gallery_recycle",
+        ".globaltrash", "globaltrash", "._-globaltrash", "_.globaltrash",
+        ".deleterecord", "deleterecord",
+        "rubbish", ".rubbish", ".trashcan", "trashcan", "trash_can", ".trash_can"
     )
 
     /** Special folders that never contain library videos. */
@@ -85,6 +91,45 @@ object LibraryDerivation {
     }
 
     /**
+     * Checks if a single path segment is an OEM/system trash, recycle, or cache directory.
+     */
+    fun isTrashSegment(seg: String): Boolean {
+        val s = seg.lowercase().trim()
+        if (s.isEmpty()) return false
+        if (s in TRASH_SEGMENTS) return true
+        if (s.contains("trash")) return true
+        if (s.contains("recycle")) return true
+        if (s.contains("recently_deleted") || s.contains("recentlydeleted") || s.contains("recent_deleted")) return true
+        if (s.contains("deleted_items") || s.contains("deleteditems") || s.contains("deleted-items")) return true
+        if (s == "deleted" || s == ".deleted") return true
+        if (s.contains("deleterecord")) return true
+        if (s.contains("rubbish")) return true
+        if (s.contains("sectrash") || s.contains("sec_trash")) return true
+        if (s.startsWith(".trashed") || s.startsWith("trashed-")) return true
+        if (s.startsWith(".pending") || s.startsWith("pending-")) return true
+        if (s == "lost.dir" || s == ".lost.dir" || s == "lost+found") return true
+        if (s == ".thumbnails" || s == "thumbnails" || s == ".cache") return true
+        if (s.startsWith(".") && s.contains("delete")) return true
+        return false
+    }
+
+    /**
+     * Checks if a video's displayName, title, or uri indicates it has been trashed, deleted, or is hidden.
+     */
+    fun isTrashOrHiddenVideo(displayName: String?, title: String?, uri: String? = null): Boolean {
+        val name = displayName.orEmpty()
+        val t = title.orEmpty()
+        val u = uri.orEmpty()
+        if (name.startsWith(".") || t.startsWith(".")) return true
+        if (name.contains(".trashed", ignoreCase = true) || t.contains(".trashed", ignoreCase = true)) return true
+        if (name.contains("trashed-", ignoreCase = true) || t.contains("trashed-", ignoreCase = true)) return true
+        if (name.contains(".pending", ignoreCase = true) || t.contains(".pending", ignoreCase = true)) return true
+        if (name.contains("pending-", ignoreCase = true) || t.contains("pending-", ignoreCase = true)) return true
+        if (u.contains(".trashed") || u.contains("trashed-")) return true
+        return false
+    }
+
+    /**
      * The library exclusion rule, video level. Mirrored in SQL in VideoDao —
      * update both together (see mirror comments there).
      */
@@ -94,6 +139,8 @@ object LibraryDerivation {
             (video.folderName == TRANSIENT_EXTERNAL_FOLDER && video.folderPath == TRANSIENT_EXTERNAL_FOLDER) ||
             isExcludedFolderPath(video.folderPath) ||
             isExcludedFolderName(video.folderName) ||
+            isTrashSegment(video.folderName) ||
+            isTrashOrHiddenVideo(video.displayName, video.title, video.uri) ||
             video.uri.startsWith("/storage/private") ||
             video.uri.startsWith("content://com.android.providers.media.documents/") ||
             video.uri.startsWith("content://com.android.externalstorage.documents/")
@@ -106,13 +153,16 @@ object LibraryDerivation {
         if (EXCLUDED_FOLDER_NAMES.any { p.equals(it, ignoreCase = true) || p.contains(it, ignoreCase = true) }) return true
         if (p.equals("private", ignoreCase = true) || p.endsWith("/private")) return true
         if (p.startsWith("/storage/private") || p.contains("/storage/private/")) return true
-        return p.lowercase().split('/').any { it in TRASH_SEGMENTS }
+        if (p.contains("/com.miui.gallery", ignoreCase = true)) return true
+        if (p.contains("/com.sec.android.gallery3d", ignoreCase = true)) return true
+        if (p.contains("/com.google.android.apps.photos", ignoreCase = true)) return true
+        return p.lowercase().split('/').any { isTrashSegment(it) }
     }
 
     /** Name-level exclusion (a folder's immediate name). */
     fun isExcludedFolderName(name: String?): Boolean {
         val n = name.orEmpty()
-        return EXCLUDED_FOLDER_NAMES.any { n.equals(it, ignoreCase = true) }
+        return EXCLUDED_FOLDER_NAMES.any { n.equals(it, ignoreCase = true) } || isTrashSegment(n)
     }
 
     fun cleanSeriesTitle(raw: String): String {

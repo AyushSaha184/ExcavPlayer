@@ -73,8 +73,10 @@ class MediaStoreDataSource @Inject constructor(
         val projection = getProjection()
         val selection = buildString {
             append("${MediaStore.Video.Media.SIZE} > 0")
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 append(" AND ${MediaStore.Video.Media.IS_TRASHED} = 0")
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 append(" AND ${MediaStore.Video.Media.IS_PENDING} = 0")
             }
         }
@@ -160,6 +162,10 @@ class MediaStoreDataSource @Inject constructor(
                 cursor.getString(nameColumn)
             } else "Video_$mediaStoreId"
 
+            if (LibraryDerivation.isTrashOrHiddenVideo(displayName, displayName, contentUri)) {
+                continue
+            }
+
             val mimeType = if (mimeColumn != -1 && !cursor.isNull(mimeColumn)) {
                 cursor.getString(mimeColumn)
             } else "video/mp4"
@@ -229,7 +235,7 @@ class MediaStoreDataSource @Inject constructor(
                 if (folderPath.isEmpty()) folderPath = "/storage/emulated/0/$folderName"
             }
 
-            if (LibraryDerivation.isExcludedFolderPath(folderPath)) {
+            if (LibraryDerivation.isExcludedFolderPath(folderPath) || LibraryDerivation.isExcludedFolderName(folderName)) {
                 continue
             }
             videos.add(

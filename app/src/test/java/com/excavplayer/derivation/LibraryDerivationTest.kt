@@ -111,6 +111,23 @@ class LibraryDerivationTest {
         assertThat(LibraryDerivation.isExcludedFromLibrary(createTestVideo("1", "a.mp4", "/storage/emulated/0/.Trash/x"))).isTrue()
         assertThat(LibraryDerivation.isExcludedFromLibrary(createTestVideo("1", "a.mp4", "/storage/emulated/0/Recycle/file.mp4"))).isTrue()
         assertThat(LibraryDerivation.isExcludedFromLibrary(createTestVideo("1", "a.mp4", "/storage/emulated/0/Recently_Deleted"))).isTrue()
+        // Xiaomi MIUI / HyperOS trash
+        assertThat(LibraryDerivation.isExcludedFromLibrary(createTestVideo("1", "a.mp4", "/storage/emulated/0/MIUI/Gallery/cloud/.trashBin"))).isTrue()
+        assertThat(LibraryDerivation.isExcludedFromLibrary(createTestVideo("1", "a.mp4", "/storage/emulated/0/DCIM/.globalTrash"))).isTrue()
+        assertThat(LibraryDerivation.isExcludedFromLibrary(createTestVideo("1", "a.mp4", "/storage/emulated/0/.deleteRecord"))).isTrue()
+        assertThat(LibraryDerivation.isExcludedFromLibrary(createTestVideo("1", "a.mp4", "/storage/emulated/0/Android/data/com.miui.gallery/files/trashBin"))).isTrue()
+        // Samsung, Huawei, Oppo, Vivo trash
+        assertThat(LibraryDerivation.isExcludedFromLibrary(createTestVideo("1", "a.mp4", "/storage/emulated/0/SecTrash/file.mp4"))).isTrue()
+        assertThat(LibraryDerivation.isExcludedFromLibrary(createTestVideo("1", "a.mp4", "/storage/emulated/0/Pictures/.recycle_bin"))).isTrue()
+    }
+
+    @Test
+    fun `isExcludedFromLibrary excludes trashed and hidden video filenames`() {
+        // Scoped storage in-place deleted videos
+        assertThat(LibraryDerivation.isExcludedFromLibrary(createTestVideo("1", ".trashed-1718293-VID_2026.mp4", "/storage/emulated/0/DCIM/Camera"))).isTrue()
+        assertThat(LibraryDerivation.isExcludedFromLibrary(createTestVideo("1", "trashed-1718293.mp4", "/storage/emulated/0/DCIM/Camera"))).isTrue()
+        assertThat(LibraryDerivation.isExcludedFromLibrary(createTestVideo("1", ".pending-1718293.mp4", "/storage/emulated/0/Movies"))).isTrue()
+        assertThat(LibraryDerivation.isExcludedFromLibrary(createTestVideo("1", ".hidden_video.mp4", "/storage/emulated/0/Movies"))).isTrue()
     }
 
     // ── Exclusion: path and name level ───────────────────────────────
@@ -121,6 +138,8 @@ class LibraryDerivationTest {
         assertThat(LibraryDerivation.isExcludedFolderPath("/storage/emulated/0/SAF Files/sub")).isTrue()
         assertThat(LibraryDerivation.isExcludedFolderPath("/storage/private")).isTrue()
         assertThat(LibraryDerivation.isExcludedFolderPath("some/path/storage/private/x.mp4")).isTrue()
+        assertThat(LibraryDerivation.isExcludedFolderPath("/storage/emulated/0/MIUI/Gallery/cloud/.trashBin")).isTrue()
+        assertThat(LibraryDerivation.isExcludedFolderPath("/storage/emulated/0/DCIM/.globalTrash")).isTrue()
         assertThat(LibraryDerivation.isExcludedFolderPath("/storage/emulated/0/Movies")).isFalse()
         assertThat(LibraryDerivation.isExcludedFolderPath("Internal Storage")).isFalse()
         assertThat(LibraryDerivation.isExcludedFolderPath(null)).isFalse()
@@ -130,6 +149,8 @@ class LibraryDerivationTest {
     @Test
     fun `isExcludedFolderName matches exactly`() {
         assertThat(LibraryDerivation.isExcludedFolderName("saf files")).isTrue()
+        assertThat(LibraryDerivation.isExcludedFolderName(".trashbin")).isTrue()
+        assertThat(LibraryDerivation.isExcludedFolderName(".globaltrash")).isTrue()
         assertThat(LibraryDerivation.isExcludedFolderName("My Movies")).isFalse()
         assertThat(LibraryDerivation.isExcludedFolderName("")).isFalse()
     }

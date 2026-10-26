@@ -34,10 +34,15 @@ class StorageFileScanner @Inject constructor(
             "data", "obb", ".thumbnails", ".trashed", ".trash", "cache",
             "self", "knox", "enc_media", "lost.dir",
             // OEM-specific trash/recycle folders (Xiaomi, Samsung, Huawei, Oppo, Vivo, etc.)
-            ".trashbin", "trashbin", ".recycle", "recycle",
-            ".recycler", "recycler", ".securetrash",
-            "recently_deleted", ".recently_deleted",
-            "trash", ".gallery_trash", "gallery_trash"
+            ".trashbin", "trashbin", ".trash_bin", "trash_bin", ".recycle", "recycle",
+            ".recycler", "recycler", ".recycle_bin", "recycle_bin",
+            ".recyclebin", "recyclebin", ".recycled", "recycled",
+            ".securetrash", "securetrash", ".sectrash", "sectrash",
+            "recently_deleted", ".recently_deleted", "recent_deleted", ".recent_deleted",
+            "trash", ".gallery_trash", "gallery_trash", ".gallery_recycle", "gallery_recycle",
+            ".globaltrash", "globaltrash", "._-globaltrash",
+            ".deleterecord", "deleterecord",
+            "rubbish", ".rubbish", ".trashcan", "trashcan", "trash_can", ".trash_can"
         )
         private val SD_CARD_PATTERN = Regex("""^[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}$""")
     }
@@ -157,6 +162,9 @@ class StorageFileScanner @Inject constructor(
             if (file.isDirectory) {
                 scanDirectory(file, existingKeys, outList, depth + 1)
             } else if (file.isFile && file.length() > 0) {
+                if (LibraryDerivation.isTrashOrHiddenVideo(file.name, file.name, file.absolutePath)) {
+                    continue
+                }
                 val ext = file.extension.lowercase()
                 if (ext in VIDEO_EXTENSIONS) {
                     val key = "${file.name.lowercase()}:${file.length()}"
