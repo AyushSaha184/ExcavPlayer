@@ -492,12 +492,7 @@ fun BottomNav(
         cornerRadius = 32,
         containerColor = Color(0x66141822)
     ) {
-        Crossfade(
-            targetState = isCompact,
-            animationSpec = tween(durationMillis = 140, easing = ExcavEaseOut),
-            label = "bottomNavCompact"
-        ) { compact ->
-            if (compact) {
+        if (isCompact) {
             // Compact circular state on left (when player pill is enlarged)
             Box(
                 modifier = Modifier
@@ -512,7 +507,7 @@ fun BottomNav(
                     imageVector = selected.icon,
                     contentDescription = selected.label,
                     tint = Color.White,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(29.dp)
                 )
             }
         } else {
@@ -523,31 +518,29 @@ fun BottomNav(
                     .padding(horizontal = 3.dp, vertical = 3.dp)
             ) {
                 val totalWidth = maxWidth
-                val tabCount = entries.size
                 val selectedIndex = entries.indexOf(selected).coerceAtLeast(0)
                 val pillWidth = 110.dp.coerceAtMost(totalWidth)
                 val pillHalfWidth = pillWidth / 2f
                 val availableRemaining = (totalWidth - pillWidth).coerceAtLeast(0.dp)
 
-                val selectedTabCenter = when (selectedIndex) {
-                    0 -> pillHalfWidth
-                    1 -> totalWidth / 2f
-                    else -> totalWidth - pillHalfWidth
-                }
-
-                val animatedPillCenter by animateDpAsState(
-                    targetValue = selectedTabCenter,
+                val animatedIndex by animateFloatAsState(
+                    targetValue = selectedIndex.toFloat(),
                     animationSpec = tween(
                         durationMillis = 180,
                         easing = ExcavEaseInOut
                     ),
-                    label = "indicatorCenter"
+                    label = "tabIndicatorIndex"
                 )
+
+                val currentPillCenter = when {
+                    animatedIndex <= 1f -> androidx.compose.ui.unit.lerp(pillHalfWidth, totalWidth / 2f, animatedIndex)
+                    else -> androidx.compose.ui.unit.lerp(totalWidth / 2f, totalWidth - pillHalfWidth, animatedIndex - 1f)
+                }
 
                 // Single sliding highlight capsule indicator
                 Box(
                     modifier = Modifier
-                        .offset(x = (animatedPillCenter - pillHalfWidth).coerceAtLeast(0.dp))
+                        .offset(x = (currentPillCenter - pillHalfWidth).coerceAtLeast(0.dp))
                         .width(pillWidth)
                         .fillMaxHeight()
                         .clip(CircleShape)
@@ -564,32 +557,20 @@ fun BottomNav(
                     // Tab visual contents dynamically shifted to give space to selected pill
                     entries.forEachIndexed { index, tab ->
                         val isSelected = selected == tab
-                        val targetCenterDp = when (selectedIndex) {
-                            0 -> when (index) {
-                                0 -> pillHalfWidth
-                                1 -> pillWidth + availableRemaining * 0.25f
-                                else -> pillWidth + availableRemaining * 0.75f
+                        val tabCenter = when (index) {
+                            0 -> when {
+                                animatedIndex <= 1f -> androidx.compose.ui.unit.lerp(pillHalfWidth, availableRemaining * 0.25f, animatedIndex)
+                                else -> availableRemaining * 0.25f
                             }
-                            1 -> when (index) {
-                                0 -> availableRemaining * 0.25f
-                                1 -> totalWidth / 2f
-                                else -> totalWidth - availableRemaining * 0.25f
+                            1 -> when {
+                                animatedIndex <= 1f -> androidx.compose.ui.unit.lerp(pillWidth + availableRemaining * 0.25f, totalWidth / 2f, animatedIndex)
+                                else -> androidx.compose.ui.unit.lerp(totalWidth / 2f, availableRemaining * 0.75f, animatedIndex - 1f)
                             }
-                            else -> when (index) {
-                                0 -> availableRemaining * 0.25f
-                                1 -> availableRemaining * 0.75f
-                                else -> totalWidth - pillHalfWidth
+                            else -> when {
+                                animatedIndex <= 1f -> androidx.compose.ui.unit.lerp(pillWidth + availableRemaining * 0.75f, totalWidth - availableRemaining * 0.25f, animatedIndex)
+                                else -> androidx.compose.ui.unit.lerp(totalWidth - availableRemaining * 0.25f, totalWidth - pillHalfWidth, animatedIndex - 1f)
                             }
                         }
-
-                        val animatedTabCenter by animateDpAsState(
-                            targetValue = targetCenterDp,
-                            animationSpec = tween(
-                                durationMillis = 180,
-                                easing = ExcavEaseInOut
-                            ),
-                            label = "tabCenter_$index"
-                        )
 
                         val contentAlpha by animateFloatAsState(
                             targetValue = if (isSelected) 1.0f else 0.60f,
@@ -599,7 +580,7 @@ fun BottomNav(
 
                         Box(
                             modifier = Modifier
-                                .offset(x = animatedTabCenter - pillHalfWidth)
+                                .offset(x = tabCenter - pillHalfWidth)
                                 .width(pillWidth)
                                 .fillMaxHeight(),
                             contentAlignment = Alignment.Center
@@ -612,7 +593,7 @@ fun BottomNav(
                                     imageVector = tab.icon,
                                     contentDescription = tab.label,
                                     tint = Color.White.copy(alpha = contentAlpha),
-                                    modifier = Modifier.size(30.dp)
+                                    modifier = Modifier.size(27.dp)
                                 )
                                 AnimatedVisibility(
                                     visible = isSelected,
@@ -625,7 +606,7 @@ fun BottomNav(
                                             text = tab.label,
                                             color = Color.White.copy(alpha = contentAlpha),
                                             style = MaterialTheme.typography.labelMedium.copy(
-                                                fontSize = 14.sp,
+                                                fontSize = 12.6.sp,
                                                 fontWeight = FontWeight.Bold
                                             ),
                                             maxLines = 1,
@@ -655,7 +636,6 @@ fun BottomNav(
             }
         }
     }
-}
 }
 
 enum class MainTab(val label: String, val icon: ImageVector) {

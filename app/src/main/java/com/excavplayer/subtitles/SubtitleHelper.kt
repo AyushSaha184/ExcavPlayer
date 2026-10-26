@@ -19,34 +19,55 @@ data class CleanedTitle(
 )
 
 fun cleanVideoTitle(rawName: String): CleanedTitle {
-    var name = rawName.substringBeforeLast('.')
-    name = name.replace(Regex("""\[.*?\]|\(.*?\)|<.*?>"""), " ")
+    val baseName = rawName.substringBeforeLast('.')
 
     var season: Int? = null
     var episode: Int? = null
-    var titlePart = name
+    var titlePart: String
 
-    val seMatch = Regex("""(?i)(?:[\.\s_(\[-])(?:s(\d{1,2})[\.\s_]*e(\d{1,3}))(?:[\.\s_)\]-]|$)""").find(name)
-        ?: Regex("""(?i)(?:[\.\s_(\[-])(\d{1,2})x(\d{1,3})(?:[\.\s_)\]-]|$)""").find(name)
-        ?: Regex("""(?i)(?:[\.\s_(\[-])(?:season|s)[\.\s_]*(\d{1,2})[\.\s_]+(?:episode|ep|e)[\.\s_]*(\d{1,3})""").find(name)
+    val seMatch = Regex("""(?i)(?:[\.\s_(\[-])(?:s(\d{1,2})[\.\s_]*e(\d{1,3}))(?:[\.\s_)\]-]|$)""").find(baseName)
+        ?: Regex("""(?i)(?:[\.\s_(\[-])(\d{1,2})x(\d{1,3})(?:[\.\s_)\]-]|$)""").find(baseName)
+        ?: Regex("""(?i)(?:[\.\s_(\[-])(?:season|s)[\.\s_]*(\d{1,2})[\.\s_]+(?:episode|ep|e)[\.\s_]*(\d{1,3})""").find(baseName)
 
     if (seMatch != null) {
         season = seMatch.groupValues[1].toIntOrNull()
         episode = seMatch.groupValues[2].toIntOrNull()
-        titlePart = name.substring(0, seMatch.range.first)
+        titlePart = baseName.substring(0, seMatch.range.first)
     } else {
-        val epMatch = Regex("""(?i)(?:[\.\s_(\[-])(?:ep|episode)[\.\s_]*(\d{1,3})""").find(name)
+        val epMatch = Regex("""(?i)(?:[\.\s_(\[-])(?:ep|episode)[\.\s_]*(\d{1,3})""").find(baseName)
         if (epMatch != null) {
             episode = epMatch.groupValues[1].toIntOrNull()
-            titlePart = name.substring(0, epMatch.range.first)
+            titlePart = baseName.substring(0, epMatch.range.first)
         } else {
-            val sMatch = Regex("""(?i)(?:[\.\s_(\[-])(?:season|s)[\.\s_]*(\d{1,2})""").find(name)
+            val sMatch = Regex("""(?i)(?:[\.\s_(\[-])(?:season|s)[\.\s_]*(\d{1,2})""").find(baseName)
             if (sMatch != null) {
                 season = sMatch.groupValues[1].toIntOrNull()
-                titlePart = name.substring(0, sMatch.range.first)
+                titlePart = baseName.substring(0, sMatch.range.first)
+            } else {
+                // Movie title extraction:
+                // Look for release year e.g. (1999) or .2022. or 2022 followed by tags
+                val yearMatches = Regex("""(?i)(?:[\.\s_(\[-])((?:19|20)\d{2})(?:[\.\s_)\]-]|$)""").findAll(baseName).toList()
+                val movieYearMatch = yearMatches.lastOrNull { m ->
+                    val afterYear = baseName.substring(m.range.last).trim()
+                    afterYear.isEmpty() || Regex("""(?i)(?:[\.\s_\)\]-]|^)(?:2160p|4k|uhd|1080p|1080i|720p|576p|480p|360p|bluray|blu-ray|bdrip|brrip|webrip|web-dl|web|hdrip|hdtv|dvdrip|dvd|remux|cam|ts|proper|repack|x264|x265|h264|h265|hevc|aac|dts|ddp|truehd|atmos)""").containsMatchIn(afterYear)
+                } ?: yearMatches.firstOrNull()
+
+                if (movieYearMatch != null && movieYearMatch.range.first > 0) {
+                    titlePart = baseName.substring(0, movieYearMatch.range.first)
+                } else {
+                    // Fall back to cutting before resolution / release quality tags
+                    val qualityMatch = Regex("""(?i)(?:[\.\s_(\[-])(2160p|4k|uhd|1080p|1080i|720p|576p|480p|360p|bluray|blu-ray|bdrip|brrip|webrip|web-dl|web|hdrip|hdtv|dvdrip|dvd|remux|cam|ts|proper|repack|x264|x265|h264|h265|hevc|xvid|divx)(?:[\.\s_)\]-]|$)""").find(baseName)
+                    titlePart = if (qualityMatch != null && qualityMatch.range.first > 0) {
+                        baseName.substring(0, qualityMatch.range.first)
+                    } else {
+                        baseName
+                    }
+                }
             }
         }
     }
+
+    var cleaned = titlePart.replace(Regex("""\[.*?\]|\(.*?\)|<.*?>"""), " ")
 
     val junkPatterns = listOf(
         Regex("""(?i)\b(?:aac|ddp?|dts|ac3)?\s*\d\s*[\.\s]\s*\d\b"""),
@@ -58,12 +79,13 @@ fun cleanVideoTitle(rawName: String): CleanedTitle {
         Regex("""\b(?:19|20)\d{2}\b""")
     )
 
-    var cleaned = titlePart
     for (pattern in junkPatterns) {
         cleaned = cleaned.replace(pattern, " ")
     }
 
-    cleaned = cleaned.replace(Regex("""[\._\-]+"""), " ")
+    cleaned = cleaned.replace(Regex("""[\._]+"""), " ")
+    cleaned = cleaned.replace(Regex("""\s+-\s+"""), " ")
+    cleaned = cleaned.replace(Regex("""^[\s\-]+|[\s\-]+$"""), "")
     cleaned = cleaned.replace(Regex("""\s+"""), " ").trim()
 
     if (cleaned.isBlank()) {

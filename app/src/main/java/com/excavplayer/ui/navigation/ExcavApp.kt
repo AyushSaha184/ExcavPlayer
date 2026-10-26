@@ -3,6 +3,7 @@ package com.excavplayer.ui.navigation
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -280,14 +281,17 @@ fun ExcavApp(
                 onDismiss = { vm.dismissUpdate() }
             )
 
-            // Fullscreen Player with slide and fade in animation, and immediate clean close
+            // Fullscreen Player with slide and fade in animation, and smooth slide and fade out
             AnimatedVisibility(
                 visible = playerOpen,
                 enter = slideInVertically(
                     initialOffsetY = { it / 3 },
                     animationSpec = tween(260, easing = FastOutSlowInEasing)
                 ) + fadeIn(tween(220)),
-                exit = androidx.compose.animation.ExitTransition.None,
+                exit = slideOutVertically(
+                    targetOffsetY = { it / 3 },
+                    animationSpec = tween(220, easing = FastOutSlowInEasing)
+                ) + fadeOut(tween(180)),
                 modifier = Modifier.fillMaxSize()
             ) {
                 PlayerScreen(
@@ -418,9 +422,7 @@ fun BottomDock(
                         .width(targetNavbarW)
                         .height(64.dp)
                 ) {
-                    var isCompactLatched by remember { mutableStateOf(false) }
-                    val isCompact = if (isCompactLatched) targetNavbarW < 130.dp else targetNavbarW < 110.dp
-                    LaunchedEffect(isCompact) { isCompactLatched = isCompact }
+                    val isCompact = isPlayerPillExpanded || targetNavbarW < 90.dp
                     BottomNav(
                         selected = tab,
                         onSelect = onSelectTab,
@@ -781,96 +783,102 @@ fun BackgroundPlayPill(
         cornerRadius = 32,
         containerColor = Color(0x66141822)
     ) {
-        if (!isExpanded) {
-            // Circular Pill: Minimalist animated audio visualizer (white ring, black waves)
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularAudioVisualizer(
-                    isPlaying = playback.isPlaying,
-                    progress = progress,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-        } else {
-            // Expanded Pill: Displays video title, elapsed time, horizontal soundwaves, play/pause and close
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(start = 16.dp, end = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Video Name and Elapsed Time + Horizontal Waves
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.Center
+        Crossfade(
+            targetState = isExpanded,
+            animationSpec = tween(180),
+            label = "bgPlayPillContent"
+        ) { expanded ->
+            if (!expanded) {
+                // Circular Pill: Minimalist animated audio visualizer (white ring, black waves)
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = currentVideo.displayName,
-                        color = Color.White,
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 13.sp
-                        ),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                    CircularAudioVisualizer(
+                        isPlaying = playback.isPlaying,
+                        progress = progress,
+                        modifier = Modifier.fillMaxSize()
                     )
-                    Spacer(Modifier.height(2.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
+                }
+            } else {
+                // Expanded Pill: Displays video title, elapsed time, horizontal soundwaves, play/pause and close
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(start = 16.dp, end = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Video Name and Elapsed Time + Horizontal Waves
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.Center
                     ) {
                         Text(
-                            text = "${formatDuration(playbackPos.currentPositionMs)} / ${formatDuration(playbackPos.durationMs)}",
-                            color = ExcavPalette.TextMuted,
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium
-                            )
+                            text = currentVideo.displayName,
+                            color = Color.White,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 13.sp
+                            ),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
-                        Spacer(Modifier.width(8.dp))
-                        HorizontalSoundWaves(
-                            isPlaying = playback.isPlaying,
-                            modifier = Modifier.size(width = 18.dp, height = 10.dp)
+                        Spacer(Modifier.height(2.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "${formatDuration(playbackPos.currentPositionMs)} / ${formatDuration(playbackPos.durationMs)}",
+                                color = ExcavPalette.TextMuted,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            HorizontalSoundWaves(
+                                isPlaying = playback.isPlaying,
+                                modifier = Modifier.size(width = 18.dp, height = 10.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.width(6.dp))
+
+                    // Play / Pause Button
+                    IconButton(
+                        onClick = {
+                            if (playback.isPlaying) {
+                                vm.player.pause()
+                            } else {
+                                vm.player.resume()
+                            }
+                        },
+                        modifier = Modifier.size(38.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = if (playback.isPlaying) "Pause" else "Play",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
                         )
                     }
-                }
 
-                Spacer(Modifier.width(6.dp))
-
-                // Play / Pause Button
-                IconButton(
-                    onClick = {
-                        if (playback.isPlaying) {
-                            vm.player.pause()
-                        } else {
-                            vm.player.resume()
-                        }
-                    },
-                    modifier = Modifier.size(38.dp)
-                ) {
-                    Icon(
-                        imageVector = if (playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = if (playback.isPlaying) "Pause" else "Play",
-                        tint = Color.White,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-
-                // Close Button
-                IconButton(
-                    onClick = {
-                        vm.player.stop()
-                        onCollapse()
-                    },
-                    modifier = Modifier.size(38.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Close",
-                        tint = ExcavPalette.TextMuted,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    // Close Button
+                    IconButton(
+                        onClick = {
+                            vm.player.stop()
+                            onCollapse()
+                        },
+                        modifier = Modifier.size(38.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = ExcavPalette.TextMuted,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
         }

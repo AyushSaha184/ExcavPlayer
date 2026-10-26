@@ -64,5 +64,14 @@ class SubtitleHelperTest {
         val test5 = cleanVideoTitle("Naruto.Shippuden.Episode.42.720p.mp4")
         assertThat(test5.formatted).isEqualTo("Naruto Shippuden E42")
         assertThat(test5.episode).isEqualTo(42)
+
+        val test6 = cleanVideoTitle("Top.Gun.Maverick.2022.1080p.AMZN.WEBRip.DDP5.1.Atmos.x264-FLUX.mkv")
+        assertThat(test6.formatted).isEqualTo("Top Gun Maverick")
+
+        val test7 = cleanVideoTitle("Everything Everywhere All at Once (2022) [1080p] [WEBRip] [5.1] [YTS.MX].mp4")
+        assertThat(test7.formatted).isEqualTo("Everything Everywhere All at Once")
+
+        val test8 = cleanVideoTitle("The.Matrix.1080p.BluRay.x264.mkv")
+        assertThat(test8.formatted).isEqualTo("The Matrix")
     }
 }
