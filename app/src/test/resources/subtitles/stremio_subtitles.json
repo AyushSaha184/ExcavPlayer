@@ -1,0 +1,7 @@
+{
+  "subtitles": [
+    {"id": "strem-1", "url": "https://opensubtitles-v3.strem.io/dl/one.srt", "lang": "eng", "movieReleaseName": "Movie.2024.1080p.BluRay"},
+    {"id": "strem-2", "url": "https://opensubtitles-v3.strem.io/dl/two.srt", "lang": "jpn", "subtitleFileName": "Movie.2024.JA.srt"},
+    {"id": "strem-3", "url": "https://opensubtitles-v3.strem.io/dl/three.srt", "lang": "spa"}
+  ]
+}

@@ -73,4 +73,6 @@
     <string name="unmute">Unmute</string>
     <string name="cd_mute">Mute audio</string>
     <string name="cd_unmute">Unmute audio</string>
+    <string name="subtitle_search_connection_error">Couldn\'t reach subtitle sites — check your connection</string>
+    <string name="subtitle_download_failed">Couldn\'t download subtitle file</string>
 </resources>

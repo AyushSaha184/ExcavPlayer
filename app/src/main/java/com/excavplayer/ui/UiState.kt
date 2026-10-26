@@ -45,8 +45,11 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import java.io.File
 import javax.inject.Inject
 import kotlinx.coroutines.flow.update
+import com.excavplayer.R
 import com.excavplayer.subtitles.SubtitleHelper
+import com.excavplayer.subtitles.SubtitleSearchOutcome
 import com.excavplayer.subtitles.SubtitleSearchResult
+import com.excavplayer.subtitles.LanguageRegistry
 import com.excavplayer.subtitles.SubtitleLanguage
 import com.excavplayer.subtitles.SubtitleSource
 
@@ -658,23 +661,40 @@ class ExcavViewModel @Inject constructor(
         val langCode = if (preferredLang.isNullOrBlank() || preferredLang.equals("auto", ignoreCase = true) || preferredLang.equals("auto (default)", ignoreCase = true)) {
             "en"
         } else {
-            preferredLang.trim().lowercase()
+            // Providers take search-API codes, not display names ("English" -> "en")
+            LanguageRegistry.nameToCode(preferredLang.trim()) ?: preferredLang.trim().lowercase()
         }
 
         viewModelScope.launch {
             _onlineSubtitleState.update { it.copy(isSearching = true, errorMessage = null) }
             try {
-                val results = subtitleHelper.searchOnlineSubtitles(
+                when (val outcome = subtitleHelper.searchOnlineSubtitles(
                     query = q,
                     languageCode = langCode,
                     source = SubtitleSource.ALL
-                )
-                _onlineSubtitleState.update {
-                    it.copy(
-                        isSearching = false,
-                        searchResults = results,
-                        errorMessage = if (results.isEmpty()) "No subtitles found for \"$q\"" else null
-                    )
+                )) {
+                    is SubtitleSearchOutcome.Results -> _onlineSubtitleState.update {
+                        it.copy(isSearching = false, searchResults = outcome.items, errorMessage = null)
+                    }
+                    is SubtitleSearchOutcome.NoResults -> _onlineSubtitleState.update {
+                        it.copy(isSearching = false, searchResults = emptyList(), errorMessage = "No subtitles found for \"$q\"")
+                    }
+                    is SubtitleSearchOutcome.NetworkError -> {
+                        logger.e(TAG, "Subtitle search unreachable: ${outcome.cause.message}")
+                        _onlineSubtitleState.update {
+                            it.copy(
+                                isSearching = false,
+                                searchResults = emptyList(),
+                                errorMessage = context.getString(R.string.subtitle_search_connection_error)
+                            )
+                        }
+                    }
+                    is SubtitleSearchOutcome.ParseError -> {
+                        logger.e(TAG, "Subtitle search parse failures: ${outcome.messages.joinToString()}")
+                        _onlineSubtitleState.update {
+                            it.copy(isSearching = false, searchResults = emptyList(), errorMessage = "Subtitle search failed")
+                        }
+                    }
                 }
             } catch (e: Exception) {
                 logger.e(TAG, "Subtitle search failed: ${e.message}", e)
@@ -695,7 +715,16 @@ class ExcavViewModel @Inject constructor(
             }
             try {
                 val dlResult = subtitleHelper.downloadAndSaveSubtitle(result, videoTitle)
-                val file = dlResult.getOrThrow()
+                val file = dlResult.getOrElse { e ->
+                    logger.e(TAG, "Subtitle download failed: ${e.message}", e)
+                    _onlineSubtitleState.update {
+                        it.copy(
+                            downloadingIds = it.downloadingIds - result.id,
+                            errorMessage = context.getString(R.string.subtitle_download_failed)
+                        )
+                    }
+                    return@launch
+                }
                 val updatedMap = _onlineSubtitleState.value.downloadedMap + (result.id to file)
 
                 val shouldApplyImmediately = _onlineSubtitleState.value.appliedSubtitleId == null

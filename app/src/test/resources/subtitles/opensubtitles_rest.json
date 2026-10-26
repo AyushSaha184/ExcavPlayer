@@ -1,0 +1,37 @@
+{
+  "data": [
+    {
+      "id": "101",
+      "attributes": {
+        "language": "English",
+        "release": "Movie.2024.1080p.WEB",
+        "files": [{"file_id": 555001, "file_name": "Movie.2024.1080p.WEB.srt"}],
+        "format": "srt",
+        "download_count": 1500,
+        "hearing_impaired": "false",
+        "ratings": "8.1"
+      }
+    },
+    {
+      "id": "102",
+      "attributes": {
+        "language": "Japanese",
+        "release": "Movie.2024.JA",
+        "files": [{"file_id": 555002, "file_name": "Movie.2024.JA.srt"}],
+        "format": "srt",
+        "download_count": 300,
+        "hearing_impaired": "false"
+      }
+    },
+    {
+      "id": "103",
+      "attributes": {
+        "language": "English",
+        "release": "Movie.2024.NoFiles",
+        "files": [],
+        "format": "srt",
+        "download_count": 10
+      }
+    }
+  ]
+}

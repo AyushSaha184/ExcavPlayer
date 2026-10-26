@@ -2,6 +2,7 @@ package com.excavplayer.player.policy
 
 import com.excavplayer.domain.model.AudioTrack
 import com.excavplayer.domain.model.SubtitleTrack
+import com.excavplayer.subtitles.LanguageRegistry
 
 /**
  * Pure track-selection decisions: which audio/subtitle track the player should
@@ -10,76 +11,11 @@ import com.excavplayer.domain.model.SubtitleTrack
  */
 object TrackSelectionPolicy {
 
-    private val LANGUAGE_MAP = mapOf(
-        "english" to listOf("en", "eng", "english"),
-        "hindi" to listOf("hi", "hin", "hindi"),
-        "japanese" to listOf("ja", "jpn", "japanese"),
-        "spanish" to listOf("es", "spa", "spanish", "espanol", "español"),
-        "french" to listOf("fr", "fra", "fre", "french", "francais", "français"),
-        "german" to listOf("de", "deu", "ger", "german", "deutsch"),
-        "chinese" to listOf("zh", "zho", "chi", "chinese", "mandarin", "cantonese"),
-        "korean" to listOf("ko", "kor", "korean"),
-        "russian" to listOf("ru", "rus", "russian"),
-        "portuguese" to listOf("pt", "por", "portuguese"),
-        "italian" to listOf("it", "ita", "italian"),
-        "telugu" to listOf("te", "tel", "telugu"),
-        "tamil" to listOf("ta", "tam", "tamil"),
-        "kannada" to listOf("kn", "kan", "kannada"),
-        "malayalam" to listOf("ml", "mal", "malayalam"),
-        "bengali" to listOf("bn", "ben", "bengali"),
-        "marathi" to listOf("mr", "mar", "marathi"),
-        "gujarati" to listOf("gu", "guj", "gujarati"),
-        "punjabi" to listOf("pa", "pan", "punjabi"),
-        "arabic" to listOf("ar", "ara", "arabic"),
-        "turkish" to listOf("tr", "tur", "turkish"),
-        "vietnamese" to listOf("vi", "vie", "vietnamese"),
-        "thai" to listOf("th", "tha", "thai"),
-        "indonesian" to listOf("id", "ind", "indonesian")
-    )
+    fun getLanguageCodes(preferred: String?): List<String> =
+        LanguageRegistry.trackLanguageCodes(preferred)
 
-    fun getLanguageCodes(preferred: String?): List<String> {
-        if (preferred.isNullOrBlank() || preferred.equals("auto", ignoreCase = true) || preferred.equals("none", ignoreCase = true) || preferred.equals("auto (default)", ignoreCase = true)) {
-            return emptyList()
-        }
-        val key = preferred.trim().lowercase()
-        return LANGUAGE_MAP[key] ?: listOf(key)
-    }
-
-    fun matchesLanguage(language: String?, label: String?, preferred: String): Boolean {
-        if (preferred.isBlank() || preferred.equals("none", ignoreCase = true) || preferred.equals("auto", ignoreCase = true) || preferred.equals("auto (default)", ignoreCase = true)) {
-            return false
-        }
-        val pref = preferred.trim().lowercase()
-        val synonyms = getLanguageCodes(pref)
-        if (synonyms.isEmpty()) return false
-
-        val lang = language?.trim()?.lowercase()?.takeIf { it.isNotBlank() && it != "und" }
-        val lab = label?.trim()?.lowercase()?.takeIf { it.isNotBlank() }
-
-        // 1. Direct language code / tag match
-        if (lang != null) {
-            if (synonyms.any { s -> lang == s || lang.startsWith("$s-") || lang.startsWith("${s}_") }) {
-                return true
-            }
-            // If the track explicitly defines another recognized language family, prevent accidental fallback
-            val belongsToOther = LANGUAGE_MAP.entries.any { (otherKey, otherSyns) ->
-                otherKey != pref && otherSyns.any { s -> lang == s || lang.startsWith("$s-") || lang.startsWith("${s}_") }
-            }
-            if (belongsToOther) {
-                return false
-            }
-        }
-
-        // 2. Tokenized whole-word match on label (prevents false positives like "clean" matching "en" or "stereo" matching "es")
-        if (lab != null) {
-            val words = lab.split(Regex("[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ]+")).filter { it.isNotBlank() }
-            if (words.any { word -> synonyms.any { s -> word.equals(s, ignoreCase = true) } }) {
-                return true
-            }
-        }
-
-        return false
-    }
+    fun matchesLanguage(language: String?, label: String?, preferred: String): Boolean =
+        LanguageRegistry.matchesTrackLanguage(language, label, preferred)
 
     fun parseSavedAudioTrack(savedPref: String?): Triple<String?, String?, String?> {
         if (savedPref.isNullOrBlank()) return Triple(null, null, null)

@@ -103,4 +103,17 @@ class PlayerErrorMapperTest {
         assertThat(domainError).isInstanceOf(PlaybackError.SourceError::class.java)
         assertThat(domainError.isRecoverable).isTrue()
     }
+
+    @Test
+    fun `maps malformed manifest to MalformedSubtitleError`() {
+        val ex = PlaybackException(
+            "Malformed manifest",
+            null,
+            PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED
+        )
+
+        val domainError = PlayerErrorMapper.map(ex)
+        assertThat(domainError).isInstanceOf(PlaybackError.MalformedSubtitleError::class.java)
+        assertThat(domainError.cause).isSameInstanceAs(ex)
+    }
 }

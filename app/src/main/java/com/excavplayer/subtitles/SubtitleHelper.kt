@@ -108,7 +108,7 @@ class SubtitleHelper @Inject constructor(
         query: String,
         languageCode: String = "en",
         source: SubtitleSource = SubtitleSource.ALL
-    ): List<SubtitleSearchResult> = withContext(dispatchers.io) {
+    ): SubtitleSearchOutcome = withContext(dispatchers.io) {
         searchService.searchSubtitles(query, languageCode, source)
     }
 

@@ -18,29 +18,12 @@ enum class SubtitleSource(val displayName: String) {
     ALL("All Sources"),
     OPENSUBTITLES("OpenSubtitles"),
     SUBDL("SubDL"),
-    YIFY("YIFY Subtitles"),
-    SUBSOURCE("SubSource")
+    YIFY("YIFY Subtitles")
 }
 
 data class SubtitleLanguage(val name: String, val code: String) {
     companion object {
-        val SUPPORTED = listOf(
-            SubtitleLanguage("All", "all"),
-            SubtitleLanguage("English", "en"),
-            SubtitleLanguage("Spanish", "es"),
-            SubtitleLanguage("French", "fr"),
-            SubtitleLanguage("German", "de"),
-            SubtitleLanguage("Hindi", "hi"),
-            SubtitleLanguage("Arabic", "ar"),
-            SubtitleLanguage("Portuguese", "pt"),
-            SubtitleLanguage("Russian", "ru"),
-            SubtitleLanguage("Japanese", "ja"),
-            SubtitleLanguage("Korean", "ko"),
-            SubtitleLanguage("Chinese", "zh"),
-            SubtitleLanguage("Italian", "it"),
-            SubtitleLanguage("Indonesian", "id"),
-            SubtitleLanguage("Turkish", "tr"),
-            SubtitleLanguage("Vietnamese", "vi")
-        )
+        /** Single source of truth: [LanguageRegistry]. Kept as a shim for call sites. */
+        val SUPPORTED: List<SubtitleLanguage> get() = LanguageRegistry.supported
     }
 }
