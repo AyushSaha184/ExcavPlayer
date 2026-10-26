@@ -5,8 +5,6 @@ import android.net.Uri
 import androidx.media3.common.MimeTypes
 import com.excavplayer.core.coroutine.DispatcherProvider
 import com.excavplayer.core.logging.AppLogger
-import com.excavplayer.data.database.dao.SubtitlePreferenceDao
-import com.excavplayer.data.database.entity.SubtitlePreferenceEntity
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -85,7 +83,6 @@ fun cleanVideoTitle(rawName: String): CleanedTitle {
 @Singleton
 class SubtitleHelper @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val subtitlePreferenceDao: SubtitlePreferenceDao,
     val searchService: SubtitleSearchService,
     val downloader: SubtitleDownloader,
     private val dispatchers: DispatcherProvider,
@@ -135,25 +132,5 @@ class SubtitleHelper @Inject constructor(
         } else {
             emptyList()
         }
-    }
-
-    suspend fun savePreference(
-        videoId: String,
-        trackId: String?,
-        delayMs: Long = 0L,
-        externalUri: String? = null
-    ) = withContext(dispatchers.io) {
-        val entity = SubtitlePreferenceEntity(
-            videoId = videoId,
-            preferredSubtitleTrackId = trackId,
-            subtitleDelayMs = delayMs,
-            externalSubtitleUri = externalUri
-        )
-        subtitlePreferenceDao.upsertPreferences(entity)
-        logger.d(TAG, "Saved subtitle preferences for video: $videoId")
-    }
-
-    suspend fun getPreference(videoId: String): SubtitlePreferenceEntity? = withContext(dispatchers.io) {
-        subtitlePreferenceDao.getPreferences(videoId)
     }
 }

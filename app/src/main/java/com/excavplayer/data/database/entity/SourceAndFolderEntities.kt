@@ -49,24 +49,3 @@ data class MediaSourceEntity(
     @ColumnInfo(name = "last_validated_timestamp")
     val lastValidatedTimestamp: Long = System.currentTimeMillis()
 )
-
-@Entity(
-    tableName = "folders"
-)
-data class FolderEntity(
-    @PrimaryKey
-    @ColumnInfo(name = "folder_path")
-    val folderPath: String,
-
-    @ColumnInfo(name = "folder_name")
-    val folderName: String,
-
-    @ColumnInfo(name = "video_count")
-    val videoCount: Int,
-
-    @ColumnInfo(name = "total_size_bytes")
-    val totalSizeBytes: Long,
-
-    @ColumnInfo(name = "last_modified_timestamp")
-    val lastModifiedTimestamp: Long = System.currentTimeMillis()
-)

@@ -5,7 +5,6 @@ import androidx.media3.common.MimeTypes
 import com.google.common.truth.Truth.assertThat
 import com.excavplayer.core.coroutine.DefaultDispatcherProvider
 import com.excavplayer.core.logging.AndroidAppLogger
-import com.excavplayer.data.database.dao.SubtitlePreferenceDao
 import io.mockk.mockk
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -16,10 +15,8 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34])
 class SubtitleHelperTest {
 
-    private val dao = mockk<SubtitlePreferenceDao>(relaxed = true)
     private val helper = SubtitleHelper(
         context = mockk(relaxed = true),
-        subtitlePreferenceDao = dao,
         searchService = mockk(relaxed = true),
         downloader = mockk(relaxed = true),
         dispatchers = DefaultDispatcherProvider(),

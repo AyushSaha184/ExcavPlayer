@@ -28,7 +28,6 @@ import com.excavplayer.core.logging.AppLogger
 import com.excavplayer.data.database.mapper.toDomain
 import com.excavplayer.domain.model.PlayerCommand
 import com.excavplayer.library.VideoLibrary
-import com.excavplayer.media.source.SafDataSource
 import com.excavplayer.media.thumbnail.ThumbnailLoader
 import com.excavplayer.player.core.PlayerManager
 import com.excavplayer.player.playback.PipHelper
@@ -50,9 +49,6 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var pipHelper: PipHelper
-
-    @Inject
-    lateinit var safDataSource: SafDataSource
 
     @Inject
     lateinit var thumbnailLoader: ThumbnailLoader

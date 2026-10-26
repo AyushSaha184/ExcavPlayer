@@ -13,7 +13,6 @@ import com.excavplayer.data.database.dao.SubtitlePreferenceDao
 import com.excavplayer.data.database.dao.VideoDao
 import com.excavplayer.data.database.entity.DismissedContinueWatchingEntity
 import com.excavplayer.data.database.entity.EqualizerPreferenceEntity
-import com.excavplayer.data.database.entity.FolderEntity
 import com.excavplayer.data.database.entity.MediaSourceEntity
 import com.excavplayer.data.database.entity.PlaybackEntity
 import com.excavplayer.data.database.entity.SubtitlePreferenceEntity
@@ -25,11 +24,10 @@ import com.excavplayer.data.database.entity.VideoEntity
         PlaybackEntity::class,
         SubtitlePreferenceEntity::class,
         MediaSourceEntity::class,
-        FolderEntity::class,
         DismissedContinueWatchingEntity::class,
         EqualizerPreferenceEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = true
 )
 abstract class ExcavDatabase : RoomDatabase() {
@@ -86,13 +84,19 @@ abstract class ExcavDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP TABLE IF EXISTS folders")
+            }
+        }
+
         fun buildDatabase(context: Context): ExcavDatabase {
             return Room.databaseBuilder(
                 context.applicationContext,
                 ExcavDatabase::class.java,
                 DATABASE_NAME
             )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 .fallbackToDestructiveMigration()
                 .build()
         }

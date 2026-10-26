@@ -28,7 +28,6 @@ class MediaSyncWorker @AssistedInject constructor(
     companion object {
         private const val TAG = "MediaSyncWorker"
         private const val PERIODIC_WORK_NAME = "excav_media_sync_periodic"
-        private const val ONE_TIME_WORK_NAME = "excav_media_sync_immediate"
 
         fun schedulePeriodicSync(context: Context) {
             val constraints = Constraints.Builder()
@@ -46,21 +45,6 @@ class MediaSyncWorker @AssistedInject constructor(
                 PERIODIC_WORK_NAME,
                 ExistingPeriodicWorkPolicy.KEEP,
                 periodicRequest
-            )
-        }
-
-        fun enqueueOneTimeSync(context: Context) {
-            val constraints = Constraints.Builder()
-                .build()
-
-            val oneTimeRequest = OneTimeWorkRequestBuilder<MediaSyncWorker>()
-                .setConstraints(constraints)
-                .build()
-
-            WorkManager.getInstance(context).enqueueUniqueWork(
-                ONE_TIME_WORK_NAME,
-                ExistingWorkPolicy.KEEP,
-                oneTimeRequest
             )
         }
     }
