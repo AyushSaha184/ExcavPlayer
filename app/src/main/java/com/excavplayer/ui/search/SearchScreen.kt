@@ -118,8 +118,7 @@ fun SearchScreen(
                 Spacer(Modifier.width(12.dp))
                 GlassmorphicItem(
                     modifier = Modifier.weight(1f),
-                    cornerRadius = 20,
-                    blurRadius = 15
+                    cornerRadius = 20
                 ) {
                     TextField(
                         value = query,

@@ -76,12 +76,18 @@ import com.excavplayer.ui.search.SearchScreen
 import com.excavplayer.ui.settings.SettingsScreen
 import com.excavplayer.ui.theme.ExcavPalette
 import com.excavplayer.ui.theme.ExcavShapes
+import com.excavplayer.ui.theme.ExcavMotion
+import com.excavplayer.ui.theme.ExcavEaseDrawer
+import com.excavplayer.ui.theme.ExcavEaseOut
+import com.excavplayer.ui.theme.excavTween
+import com.excavplayer.ui.theme.rememberSystemReducedMotion
 
 @Composable
 fun ExcavApp(
     vm: ExcavViewModel,
     onPickSubtitle: () -> Unit
 ) {
+    val reducedMotion = rememberSystemReducedMotion()
     var tab by rememberSaveable { mutableStateOf(MainTab.HOME) }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     val playerOpen by vm.isPlayerOpen.collectAsStateWithLifecycle()
@@ -148,21 +154,24 @@ fun ExcavApp(
                                     .padding(24.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                CircularProgressIndicator(
-                                    color = ExcavPalette.Blue,
-                                    strokeWidth = 2.5.dp
-                                )
+                                RoseThreeLoader(size = 32.dp)
                             }
                         } else {
                             AnimatedContent(
                                 targetState = tab,
                                 transitionSpec = {
-                                    if (targetState.ordinal > initialState.ordinal) {
-                                        (slideInHorizontally(tween(220, easing = FastOutSlowInEasing)) { it / 4 } + fadeIn(tween(200)))
-                                            .togetherWith(slideOutHorizontally(tween(180, easing = FastOutSlowInEasing)) { -it / 4 } + fadeOut(tween(160)))
+                                    if (reducedMotion) {
+                                        fadeIn(tween(120)).togetherWith(fadeOut(tween(120)))
+                                    } else if (targetState.ordinal > initialState.ordinal) {
+                                        (slideInHorizontally(excavTween(ExcavMotion.Ui, ExcavEaseDrawer)) { it / 4 } +
+                                            fadeIn(excavTween(ExcavMotion.Ui)))
+                                            .togetherWith(slideOutHorizontally(excavTween(ExcavMotion.Press, ExcavEaseDrawer)) { -it / 4 } +
+                                                fadeOut(excavTween(ExcavMotion.Press)))
                                     } else {
-                                        (slideInHorizontally(tween(220, easing = FastOutSlowInEasing)) { -it / 4 } + fadeIn(tween(200)))
-                                            .togetherWith(slideOutHorizontally(tween(180, easing = FastOutSlowInEasing)) { it / 4 } + fadeOut(tween(160)))
+                                        (slideInHorizontally(excavTween(ExcavMotion.Ui, ExcavEaseDrawer)) { -it / 4 } +
+                                            fadeIn(excavTween(ExcavMotion.Ui)))
+                                            .togetherWith(slideOutHorizontally(excavTween(ExcavMotion.Press, ExcavEaseDrawer)) { it / 4 } +
+                                                fadeOut(excavTween(ExcavMotion.Press)))
                                     }
                                 },
                                 label = "tab_content"
@@ -220,8 +229,8 @@ fun ExcavApp(
 
                     AnimatedVisibility(
                         visible = searchOpen,
-                        enter = slideInVertically(tween(220, easing = FastOutSlowInEasing)) { -it / 6 } + fadeIn(tween(180)),
-                        exit = slideOutVertically(tween(180, easing = FastOutSlowInEasing)) { -it / 6 } + fadeOut(tween(160)),
+                        enter = if (reducedMotion) fadeIn(tween(140)) else (slideInVertically(tween(220, easing = FastOutSlowInEasing)) { -it / 6 } + fadeIn(tween(180))),
+                        exit = if (reducedMotion) fadeOut(tween(120)) else (slideOutVertically(tween(180, easing = FastOutSlowInEasing)) { -it / 6 } + fadeOut(tween(160))),
                         modifier = Modifier.fillMaxSize()
                     ) {
                         SearchScreen(
@@ -412,7 +421,9 @@ fun BottomDock(
                         .width(targetNavbarW)
                         .height(64.dp)
                 ) {
-                    val isCompact = targetNavbarW < 110.dp
+                    var isCompactLatched by remember { mutableStateOf(false) }
+                    val isCompact = if (isCompactLatched) targetNavbarW < 130.dp else targetNavbarW < 110.dp
+                    LaunchedEffect(isCompact) { isCompactLatched = isCompact }
                     BottomNav(
                         selected = tab,
                         onSelect = onSelectTab,
@@ -455,6 +466,36 @@ fun HorizontalSoundWaves(
     isPlaying: Boolean,
     modifier: Modifier = Modifier
 ) {
+    val reducedMotion = rememberSystemReducedMotion()
+    if (reducedMotion || !isPlaying) {
+        Canvas(modifier = modifier) {
+            val count = 4
+            val barWidthPx = 2.dp.toPx()
+            val barSpacingPx = 2.dp.toPx()
+            val totalWidth = count * barWidthPx + (count - 1) * barSpacingPx
+            val startX = (size.width - totalWidth) / 2f + barWidthPx / 2f
+            val centerY = size.height / 2f
+
+            val minH = 2.5.dp.toPx()
+            val maxH = size.height.coerceAtMost(10.dp.toPx())
+            val factors = listOf(0.65f, 0.85f, 0.55f, 0.70f)
+            val activity = if (isPlaying) 1f else 0.15f
+
+            for (i in 0 until count) {
+                val x = startX + i * (barWidthPx + barSpacingPx)
+                val h = minH + (maxH - minH) * factors[i] * activity
+                drawLine(
+                    color = Color.White.copy(alpha = if (reducedMotion) 0.8f else 0.35f),
+                    start = Offset(x, centerY - h / 2f),
+                    end = Offset(x, centerY + h / 2f),
+                    strokeWidth = barWidthPx,
+                    cap = StrokeCap.Round
+                )
+            }
+        }
+        return
+    }
+
     val infiniteTransition = rememberInfiniteTransition(label = "horizontalWaves")
     val t1 by infiniteTransition.animateFloat(
         initialValue = 0.20f,
@@ -530,6 +571,75 @@ fun CircularAudioVisualizer(
     progress: Float = 0f,
     modifier: Modifier = Modifier
 ) {
+    val reducedMotion = rememberSystemReducedMotion()
+    if (reducedMotion || !isPlaying) {
+        Box(
+            modifier = modifier.size(52.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val center = Offset(size.width / 2f, size.height / 2f)
+                val outerRadius = size.minDimension / 2f - 3.dp.toPx()
+
+                // 1. Minimal circular hairline track
+                drawCircle(
+                    color = Color.White.copy(alpha = 0.20f),
+                    radius = outerRadius,
+                    center = center,
+                    style = Stroke(width = 1.2.dp.toPx())
+                )
+
+                // 2. White circular progress indicator around the circumference showing elapsed time
+                if (progress > 0.005f) {
+                    drawArc(
+                        color = Color.White,
+                        startAngle = -90f,
+                        sweepAngle = 360f * progress,
+                        useCenter = false,
+                        topLeft = Offset(center.x - outerRadius, center.y - outerRadius),
+                        size = androidx.compose.ui.geometry.Size(outerRadius * 2f, outerRadius * 2f),
+                        style = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round)
+                    )
+                }
+
+                // 3. Central minimal 4-bar soundwave
+                val barWidthPx = 2.5.dp.toPx()
+                val barSpacingPx = 2.5.dp.toPx()
+                val totalBarsWidth = 4 * barWidthPx + 3 * barSpacingPx
+                val startX = center.x - totalBarsWidth / 2f + barWidthPx / 2f
+
+                val restingHeightPx = 3.dp.toPx()
+                val maxHeight1 = 10.dp.toPx()
+                val maxHeight2 = 16.dp.toPx()
+                val maxHeight3 = 13.dp.toPx()
+                val maxHeight4 = 9.dp.toPx()
+
+                val factors = listOf(0.60f, 0.80f, 0.45f, 0.70f)
+                val activity = if (isPlaying) 1f else 0f
+
+                val heights = listOf(
+                    restingHeightPx + (maxHeight1 - restingHeightPx) * factors[0] * activity,
+                    restingHeightPx + (maxHeight2 - restingHeightPx) * factors[1] * activity,
+                    restingHeightPx + (maxHeight3 - restingHeightPx) * factors[2] * activity,
+                    restingHeightPx + (maxHeight4 - restingHeightPx) * factors[3] * activity
+                )
+
+                for (i in 0 until 4) {
+                    val x = startX + i * (barWidthPx + barSpacingPx)
+                    val h = heights[i]
+                    drawLine(
+                        color = Color.White,
+                        start = Offset(x, center.y - h / 2f),
+                        end = Offset(x, center.y + h / 2f),
+                        strokeWidth = barWidthPx,
+                        cap = StrokeCap.Round
+                    )
+                }
+            }
+        }
+        return
+    }
+
     val infiniteTransition = rememberInfiniteTransition(label = "minimalVisualizer")
 
     val t1 by infiniteTransition.animateFloat(
@@ -672,7 +782,6 @@ fun BackgroundPlayPill(
                 }
             },
         cornerRadius = 32,
-        blurRadius = 15,
         containerColor = Color(0x66141822)
     ) {
         if (!isExpanded) {

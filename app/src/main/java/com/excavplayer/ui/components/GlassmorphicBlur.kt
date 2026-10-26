@@ -58,7 +58,6 @@ fun GlassmorphicItem(
     modifier: Modifier = Modifier,
     hazeState: HazeState = LocalHazeState.current,
     cornerRadius: Int = 20,
-    blurRadius: Int = 10,
     containerColor: Color = Color(0x66141720),
     hazeStyle: HazeBlurStyle = CupertinoMaterials.ultraThin(containerColor = containerColor),
     content: @Composable BoxScope.() -> Unit

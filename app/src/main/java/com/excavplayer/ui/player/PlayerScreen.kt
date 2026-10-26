@@ -109,12 +109,28 @@ import com.excavplayer.ui.ExcavViewModel
 import com.excavplayer.ui.components.*
 import com.excavplayer.ui.theme.ExcavPalette
 import com.excavplayer.ui.theme.ExcavShapes
+import com.excavplayer.ui.theme.ExcavEaseOut
+import com.excavplayer.ui.theme.rememberSystemReducedMotion
 
 enum class ScrubSource { SLIDER, SWIPE }
 data class ScrubState(val targetMs: Long, val source: ScrubSource)
 private enum class DragClassifierMode { NONE, VERTICAL, HORIZONTAL_SEEK }
 private enum class PlayerSheet { SUBTITLES, AUDIO, SPEED, CHAPTERS, MORE_OPTIONS, EQUALIZER, SUBTITLE_CUSTOMIZATION }
 private enum class DoubleTapSide { LEFT, RIGHT }
+
+/** Rising-friction clamp: motion keeps moving past `limit` but with diminishing effect. */
+private fun rubberClamp(raw: Float, limit: Float): Float {
+    val limitAbs = limit.coerceAtLeast(1f)
+    if (raw > limitAbs) {
+        val over = raw - limitAbs
+        return limitAbs + (over / (1f + over / (limitAbs * 0.35f + 1f)))
+    }
+    if (raw < -limitAbs) {
+        val over = -raw - limitAbs
+        return -limitAbs - (over / (1f + over / (limitAbs * 0.35f + 1f)))
+    }
+    return raw
+}
 
 @Composable
 private fun Modifier.playerGlass(
@@ -191,12 +207,7 @@ fun PlayerScreen(
     var activeSurfaceView by remember { mutableStateOf<android.view.SurfaceView?>(null) }
     var activePlayerView by remember { mutableStateOf<PlayerView?>(null) }
 
-    // Subtle background blur when an option sheet is opened
-    val sheetBlurRadius by animateDpAsState(
-        targetValue = if (activeSheet != null) 2.dp else 0.dp,
-        animationSpec = tween(200, easing = FastOutSlowInEasing),
-        label = "sheetBlurRadius"
-    )
+
 
     // When returning to video player, reset background audio toggle state so button is OFF
     LaunchedEffect(Unit) {
@@ -361,8 +372,8 @@ fun PlayerScreen(
                             val maxPanX = (size.width * (newZoom - 1f)) / 2f
                             val maxPanY = (size.height * (newZoom - 1f)) / 2f
                             panOffset = Offset(
-                                (panOffset.x + pan.x).coerceIn(-maxPanX, maxPanX),
-                                (panOffset.y + pan.y).coerceIn(-maxPanY, maxPanY)
+                                rubberClamp(panOffset.x + pan.x, maxPanX),
+                                rubberClamp(panOffset.y + pan.y, maxPanY)
                             )
                         } else {
                             panOffset = Offset.Zero
@@ -658,47 +669,49 @@ fun PlayerScreen(
         val seekFontSize = if (isVeryCompact) 10.sp else if (isCompact) 12.sp else 14.sp
         val seekPaddingH = if (isVeryCompact) 16.dp else if (isCompact) 28.dp else 44.dp
 
-        AnimatedVisibility(
-            visible = doubleTapSeekSide != null,
-            enter = fadeIn(tween(100)) + scaleIn(initialScale = 0.82f, animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMedium)),
-            exit = fadeOut(tween(180)),
-            modifier = Modifier
-                .align(if (doubleTapSeekSide == DoubleTapSide.LEFT) Alignment.CenterStart else Alignment.CenterEnd)
-                .padding(horizontal = seekPaddingH)
-        ) {
-            doubleTapSeekSide?.let { side ->
-                val isLeft = side == DoubleTapSide.LEFT
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy((-6).dp),
-                        verticalAlignment = Alignment.CenterVertically
+        key(doubleTapSeekSide) {
+            AnimatedVisibility(
+                visible = doubleTapSeekSide != null,
+                enter = fadeIn(tween(140, easing = ExcavEaseOut)) + scaleIn(initialScale = 0.92f, animationSpec = tween(140, easing = ExcavEaseOut)),
+                exit = fadeOut(tween(140, easing = ExcavEaseOut)),
+                modifier = Modifier
+                    .align(if (doubleTapSeekSide == DoubleTapSide.LEFT) Alignment.CenterStart else Alignment.CenterEnd)
+                    .padding(horizontal = seekPaddingH)
+            ) {
+                doubleTapSeekSide?.let { side ->
+                    val isLeft = side == DoubleTapSide.LEFT
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
                     ) {
-                        val chevron = if (isLeft) Icons.AutoMirrored.Filled.ArrowBack else Icons.AutoMirrored.Filled.ArrowForward
-                        Icon(
-                            imageVector = chevron,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(seekChevronSize)
-                        )
-                        Icon(
-                            imageVector = chevron,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(seekChevronSize)
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy((-6).dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val chevron = if (isLeft) Icons.AutoMirrored.Filled.ArrowBack else Icons.AutoMirrored.Filled.ArrowForward
+                            Icon(
+                                imageVector = chevron,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(seekChevronSize)
+                            )
+                            Icon(
+                                imageVector = chevron,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(seekChevronSize)
+                            )
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "${if (isLeft) "-" else "+"}$doubleTapSeekAccumulatedSeconds sec",
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = seekFontSize
+                            )
                         )
                     }
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = "${if (isLeft) "-" else "+"}$doubleTapSeekAccumulatedSeconds sec",
-                        color = Color.White,
-                        style = MaterialTheme.typography.labelLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = seekFontSize
-                        )
-                    )
                 }
             }
         }
@@ -716,11 +729,7 @@ fun PlayerScreen(
             exit = scaleOut(targetScale = 0.92f, animationSpec = tween(160)) + fadeOut(tween(160)),
             modifier = Modifier.align(Alignment.Center)
         ) {
-            val animatedHudProgress by animateFloatAsState(
-                targetValue = gestureHudProgress,
-                animationSpec = spring(stiffness = Spring.StiffnessMedium),
-                label = "hudProgress"
-            )
+
             Box(
                 modifier = Modifier
                     .playerGlass(RoundedCornerShape(24.dp))
@@ -747,7 +756,7 @@ fun PlayerScreen(
                     if (gestureHudProgress > 0f) {
                         Spacer(Modifier.height(if (isVeryCompact) 6.dp else 10.dp))
                         LinearProgressIndicator(
-                            progress = { animatedHudProgress },
+                            progress = { gestureHudProgress },
                             modifier = Modifier
                                 .width(hudProgWidth)
                                 .height(4.dp)
@@ -886,8 +895,8 @@ fun PlayerScreen(
                     .align(Alignment.BottomStart)
                     .windowInsetsPadding(WindowInsets.safeDrawing)
                     .padding(horizontal = lockPadH, vertical = lockPadV),
-                enter = fadeIn(),
-                exit = fadeOut()
+                enter = fadeIn(tween(durationMillis = 90, easing = ExcavEaseOut)),
+                exit = fadeOut(tween(durationMillis = 160, easing = ExcavEaseOut))
             ) {
                 CompositionLocalProvider(
                     LocalRippleConfiguration provides null,
@@ -916,13 +925,12 @@ fun PlayerScreen(
             // Main Controls Overlay
             AnimatedVisibility(
                 visible = controlsVisible,
-                enter = fadeIn(),
-                exit = fadeOut()
+                enter = fadeIn(tween(durationMillis = 90, easing = ExcavEaseOut)),
+                exit = fadeOut(tween(durationMillis = 160, easing = ExcavEaseOut))
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .blur(sheetBlurRadius)
                 ) {
                     PlayerControlsOverlay(
                         state = state,
@@ -1460,11 +1468,11 @@ private fun PlayerControlsOverlay(
                             AnimatedContent(
                                 targetState = orientationIndex,
                                 transitionSpec = {
-                                    (fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing)) +
-                                     scaleIn(initialScale = 0.65f, animationSpec = tween(220, easing = FastOutSlowInEasing)))
+                                    (fadeIn(animationSpec = tween(160, easing = ExcavEaseOut)) +
+                                     scaleIn(initialScale = 0.92f, animationSpec = tween(160, easing = ExcavEaseOut)))
                                     .togetherWith(
-                                        fadeOut(animationSpec = tween(160, easing = FastOutSlowInEasing)) +
-                                        scaleOut(targetScale = 0.65f, animationSpec = tween(160, easing = FastOutSlowInEasing))
+                                        fadeOut(animationSpec = tween(140, easing = ExcavEaseOut)) +
+                                        scaleOut(targetScale = 0.96f, animationSpec = tween(140, easing = ExcavEaseOut))
                                     )
                                 },
                                 label = "OrientationIconAnimation"
@@ -1654,21 +1662,30 @@ private fun SheetContainer(
             .padding(containerPadding),
         contentAlignment = alignment
     ) {
+        val reducedMotion = rememberSystemReducedMotion()
         AnimatedVisibility(
             visible = isOpen,
-            enter = scaleIn(
-                initialScale = 0.35f,
-                transformOrigin = getSheetTransformOrigin(sheet),
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioLowBouncy,
-                    stiffness = Spring.StiffnessMediumLow
-                )
-            ) + fadeIn(animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing)),
-            exit = scaleOut(
-                targetScale = 0.35f,
-                transformOrigin = getSheetTransformOrigin(sheet),
-                animationSpec = tween(durationMillis = 140, easing = FastOutSlowInEasing)
-            ) + fadeOut(animationSpec = tween(durationMillis = 140, easing = FastOutSlowInEasing))
+            enter = if (reducedMotion) {
+                fadeIn(tween(durationMillis = 120))
+            } else {
+                scaleIn(
+                    initialScale = 0.92f,
+                    transformOrigin = getSheetTransformOrigin(sheet),
+                    animationSpec = spring(
+                        dampingRatio = 0.86f,
+                        stiffness = Spring.StiffnessMedium
+                    )
+                ) + fadeIn(animationSpec = tween(durationMillis = 140, easing = ExcavEaseOut))
+            },
+            exit = if (reducedMotion) {
+                fadeOut(tween(durationMillis = 100))
+            } else {
+                scaleOut(
+                    targetScale = 0.96f,
+                    transformOrigin = getSheetTransformOrigin(sheet),
+                    animationSpec = tween(durationMillis = 140, easing = ExcavEaseOut)
+                ) + fadeOut(animationSpec = tween(durationMillis = 120, easing = ExcavEaseOut))
+            }
         ) {
             Box(
                 modifier = Modifier
@@ -1851,100 +1868,7 @@ private fun ChaptersSheet(
 // -----------------------------------------------------------------------------------------
 private enum class SubtitleTab { TRACKS, ONLINE }
 
-@Composable
-private fun SubtitlesPillTabBar(
-    selectedTab: SubtitleTab,
-    onTabSelected: (SubtitleTab) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val tabs = remember { listOf(SubtitleTab.TRACKS to "Tracks", SubtitleTab.ONLINE to "Online Sub") }
-    val selectedIndex = if (selectedTab == SubtitleTab.TRACKS) 0 else 1
 
-    val targetOffsetFraction by animateFloatAsState(
-        targetValue = selectedIndex.toFloat(),
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioLowBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
-        label = "pillOffset"
-    )
-
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(Color.White.copy(alpha = 0.08f))
-            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
-            .padding(3.dp)
-    ) {
-        Layout(
-            content = {
-                // Animated Highlight Pill Background
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(17.dp))
-                        .background(
-                            Brush.horizontalGradient(
-                                listOf(ExcavPalette.Primary, ExcavPalette.Primary.copy(alpha = 0.85f))
-                            )
-                        )
-                )
-                // Tabs
-                tabs.forEach { (tab, label) ->
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(17.dp))
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ) { onTabSelected(tab) }
-                            .padding(horizontal = 12.dp, vertical = 5.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = label,
-                            color = if (selectedTab == tab) Color.White else ExcavPalette.TextMuted,
-                            style = MaterialTheme.typography.labelMedium.copy(
-                                fontWeight = if (selectedTab == tab) FontWeight.Bold else FontWeight.Medium,
-                                fontSize = 12.sp
-                            )
-                        )
-                    }
-                }
-            }
-        ) { measurables, constraints ->
-            val indicatorMeasurable = measurables[0]
-            val tabMeasurables = measurables.drop(1)
-
-            val tabPlaceables = tabMeasurables.map { it.measure(constraints) }
-            val totalWidth = tabPlaceables.sumOf { it.width }
-            val maxHeight = tabPlaceables.maxOfOrNull { it.height } ?: 0
-
-            val w0 = tabPlaceables.getOrNull(0)?.width ?: 0
-            val w1 = tabPlaceables.getOrNull(1)?.width ?: 0
-            val animatedWidth = (w0 + (w1 - w0) * targetOffsetFraction).toInt()
-
-            val indicatorPlaceable = indicatorMeasurable.measure(
-                constraints.copy(
-                    minWidth = animatedWidth,
-                    maxWidth = animatedWidth,
-                    minHeight = maxHeight,
-                    maxHeight = maxHeight
-                )
-            )
-
-            layout(totalWidth, maxHeight) {
-                val animatedX = (0f + w0.toFloat() * targetOffsetFraction).toInt()
-                indicatorPlaceable.placeRelative(animatedX, 0)
-
-                var currentLeft = 0
-                tabPlaceables.forEach { placeable ->
-                    placeable.placeRelative(currentLeft, 0)
-                    currentLeft += placeable.width
-                }
-            }
-        }
-    }
-}
 
 @Composable
 private fun SubtitleSheet(
@@ -1992,9 +1916,11 @@ private fun SubtitleSheet(
                     )
                 }
             }
-            SubtitlesPillTabBar(
-                selectedTab = selectedTab,
-                onTabSelected = { selectedTab = it }
+            SegmentedAnimatedPillBar(
+                options = listOf("Tracks", "Online Sub"),
+                selectedIndex = if (selectedTab == SubtitleTab.TRACKS) 0 else 1,
+                onSelectIndex = { selectedTab = if (it == 0) SubtitleTab.TRACKS else SubtitleTab.ONLINE },
+                compact = true
             )
         }
 
@@ -3255,112 +3181,7 @@ private fun MoreOptionItem(
 // -----------------------------------------------------------------------------------------
 private enum class EqualizerPreset { CUSTOM, BALANCED, BASS_BOOST }
 
-@Composable
-private fun EqualizerPillTabBar(
-    selectedPreset: EqualizerPreset,
-    onPresetSelected: (EqualizerPreset) -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true
-) {
-    val tabs = remember {
-        listOf(
-            EqualizerPreset.CUSTOM to "Custom",
-            EqualizerPreset.BALANCED to "Balanced",
-            EqualizerPreset.BASS_BOOST to "Bass Boost"
-        )
-    }
-    val selectedIndex = selectedPreset.ordinal
 
-    val targetOffsetFraction by animateFloatAsState(
-        targetValue = selectedIndex.toFloat(),
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioLowBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
-        label = "eqPillOffset"
-    )
-
-    Box(
-        modifier = modifier
-            .graphicsLayer { alpha = if (enabled) 1f else 0.45f }
-            .clip(RoundedCornerShape(20.dp))
-            .background(Color.White.copy(alpha = 0.08f))
-            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
-            .padding(3.dp)
-    ) {
-        Layout(
-            content = {
-                // Animated Highlight Pill Background
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(17.dp))
-                        .background(
-                            Brush.horizontalGradient(
-                                listOf(ExcavPalette.Primary, ExcavPalette.Primary.copy(alpha = 0.85f))
-                            )
-                        )
-                )
-                // Tabs
-                tabs.forEach { (preset, label) ->
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(17.dp))
-                            .clickable(
-                                enabled = enabled,
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ) { onPresetSelected(preset) }
-                            .padding(horizontal = 10.dp, vertical = 5.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = label,
-                            color = if (selectedPreset == preset) Color.White else ExcavPalette.TextMuted,
-                            style = MaterialTheme.typography.labelMedium.copy(
-                                fontWeight = if (selectedPreset == preset) FontWeight.Bold else FontWeight.Medium,
-                                fontSize = 11.5.sp
-                            )
-                        )
-                    }
-                }
-            }
-        ) { measurables, constraints ->
-            val indicatorMeasurable = measurables[0]
-            val tabMeasurables = measurables.drop(1)
-            val tabPlaceables = tabMeasurables.map { it.measure(constraints) }
-
-            val totalWidth = tabPlaceables.sumOf { it.width }
-            val maxHeight = tabPlaceables.maxOf { it.height }
-
-            val currentIndex = targetOffsetFraction.toInt().coerceIn(0, tabPlaceables.size - 1)
-            val nextIndex = (currentIndex + 1).coerceAtMost(tabPlaceables.size - 1)
-            val fraction = targetOffsetFraction - currentIndex
-
-            val currentWidth = tabPlaceables[currentIndex].width
-            val nextWidth = tabPlaceables[nextIndex].width
-            val indicatorWidth = (currentWidth + (nextWidth - currentWidth) * fraction).roundToInt()
-
-            var currentXOffset = 0
-            for (i in 0 until currentIndex) {
-                currentXOffset += tabPlaceables[i].width
-            }
-            val targetXOffset = currentXOffset + (tabPlaceables[currentIndex].width * fraction).roundToInt()
-
-            val indicatorPlaceable = indicatorMeasurable.measure(
-                androidx.compose.ui.unit.Constraints.fixed(indicatorWidth, maxHeight)
-            )
-
-            layout(totalWidth, maxHeight) {
-                indicatorPlaceable.placeRelative(targetXOffset, 0)
-                var x = 0
-                tabPlaceables.forEach {
-                    it.placeRelative(x, 0)
-                    x += it.width
-                }
-            }
-        }
-    }
-}
 
 @Composable
 private fun EqualizerSheet(
@@ -3438,19 +3259,21 @@ private fun EqualizerSheet(
                 .padding(bottom = 12.dp),
             contentAlignment = Alignment.Center
         ) {
-            EqualizerPillTabBar(
-                selectedPreset = selectedPreset,
-                onPresetSelected = { preset ->
+            SegmentedAnimatedPillBar(
+                options = listOf("Custom", "Balanced", "Bass Boost"),
+                selectedIndex = selectedPreset.ordinal,
+                onSelectIndex = { index ->
                     if (equalizerState.enabled) {
-                        val presetStr = when (preset) {
-                            EqualizerPreset.CUSTOM -> "Custom"
-                            EqualizerPreset.BALANCED -> "Balanced"
-                            EqualizerPreset.BASS_BOOST -> "Bass Boost"
+                        val presetStr = when (index) {
+                            0 -> "Custom"
+                            1 -> "Balanced"
+                            else -> "Bass Boost"
                         }
                         vm.setEqualizerPreset(presetStr)
                     }
                 },
-                enabled = equalizerState.enabled
+                modifier = Modifier.graphicsLayer { alpha = if (equalizerState.enabled) 1f else 0.45f },
+                compact = true
             )
         }
 
@@ -3998,22 +3821,31 @@ private fun SegmentedAnimatedPillBar(
     options: List<String>,
     selectedIndex: Int,
     onSelectIndex: (Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    compact: Boolean = false,
+    bouncy: Boolean = true
 ) {
     val targetOffsetFraction by animateFloatAsState(
         targetValue = selectedIndex.toFloat(),
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioLowBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
+        animationSpec = if (bouncy) {
+            spring(
+                dampingRatio = Spring.DampingRatioLowBouncy,
+                stiffness = Spring.StiffnessMedium
+            )
+        } else {
+            spring(
+                dampingRatio = 0.75f,
+                stiffness = Spring.StiffnessMedium
+            )
+        },
         label = "segmentedPillOffset"
     )
 
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(20.dp))
-            .background(Color.White.copy(alpha = 0.05f))
-            .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(20.dp))
+            .background(Color.White.copy(alpha = if (compact) 0.08f else 0.05f))
+            .border(1.dp, Color.White.copy(alpha = if (compact) 0.12f else 0.10f), RoundedCornerShape(20.dp))
             .padding(3.dp)
     ) {
         Layout(
@@ -4038,8 +3870,8 @@ private fun SegmentedAnimatedPillBar(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null
                             ) { onSelectIndex(index) }
-                            .defaultMinSize(minHeight = 36.dp)
-                            .padding(vertical = 8.dp),
+                            .defaultMinSize(minHeight = if (compact) 30.dp else 36.dp)
+                            .padding(horizontal = if (compact) 10.dp else 12.dp, vertical = if (compact) 5.dp else 8.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -4047,7 +3879,7 @@ private fun SegmentedAnimatedPillBar(
                             color = if (isSelected) Color.White else ExcavPalette.TextMuted,
                             style = MaterialTheme.typography.labelMedium.copy(
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                fontSize = 12.sp
+                                fontSize = if (compact) 11.5.sp else 12.sp
                             ),
                             textAlign = TextAlign.Center
                         )

@@ -22,11 +22,20 @@ import kotlin.math.cos
 import kotlin.math.pow
 import kotlin.math.sin
 
+import com.excavplayer.ui.theme.rememberSystemReducedMotion
+
 @Composable
 fun RoseThreeLoader(
     modifier: Modifier = Modifier,
     size: androidx.compose.ui.unit.Dp = 48.dp
 ) {
+    val reducedMotion = rememberSystemReducedMotion()
+
+    if (reducedMotion) {
+        StaticRose(modifier = modifier, size = size)
+        return
+    }
+
     val infiniteTransition = rememberInfiniteTransition(label = "loader")
 
     val progress by infiniteTransition.animateFloat(
@@ -80,5 +89,37 @@ fun RoseThreeLoader(
             val fade = (1f - tailOffset).pow(0.56f)
             drawCircle(Color.White.copy(alpha = 0.04f + fade * 0.96f), radius = (0.9f + fade * 2.7f).dp.toPx(), center = Offset(px, py))
         }
+    }
+}
+
+/**
+ * Reduced-motion fallback: single static rose frame (pulse mid-breath),
+ * full-size, no rotation, no trail particles.
+ */
+@Composable
+private fun StaticRose(modifier: Modifier = Modifier, size: androidx.compose.ui.unit.Dp) {
+    Canvas(modifier = modifier.size(size)) {
+        val roseA = 9.2f
+        val detailScale = 1.00f // fixed breath value (matches mid-pulse amplitude)
+        val breathBase = 0.72f
+        val breathBoost = 0.28f
+        val k = 3
+        val roseScale = 2.00f
+        val TWO_PI = 2f * Math.PI.toFloat()
+
+        val cs = this.size.width / 100f
+        val path = Path()
+        for (i in 0..480) {
+            val t = (i / 480f) * TWO_PI
+            val r = roseA * (breathBase + detailScale * breathBoost) * cos(k * t)
+            val x = (50f + cos(t) * r * roseScale) * cs
+            val y = (50f + sin(t) * r * roseScale) * cs
+            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        }
+        drawPath(
+            path,
+            Color.White.copy(alpha = 0.9f),
+            style = Stroke(3.9f.dp.toPx(), cap = StrokeCap.Round)
+        )
     }
 }

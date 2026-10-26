@@ -3,6 +3,7 @@ package com.excavplayer.ui.components
 import android.graphics.Bitmap
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -85,9 +86,13 @@ import com.excavplayer.ui.UserMessage
 import com.excavplayer.ui.theme.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.ui.draw.blur
 import dagger.hilt.android.EntryPointAccessors
 import dev.chrisbanes.haze.HazeState
+
+private val SelectionDimFade = tween<Float>(
+    durationMillis = 160,
+    easing = ExcavEaseOut
+)
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -486,10 +491,14 @@ fun BottomNav(
     GlassmorphicItem(
         modifier = modifier.height(64.dp),
         cornerRadius = 32,
-        blurRadius = 15,
         containerColor = Color(0x66141822)
     ) {
-        if (isCompact) {
+        Crossfade(
+            targetState = isCompact,
+            animationSpec = tween(durationMillis = 140, easing = ExcavEaseOut),
+            label = "bottomNavCompact"
+        ) { compact ->
+            if (compact) {
             // Compact circular state on left (when player pill is enlarged)
             Box(
                 modifier = Modifier
@@ -530,8 +539,8 @@ fun BottomNav(
                 val animatedPillCenter by animateDpAsState(
                     targetValue = selectedTabCenter,
                     animationSpec = tween(
-                        durationMillis = 240,
-                        easing = FastOutSlowInEasing
+                        durationMillis = 180,
+                        easing = ExcavEaseInOut
                     ),
                     label = "indicatorCenter"
                 )
@@ -577,8 +586,8 @@ fun BottomNav(
                         val animatedTabCenter by animateDpAsState(
                             targetValue = targetCenterDp,
                             animationSpec = tween(
-                                durationMillis = 240,
-                                easing = FastOutSlowInEasing
+                                durationMillis = 180,
+                                easing = ExcavEaseInOut
                             ),
                             label = "tabCenter_$index"
                         )
@@ -608,7 +617,7 @@ fun BottomNav(
                                 )
                                 AnimatedVisibility(
                                     visible = isSelected,
-                                    enter = fadeIn(tween(160, delayMillis = 60)),
+                                    enter = fadeIn(tween(120, easing = ExcavEaseOut)),
                                     exit = fadeOut(tween(90))
                                 ) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -647,6 +656,7 @@ fun BottomNav(
             }
         }
     }
+}
 }
 
 enum class MainTab(val label: String, val icon: ImageVector) {
@@ -722,14 +732,9 @@ fun VideoCard(
     dropdownMenu: (@Composable () -> Unit)? = null
 ) {
     val resLabel = formatResolution(video.width, video.height)
-    val animatedBlur by animateDpAsState(
-        targetValue = if (isSelectionMode && !isSelected) 2.dp else 0.dp,
-        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
-        label = "selectionBlur"
-    )
     val animatedAlpha by animateFloatAsState(
         targetValue = if (isSelectionMode && !isSelected) 0.65f else 1f,
-        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        animationSpec = SelectionDimFade,
         label = "selectionAlpha"
     )
 
@@ -739,7 +744,6 @@ fun VideoCard(
             .graphicsLayer {
                 alpha = animatedAlpha
             }
-            .blur(animatedBlur)
             .clip(ExcavShapes.Card)
             .border(
                 if (isSelected) 1.5.dp else 1.dp,
@@ -1038,14 +1042,9 @@ fun GroupCard(
     val totalCount = videos.size
     val cardShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 38.dp, bottomEnd = 38.dp)
     val thumbnailShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 14.dp, bottomEnd = 14.dp)
-    val animatedBlur by animateDpAsState(
-        targetValue = if (isSelectionMode && !isSelected) 2.dp else 0.dp,
-        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
-        label = "selectionBlur"
-    )
     val animatedAlpha by animateFloatAsState(
         targetValue = if (isSelectionMode && !isSelected) 0.65f else 1f,
-        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        animationSpec = SelectionDimFade,
         label = "selectionAlpha"
     )
 
@@ -1055,7 +1054,6 @@ fun GroupCard(
             .graphicsLayer {
                 alpha = animatedAlpha
             }
-            .blur(animatedBlur)
             .clip(cardShape)
             .border(
                 if (isSelected) 1.5.dp else 1.dp,
@@ -1177,14 +1175,9 @@ fun ContinueWatchingRowCard(
     val progress = ((video.resumePositionMs ?: 0L).toFloat() / video.durationMs.coerceAtLeast(1L)).coerceIn(0f, 1f)
     val watched = video.resumePositionMs ?: 0L
     val remaining = (video.durationMs - watched).coerceAtLeast(0L)
-    val animatedBlur by animateDpAsState(
-        targetValue = if (isSelectionMode && !isSelected) 2.dp else 0.dp,
-        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
-        label = "selectionBlur"
-    )
     val animatedAlpha by animateFloatAsState(
         targetValue = if (isSelectionMode && !isSelected) 0.65f else 1f,
-        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        animationSpec = SelectionDimFade,
         label = "selectionAlpha"
     )
 
@@ -1194,7 +1187,6 @@ fun ContinueWatchingRowCard(
             .graphicsLayer {
                 alpha = animatedAlpha
             }
-            .blur(animatedBlur)
             .clip(ExcavShapes.Card)
             .border(
                 if (isSelected) 1.5.dp else 1.dp,
@@ -1325,14 +1317,9 @@ fun FolderCard(
     val totalCount = if (folder.videoCount > 0) folder.videoCount else videos.size
     val cardShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 38.dp, bottomEnd = 38.dp)
     val thumbnailShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 14.dp, bottomEnd = 14.dp)
-    val animatedBlur by animateDpAsState(
-        targetValue = if (isSelectionMode && !isSelected) 2.dp else 0.dp,
-        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
-        label = "selectionBlur"
-    )
     val animatedAlpha by animateFloatAsState(
         targetValue = if (isSelectionMode && !isSelected) 0.65f else 1f,
-        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        animationSpec = SelectionDimFade,
         label = "selectionAlpha"
     )
 
@@ -1342,7 +1329,6 @@ fun FolderCard(
             .graphicsLayer {
                 alpha = animatedAlpha
             }
-            .blur(animatedBlur)
             .clip(cardShape)
             .border(
                 if (isSelected) 1.5.dp else 1.dp,
@@ -1570,14 +1556,9 @@ fun ListVideoRow(
     val sizeStr = formatFileSize(video.sizeBytes)
     val formatStr = video.fileFormat
     val resumePos = video.resumePositionMs ?: 0L
-    val animatedBlur by animateDpAsState(
-        targetValue = if (isSelectionMode && !isSelected) 2.dp else 0.dp,
-        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
-        label = "selectionBlur"
-    )
     val animatedAlpha by animateFloatAsState(
         targetValue = if (isSelectionMode && !isSelected) 0.65f else 1f,
-        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        animationSpec = SelectionDimFade,
         label = "selectionAlpha"
     )
 
@@ -1587,7 +1568,6 @@ fun ListVideoRow(
             .graphicsLayer {
                 alpha = animatedAlpha
             }
-            .blur(animatedBlur)
             .clip(ExcavShapes.Row)
             .border(
                 if (isSelected) 1.5.dp else 1.dp,
@@ -2671,9 +2651,14 @@ fun SleekRadioButton(
     modifier: Modifier = Modifier
 ) {
     val dotScale by animateFloatAsState(
-        targetValue = if (selected) 1f else 0f,
-        animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMedium),
+        targetValue = if (selected) 1f else 0.92f,
+        animationSpec = spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMedium),
         label = "radioDotScale"
+    )
+    val dotAlpha by animateFloatAsState(
+        targetValue = if (selected) 1f else 0f,
+        animationSpec = tween(durationMillis = 100, easing = ExcavEaseOut),
+        label = "radioDotAlpha"
     )
     val borderColor by animateColorAsState(
         targetValue = if (selected) ExcavPalette.CyanGlow else ExcavPalette.Line,
@@ -2693,14 +2678,14 @@ fun SleekRadioButton(
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         contentAlignment = Alignment.Center
     ) {
-        if (dotScale > 0.01f) {
+        if (dotAlpha > 0.01f) {
             Box(
                 modifier = Modifier
                     .size(10.dp)
                     .graphicsLayer {
                         scaleX = dotScale
                         scaleY = dotScale
-                        alpha = dotScale
+                        alpha = dotAlpha
                     }
                     .clip(CircleShape)
                     .background(
@@ -2743,10 +2728,11 @@ fun UserMessageHost(message: UserMessage?, onDismiss: () -> Unit) {
         }
     }
 
+    val reducedMotion = rememberSystemReducedMotion()
     AnimatedVisibility(
         visible = message != null,
-        enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
-        exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut()
+        enter = if (reducedMotion) fadeIn(tween(120)) else (slideInVertically(initialOffsetY = { -it }) + fadeIn()),
+        exit = if (reducedMotion) fadeOut(tween(120)) else (slideOutVertically(targetOffsetY = { -it }) + fadeOut())
     ) {
         if (message != null) {
             Surface(
@@ -2819,20 +2805,14 @@ fun ExcavSleekSlider(
     val thumbScale by animateFloatAsState(
         targetValue = if (isDragging) 1.30f else 1f,
         animationSpec = spring(
-            dampingRatio = 0.72f,
-            stiffness = Spring.StiffnessMediumLow
+            dampingRatio = 0.75f,
+            stiffness = if (isDragging) Spring.StiffnessMedium else Spring.StiffnessLow
         ),
         label = "scrubberThumbScale"
     )
 
-    val trackHeight by animateDpAsState(
-        targetValue = if (isDragging) 8.dp else 6.dp,
-        animationSpec = spring(
-            dampingRatio = 0.72f,
-            stiffness = Spring.StiffnessMediumLow
-        ),
-        label = "scrubberTrackHeight"
-    )
+    // Track thickness flips on drag start/end (single re-measure, no per-frame spring).
+    val trackHeight = if (isDragging) 8.dp else 6.dp
 
     Column(modifier = modifier.fillMaxWidth()) {
         Slider(
