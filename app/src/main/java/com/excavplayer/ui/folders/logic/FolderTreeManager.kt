@@ -86,7 +86,13 @@ object FolderTreeManager {
             )
         }
 
-        // Filter out any corrupted, system-private, or dummy external/SAF folders
+        // Filter out any corrupted, system-private, trash/recycle, or dummy external/SAF folders
+        val trashSegments = setOf(
+            ".trash", ".trashed", "trash", ".trashbin", "trashbin",
+            ".recycle", "recycle", ".recycler", "recycler",
+            ".securetrash", "recently_deleted", ".recently_deleted",
+            ".gallery_trash", "gallery_trash"
+        )
         val validVideos = videos.filter { v ->
             !v.id.startsWith("saf_") &&
             !v.id.startsWith("transient_") &&
@@ -105,7 +111,9 @@ object FolderTreeManager {
             !v.folderPath.startsWith("/storage/private") &&
             !v.uri.startsWith("/storage/private") &&
             !v.uri.startsWith("content://com.android.providers.media.documents/") &&
-            !v.uri.startsWith("content://com.android.externalstorage.documents/")
+            !v.uri.startsWith("content://com.android.externalstorage.documents/") &&
+            // Exclude videos in trash/recycle folders (Xiaomi, Samsung, Huawei, etc.)
+            !v.folderPath.lowercase().split('/').any { it in trashSegments }
         }
 
         // Group videos by their normalized immediate folder path

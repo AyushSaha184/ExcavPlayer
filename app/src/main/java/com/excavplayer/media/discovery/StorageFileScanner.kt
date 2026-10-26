@@ -31,7 +31,12 @@ class StorageFileScanner @Inject constructor(
         )
         private val EXCLUDED_DIR_NAMES = setOf(
             "data", "obb", ".thumbnails", ".trashed", ".trash", "cache",
-            "self", "knox", "enc_media", "lost.dir"
+            "self", "knox", "enc_media", "lost.dir",
+            // OEM-specific trash/recycle folders (Xiaomi, Samsung, Huawei, Oppo, Vivo, etc.)
+            ".trashbin", "trashbin", ".recycle", "recycle",
+            ".recycler", "recycler", ".securetrash",
+            "recently_deleted", ".recently_deleted",
+            "trash", ".gallery_trash", "gallery_trash"
         )
         private val SD_CARD_PATTERN = Regex("""^[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}$""")
     }

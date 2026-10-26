@@ -61,17 +61,8 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:mimeType="video/x-matroska" />
             </intent-filter>
-            <!-- Fallback: file managers that send octet-stream for unrecognised types -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="content" />
-                <data android:scheme="file" />
-                <data android:mimeType="application/octet-stream" />
-                <data android:pathPattern=".*\\.mp4" />
-                <data android:pathPattern=".*\\.mkv" />
-            </intent-filter>
+            <!-- Note: application/octet-stream intent filter removed to prevent matching
+                 non-video files (.bin etc). Video files with correct MIME types are handled above. -->
             <!-- Share mp4/mkv to this app -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />

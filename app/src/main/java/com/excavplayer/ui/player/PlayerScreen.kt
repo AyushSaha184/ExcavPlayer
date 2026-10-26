@@ -1219,7 +1219,7 @@ private fun PlayerControlsOverlay(
                     Icon(
                         imageVector = if (state.isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
                         contentDescription = if (state.isMuted) stringResource(R.string.cd_unmute) else stringResource(R.string.cd_mute),
-                        tint = if (state.isMuted) Color(0xFFFF5252) else Color.White,
+                        tint = if (state.isMuted) Color.White.copy(alpha = 0.7f) else Color.White,
                         modifier = Modifier.size(topIconSize)
                     )
                 }

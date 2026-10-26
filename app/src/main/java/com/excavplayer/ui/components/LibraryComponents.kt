@@ -775,17 +775,40 @@ fun VideoCard(
                 }
 
                 if (video.durationMs > 0) {
-                    Text(
-                        text = video.formattedDuration,
-                        color = ExcavPalette.Text,
-                        style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
+                    val isFinished = (video.resumePositionMs ?: 0L).toFloat() / video.durationMs >= 0.95f
+                    Row(
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
-                            .padding(6.dp)
-                            .background(ExcavPalette.Ink.copy(alpha = 0.88f), RoundedCornerShape(6.dp))
-                            .border(0.5.dp, ExcavPalette.Line, RoundedCornerShape(6.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
+                            .padding(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (isFinished) {
+                            Box(
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .background(ExcavPalette.Ink.copy(alpha = 0.88f), CircleShape)
+                                    .border(0.5.dp, ExcavPalette.Line, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "Watched",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
+                        }
+                        Text(
+                            text = video.formattedDuration,
+                            color = ExcavPalette.Text,
+                            style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
+                            modifier = Modifier
+                                .background(ExcavPalette.Ink.copy(alpha = 0.88f), RoundedCornerShape(6.dp))
+                                .border(0.5.dp, ExcavPalette.Line, RoundedCornerShape(6.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
                 }
                 val progress = ((video.resumePositionMs ?: 0L).toFloat() / video.durationMs.coerceAtLeast(1L)).coerceIn(0f, 1f)
                 if (progress > 0f) {

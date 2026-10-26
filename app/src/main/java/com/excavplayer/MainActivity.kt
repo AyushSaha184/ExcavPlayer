@@ -253,6 +253,18 @@ class MainActivity : ComponentActivity() {
                 })
                 ?: return
 
+            // Reject non-video file extensions (e.g. .bin) that arrive via octet-stream MIME
+            val fileName = dataUri.lastPathSegment?.substringAfterLast('/') ?: ""
+            val ext = fileName.substringAfterLast('.', "").lowercase()
+            val mimeType = intent.type ?: ""
+            val isVideoMime = mimeType.startsWith("video/")
+            if (!isVideoMime && ext.isNotEmpty() &&
+                ext !in com.excavplayer.media.discovery.StorageFileScanner.VIDEO_EXTENSIONS
+            ) {
+                logger.d("MainActivity", "Ignoring non-video file intent: ext=$ext mime=$mimeType")
+                return
+            }
+
             logger.i("MainActivity", "Handling external VIEW/SEND intent for: $dataUri")
 
             // Grant temporary read URI permission across the application components

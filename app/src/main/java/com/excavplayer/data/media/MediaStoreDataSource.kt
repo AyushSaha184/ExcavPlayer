@@ -70,7 +70,13 @@ class MediaStoreDataSource @Inject constructor(
         var hasMore = true
 
         val projection = getProjection()
-        val selection = "${MediaStore.Video.Media.SIZE} > 0"
+        val selection = buildString {
+            append("${MediaStore.Video.Media.SIZE} > 0")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                append(" AND ${MediaStore.Video.Media.IS_TRASHED} = 0")
+                append(" AND ${MediaStore.Video.Media.IS_PENDING} = 0")
+            }
+        }
         val sortOrder = "${MediaStore.Video.Media.DATE_MODIFIED} DESC"
 
         while (hasMore) {
