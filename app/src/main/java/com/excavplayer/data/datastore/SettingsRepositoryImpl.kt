@@ -62,10 +62,6 @@ class SettingsRepositoryImpl @Inject constructor(
         val KEY_HARDWARE_ACCELERATION_MODE = stringPreferencesKey("hardware_acceleration_mode")
         val KEY_DIALOGUE_BOOST = booleanPreferencesKey("dialogue_boost")
         val KEY_MATCH_DISPLAY_REFRESH_RATE = booleanPreferencesKey("match_display_refresh_rate")
-        val KEY_EQUALIZER_ENABLED = booleanPreferencesKey("equalizer_enabled")
-        val KEY_EQUALIZER_PRESET = stringPreferencesKey("equalizer_preset")
-        val KEY_EQUALIZER_BAND_LEVELS = stringPreferencesKey("equalizer_band_levels")
-        val KEY_BASS_BOOST_STRENGTH = intPreferencesKey("bass_boost_strength")
     }
 
     override val userSettings: Flow<UserSettings> = context.dataStore.data
@@ -110,129 +106,125 @@ class SettingsRepositoryImpl @Inject constructor(
                 hardwareAccelerationMode = hwMode,
                 hardwareAccelerationEnabled = hwMode != "Disabled",
                 dialogueBoostEnabled = preferences[KEY_DIALOGUE_BOOST] ?: false,
-                matchDisplayRefreshRate = preferences[KEY_MATCH_DISPLAY_REFRESH_RATE] ?: false,
-                equalizerEnabled = preferences[KEY_EQUALIZER_ENABLED] ?: false,
-                equalizerPreset = preferences[KEY_EQUALIZER_PRESET] ?: "Custom",
-                equalizerBandLevels = preferences[KEY_EQUALIZER_BAND_LEVELS] ?: "0,0,0,0,0",
-                bassBoostStrength = preferences[KEY_BASS_BOOST_STRENGTH] ?: 0
+                matchDisplayRefreshRate = preferences[KEY_MATCH_DISPLAY_REFRESH_RATE] ?: false
             )
         }
         .flowOn(dispatchers.io)
 
     override suspend fun updatePlaybackSpeed(speed: Float) {
         logger.i(TAG, "updatePlaybackSpeed: $speed")
-        edit { it[KEY_DEFAULT_PLAYBACK_SPEED] = speed }
+        edit(KEY_DEFAULT_PLAYBACK_SPEED) { it[KEY_DEFAULT_PLAYBACK_SPEED] = speed }
     }
 
     override suspend fun updateAutoResume(enabled: Boolean) {
         logger.i(TAG, "updateAutoResume: $enabled")
-        edit { it[KEY_AUTO_RESUME] = enabled }
+        edit(KEY_AUTO_RESUME) { it[KEY_AUTO_RESUME] = enabled }
     }
 
     override suspend fun updateResumeThreshold(threshold: Float) {
         logger.i(TAG, "updateResumeThreshold: $threshold")
-        edit { it[KEY_RESUME_THRESHOLD] = threshold }
+        edit(KEY_RESUME_THRESHOLD) { it[KEY_RESUME_THRESHOLD] = threshold }
     }
 
     override suspend fun updateDefaultRepeatMode(mode: RepeatMode) {
         logger.i(TAG, "updateDefaultRepeatMode: $mode")
-        edit { it[KEY_DEFAULT_REPEAT_MODE] = mode.name }
+        edit(KEY_DEFAULT_REPEAT_MODE) { it[KEY_DEFAULT_REPEAT_MODE] = mode.name }
     }
 
     override suspend fun updateAutoplayNext(enabled: Boolean) {
         logger.i(TAG, "updateAutoplayNext: $enabled")
-        edit { it[KEY_AUTOPLAY_NEXT] = enabled }
+        edit(KEY_AUTOPLAY_NEXT) { it[KEY_AUTOPLAY_NEXT] = enabled }
     }
 
     override suspend fun updateSubtitlesEnabled(enabled: Boolean) {
         logger.i(TAG, "updateSubtitlesEnabled: $enabled")
-        edit { it[KEY_SUBTITLES_ENABLED] = enabled }
+        edit(KEY_SUBTITLES_ENABLED) { it[KEY_SUBTITLES_ENABLED] = enabled }
     }
 
     override suspend fun updatePreferredSubtitleLanguage(lang: String?) {
         logger.i(TAG, "updatePreferredSubtitleLanguage: $lang")
-        edit {
+        edit(KEY_PREFERRED_SUBTITLE_LANG) {
             if (lang != null) it[KEY_PREFERRED_SUBTITLE_LANG] = lang else it.remove(KEY_PREFERRED_SUBTITLE_LANG)
         }
     }
 
     override suspend fun updatePreferredAudioLanguage(lang: String?) {
         logger.i(TAG, "updatePreferredAudioLanguage: $lang")
-        edit {
+        edit(KEY_PREFERRED_AUDIO_LANG) {
             if (lang != null) it[KEY_PREFERRED_AUDIO_LANG] = lang else it.remove(KEY_PREFERRED_AUDIO_LANG)
         }
     }
 
     override suspend fun updateGestureControls(enabled: Boolean) {
         logger.i(TAG, "updateGestureControls: $enabled")
-        edit { it[KEY_GESTURE_CONTROLS] = enabled }
+        edit(KEY_GESTURE_CONTROLS) { it[KEY_GESTURE_CONTROLS] = enabled }
     }
 
     override suspend fun updateBrightnessGesture(enabled: Boolean) {
         logger.i(TAG, "updateBrightnessGesture: $enabled")
-        edit { it[KEY_BRIGHTNESS_GESTURE] = enabled }
+        edit(KEY_BRIGHTNESS_GESTURE) { it[KEY_BRIGHTNESS_GESTURE] = enabled }
     }
 
     override suspend fun updateVolumeGesture(enabled: Boolean) {
         logger.i(TAG, "updateVolumeGesture: $enabled")
-        edit { it[KEY_VOLUME_GESTURE] = enabled }
+        edit(KEY_VOLUME_GESTURE) { it[KEY_VOLUME_GESTURE] = enabled }
     }
 
     override suspend fun updateSubtitleTextSize(size: String) {
         logger.i(TAG, "updateSubtitleTextSize: $size")
-        edit { it[KEY_SUBTITLE_TEXT_SIZE] = size }
+        edit(KEY_SUBTITLE_TEXT_SIZE) { it[KEY_SUBTITLE_TEXT_SIZE] = size }
     }
 
     override suspend fun updateSubtitleTextColor(color: String) {
         logger.i(TAG, "updateSubtitleTextColor: $color")
-        edit { it[KEY_SUBTITLE_TEXT_COLOR] = color }
+        edit(KEY_SUBTITLE_TEXT_COLOR) { it[KEY_SUBTITLE_TEXT_COLOR] = color }
     }
 
     override suspend fun updateSubtitleBackgroundStyle(style: String) {
         logger.i(TAG, "updateSubtitleBackgroundStyle: $style")
-        edit { it[KEY_SUBTITLE_BACKGROUND_STYLE] = style }
+        edit(KEY_SUBTITLE_BACKGROUND_STYLE) { it[KEY_SUBTITLE_BACKGROUND_STYLE] = style }
     }
 
     override suspend fun updateContinueWatching(enabled: Boolean) {
         logger.i(TAG, "updateContinueWatching: $enabled")
-        edit { it[KEY_CONTINUE_WATCHING] = enabled }
+        edit(KEY_CONTINUE_WATCHING) { it[KEY_CONTINUE_WATCHING] = enabled }
     }
 
     override suspend fun updateDefaultScreenOrientation(orientation: String) {
         logger.i(TAG, "updateDefaultScreenOrientation: $orientation")
-        edit { it[KEY_DEFAULT_SCREEN_ORIENTATION] = orientation }
+        edit(KEY_DEFAULT_SCREEN_ORIENTATION) { it[KEY_DEFAULT_SCREEN_ORIENTATION] = orientation }
     }
 
     override suspend fun updateDefaultMediaFit(fit: String) {
         logger.i(TAG, "updateDefaultMediaFit: $fit")
-        edit { it[KEY_DEFAULT_MEDIA_FIT] = fit }
+        edit(KEY_DEFAULT_MEDIA_FIT) { it[KEY_DEFAULT_MEDIA_FIT] = fit }
     }
 
     override suspend fun updateLastOpenedFolder(folderPath: String?) {
         logger.i(TAG, "updateLastOpenedFolder: $folderPath")
-        edit {
+        edit(KEY_LAST_OPENED_FOLDER) {
             if (folderPath != null) it[KEY_LAST_OPENED_FOLDER] = folderPath else it.remove(KEY_LAST_OPENED_FOLDER)
         }
     }
 
     override suspend fun updateSubtitlePosition(percentY: Float) {
         logger.i(TAG, "updateSubtitlePosition: $percentY")
-        edit { it[KEY_SUBTITLE_VERTICAL_POS] = percentY }
+        edit(KEY_SUBTITLE_VERTICAL_POS) { it[KEY_SUBTITLE_VERTICAL_POS] = percentY }
     }
 
     override suspend fun updateAutoRescanOnLaunch(enabled: Boolean) {
         logger.i(TAG, "updateAutoRescanOnLaunch: $enabled")
-        edit { it[KEY_AUTO_RESCAN] = enabled }
+        edit(KEY_AUTO_RESCAN) { it[KEY_AUTO_RESCAN] = enabled }
     }
 
     override suspend fun updateHeadsetDetection(enabled: Boolean) {
         logger.i(TAG, "updateHeadsetDetection: $enabled")
-        edit { it[KEY_HEADSET_DETECTION] = enabled }
+        edit(KEY_HEADSET_DETECTION) { it[KEY_HEADSET_DETECTION] = enabled }
     }
 
     override suspend fun updateStopOnScreenOff(enabled: Boolean) {
         logger.i(TAG, "updateStopOnScreenOff: $enabled")
-        edit { it[KEY_STOP_ON_SCREEN_OFF] = enabled }
+        edit(KEY_STOP_ON_SCREEN_OFF) { it[KEY_STOP_ON_SCREEN_OFF] = enabled }
     }
 
     override suspend fun updateHardwareAcceleration(enabled: Boolean) {
@@ -242,7 +234,7 @@ class SettingsRepositoryImpl @Inject constructor(
 
     override suspend fun updateHardwareAccelerationMode(mode: String) {
         logger.i(TAG, "updateHardwareAccelerationMode: $mode")
-        edit {
+        edit(KEY_HARDWARE_ACCELERATION_MODE) {
             it[KEY_HARDWARE_ACCELERATION_MODE] = mode
             it[KEY_HARDWARE_ACCELERATION] = (mode != "Disabled")
         }
@@ -250,40 +242,24 @@ class SettingsRepositoryImpl @Inject constructor(
 
     override suspend fun updateDialogueBoost(enabled: Boolean) {
         logger.i(TAG, "updateDialogueBoost: $enabled")
-        edit { it[KEY_DIALOGUE_BOOST] = enabled }
+        edit(KEY_DIALOGUE_BOOST) { it[KEY_DIALOGUE_BOOST] = enabled }
     }
 
     override suspend fun updateMatchDisplayRefreshRate(enabled: Boolean) {
         logger.i(TAG, "updateMatchDisplayRefreshRate: $enabled")
-        edit { it[KEY_MATCH_DISPLAY_REFRESH_RATE] = enabled }
+        edit(KEY_MATCH_DISPLAY_REFRESH_RATE) { it[KEY_MATCH_DISPLAY_REFRESH_RATE] = enabled }
     }
 
-    override suspend fun updateEqualizerEnabled(enabled: Boolean) {
-        logger.i(TAG, "updateEqualizerEnabled: $enabled")
-        edit { it[KEY_EQUALIZER_ENABLED] = enabled }
-    }
-
-    override suspend fun updateEqualizerPreset(preset: String) {
-        logger.i(TAG, "updateEqualizerPreset: $preset")
-        edit { it[KEY_EQUALIZER_PRESET] = preset }
-    }
-
-    override suspend fun updateEqualizerBandLevels(levels: String) {
-        logger.i(TAG, "updateEqualizerBandLevels: $levels")
-        edit { it[KEY_EQUALIZER_BAND_LEVELS] = levels }
-    }
-
-    override suspend fun updateBassBoostStrength(strength: Int) {
-        logger.i(TAG, "updateBassBoostStrength: $strength")
-        edit { it[KEY_BASS_BOOST_STRENGTH] = strength }
-    }
-
-    private suspend fun edit(transform: suspend (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
+    /**
+     * Single DataStore write path. [key] names the primary key being written so
+     * that a failed write can be attributed in the log.
+     */
+    private suspend fun edit(key: Preferences.Key<*>, transform: suspend (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
         withContext(dispatchers.io) {
             runCatching {
                 context.dataStore.edit(transform)
             }.onFailure { e ->
-                logger.e(TAG, "Failed to update user settings in DataStore", e)
+                logger.e(TAG, "Failed to write setting '${key.name}' to DataStore", e)
             }
         }
     }

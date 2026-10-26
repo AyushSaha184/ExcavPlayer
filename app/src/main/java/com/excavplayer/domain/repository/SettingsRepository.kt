@@ -32,8 +32,4 @@ interface SettingsRepository {
     suspend fun updateHardwareAccelerationMode(mode: String)
     suspend fun updateDialogueBoost(enabled: Boolean)
     suspend fun updateMatchDisplayRefreshRate(enabled: Boolean)
-    suspend fun updateEqualizerEnabled(enabled: Boolean)
-    suspend fun updateEqualizerPreset(preset: String)
-    suspend fun updateEqualizerBandLevels(levels: String)
-    suspend fun updateBassBoostStrength(strength: Int)
 }

@@ -14,7 +14,7 @@ import com.excavplayer.domain.model.NaturalVideoComparator
 import com.excavplayer.library.VideoLibrary
 import com.excavplayer.player.core.PlayerController
 import com.excavplayer.player.queue.PlaybackQueue
-import com.excavplayer.settings.SettingsManager
+import com.excavplayer.domain.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -92,7 +92,7 @@ data class OnlineSubtitleUiState(
 class ExcavViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val library: VideoLibrary,
-    private val settingsManager: SettingsManager,
+    private val settings: SettingsRepository,
     val player: PlayerController,
     val queue: PlaybackQueue,
     val updateManager: AppUpdateManager,
@@ -123,7 +123,7 @@ class ExcavViewModel @Inject constructor(
     private val _userMessage = MutableStateFlow<UserMessage?>(null)
     val userMessage: StateFlow<UserMessage?> = _userMessage.asStateFlow()
 
-    val userSettings: StateFlow<UserSettings> = settingsManager.settings
+    val userSettings: StateFlow<UserSettings> = settings.userSettings
         .stateIn(viewModelScope, SharingStarted.Eagerly, UserSettings())
 
     val updateState: StateFlow<UpdateState> = updateManager.updateState
@@ -151,7 +151,7 @@ class ExcavViewModel @Inject constructor(
         searchResults,
         selectedFolder,
         folderVideos,
-        settingsManager.settings
+        settings.userSettings
     ) { values ->
         val videos = values[0] as List<Video>
         val continueWatching = values[1] as List<Video>
@@ -211,7 +211,7 @@ class ExcavViewModel @Inject constructor(
 
     fun setLastOpenedFolder(path: String?) {
         viewModelScope.launch {
-            settingsManager.setLastOpenedFolder(path)
+            settings.updateLastOpenedFolder(path)
         }
     }
 
@@ -439,85 +439,73 @@ class ExcavViewModel @Inject constructor(
     // Settings actions
     fun setAutoResume(enabled: Boolean) {
         viewModelScope.launch {
-            logger.i(TAG, "setAutoResume: $enabled")
-            settingsManager.setAutoResume(enabled)
+            settings.updateAutoResume(enabled)
         }
     }
 
     fun setDefaultPlaybackSpeed(speed: Float) {
         viewModelScope.launch {
-            logger.i(TAG, "setDefaultPlaybackSpeed: $speed")
-            settingsManager.setPlaybackSpeed(speed)
+            settings.updatePlaybackSpeed(speed)
         }
     }
 
     fun setDefaultRepeatMode(mode: RepeatMode) {
         viewModelScope.launch {
-            logger.i(TAG, "setDefaultRepeatMode: $mode")
-            settingsManager.setDefaultRepeatMode(mode)
+            settings.updateDefaultRepeatMode(mode)
         }
     }
 
     fun setResumeThreshold(threshold: Float) {
         viewModelScope.launch {
-            logger.i(TAG, "setResumeThreshold: $threshold")
-            settingsManager.setResumeThreshold(threshold)
+            settings.updateResumeThreshold(threshold)
         }
     }
 
     fun setPreferredSubtitleLanguage(lang: String?) {
         viewModelScope.launch {
-            logger.i(TAG, "setPreferredSubtitleLanguage: $lang")
-            settingsManager.setPreferredSubtitleLanguage(lang)
+            settings.updatePreferredSubtitleLanguage(lang)
         }
     }
 
     fun setSubtitlesEnabled(enabled: Boolean) {
         viewModelScope.launch {
-            logger.i(TAG, "setSubtitlesEnabled: $enabled")
-            settingsManager.setSubtitlesEnabled(enabled)
+            settings.updateSubtitlesEnabled(enabled)
         }
     }
 
     fun setPreferredAudioLanguage(lang: String?) {
         viewModelScope.launch {
-            logger.i(TAG, "setPreferredAudioLanguage: $lang")
-            settingsManager.setPreferredAudioLanguage(lang)
+            settings.updatePreferredAudioLanguage(lang)
         }
     }
 
     fun setSubtitleTextSize(size: String) {
         viewModelScope.launch {
-            logger.i(TAG, "setSubtitleTextSize: $size")
-            settingsManager.setSubtitleTextSize(size)
+            settings.updateSubtitleTextSize(size)
         }
     }
 
     fun setSubtitleTextColor(color: String) {
         viewModelScope.launch {
-            logger.i(TAG, "setSubtitleTextColor: $color")
-            settingsManager.setSubtitleTextColor(color)
+            settings.updateSubtitleTextColor(color)
         }
     }
 
     fun setSubtitleBackgroundStyle(style: String) {
         viewModelScope.launch {
-            logger.i(TAG, "setSubtitleBackgroundStyle: $style")
-            settingsManager.setSubtitleBackgroundStyle(style)
+            settings.updateSubtitleBackgroundStyle(style)
         }
     }
 
     fun setAutoplayNext(enabled: Boolean) {
         viewModelScope.launch {
-            logger.i(TAG, "setAutoplayNext: $enabled")
-            settingsManager.setAutoplayNext(enabled)
+            settings.updateAutoplayNext(enabled)
         }
     }
 
     fun setContinueWatching(enabled: Boolean) {
         viewModelScope.launch {
-            logger.i(TAG, "setContinueWatching: $enabled")
-            settingsManager.setContinueWatching(enabled)
+            settings.updateContinueWatching(enabled)
         }
     }
 
@@ -531,85 +519,73 @@ class ExcavViewModel @Inject constructor(
 
     fun setDefaultScreenOrientation(orientation: String) {
         viewModelScope.launch {
-            logger.i(TAG, "setDefaultScreenOrientation: $orientation")
-            settingsManager.setDefaultScreenOrientation(orientation)
+            settings.updateDefaultScreenOrientation(orientation)
         }
     }
 
     fun setDefaultMediaFit(fit: String) {
         viewModelScope.launch {
-            logger.i(TAG, "setDefaultMediaFit: $fit")
-            settingsManager.setDefaultMediaFit(fit)
+            settings.updateDefaultMediaFit(fit)
         }
     }
 
     fun setBrightnessGesture(enabled: Boolean) {
         viewModelScope.launch {
-            logger.i(TAG, "setBrightnessGesture: $enabled")
-            settingsManager.setBrightnessGesture(enabled)
+            settings.updateBrightnessGesture(enabled)
         }
     }
 
     fun setVolumeGesture(enabled: Boolean) {
         viewModelScope.launch {
-            logger.i(TAG, "setVolumeGesture: $enabled")
-            settingsManager.setVolumeGesture(enabled)
+            settings.updateVolumeGesture(enabled)
         }
     }
 
     fun setSubtitlePosition(percentY: Float) {
         viewModelScope.launch {
-            logger.i(TAG, "setSubtitlePosition: $percentY")
-            settingsManager.setSubtitlePosition(percentY)
+            settings.updateSubtitlePosition(percentY)
         }
     }
 
     fun setAutoRescanOnLaunch(enabled: Boolean) {
         viewModelScope.launch {
-            logger.i(TAG, "setAutoRescanOnLaunch: $enabled")
-            settingsManager.setAutoRescanOnLaunch(enabled)
+            settings.updateAutoRescanOnLaunch(enabled)
         }
     }
 
     fun setHeadsetDetection(enabled: Boolean) {
         viewModelScope.launch {
-            logger.i(TAG, "setHeadsetDetection: $enabled")
-            settingsManager.setHeadsetDetection(enabled)
+            settings.updateHeadsetDetection(enabled)
         }
     }
 
     fun setStopOnScreenOff(enabled: Boolean) {
         viewModelScope.launch {
-            logger.i(TAG, "setStopOnScreenOff: $enabled")
-            settingsManager.setStopOnScreenOff(enabled)
+            settings.updateStopOnScreenOff(enabled)
         }
     }
 
     fun setHardwareAcceleration(enabled: Boolean) {
         viewModelScope.launch {
-            logger.i(TAG, "setHardwareAcceleration: $enabled")
-            settingsManager.setHardwareAcceleration(enabled)
+            settings.updateHardwareAcceleration(enabled)
         }
     }
 
     fun setHardwareAccelerationMode(mode: String) {
         viewModelScope.launch {
-            logger.i(TAG, "setHardwareAccelerationMode: $mode")
-            settingsManager.setHardwareAccelerationMode(mode)
+            settings.updateHardwareAccelerationMode(mode)
         }
     }
 
     fun setDialogueBoost(enabled: Boolean) {
         viewModelScope.launch {
-            logger.i(TAG, "setDialogueBoost: $enabled")
-            settingsManager.setDialogueBoost(enabled)
+            settings.updateDialogueBoost(enabled)
         }
     }
 
     fun setMatchDisplayRefreshRate(enabled: Boolean) {
         viewModelScope.launch {
-            logger.i(TAG, "setMatchDisplayRefreshRate: $enabled")
-            settingsManager.setMatchDisplayRefreshRate(enabled)
+            settings.updateMatchDisplayRefreshRate(enabled)
         }
     }
 
