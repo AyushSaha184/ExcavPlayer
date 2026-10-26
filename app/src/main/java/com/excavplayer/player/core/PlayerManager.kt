@@ -26,7 +26,6 @@ import com.excavplayer.domain.model.PlaybackError
 import com.excavplayer.domain.model.PlaybackPosition
 import com.excavplayer.domain.model.PlaybackState
 import com.excavplayer.domain.model.PlaybackStatus
-import com.excavplayer.domain.model.PlayerCommand
 import com.excavplayer.domain.model.PlayerState
 import com.excavplayer.domain.model.RepeatMode
 import com.excavplayer.domain.model.Video
@@ -37,6 +36,8 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import com.excavplayer.player.chapters.ChapterExtractor
 import com.excavplayer.player.chapters.RawChapter
 import com.excavplayer.player.playback.PlaybackPersistenceManager
+import com.excavplayer.player.policy.AutoAdvancePolicy
+import com.excavplayer.player.policy.TrackSelectionPolicy
 import com.excavplayer.player.queue.PlaybackQueue
 import com.excavplayer.player.tracks.TrackManager
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -80,86 +81,6 @@ class PlayerManager @Inject constructor(
 
     companion object {
         private const val TAG = "PlayerManager"
-
-        private val LANGUAGE_MAP = mapOf(
-            "english" to listOf("en", "eng", "english"),
-            "hindi" to listOf("hi", "hin", "hindi"),
-            "japanese" to listOf("ja", "jpn", "japanese"),
-            "spanish" to listOf("es", "spa", "spanish", "espanol", "español"),
-            "french" to listOf("fr", "fra", "fre", "french", "francais", "français"),
-            "german" to listOf("de", "deu", "ger", "german", "deutsch"),
-            "chinese" to listOf("zh", "zho", "chi", "chinese", "mandarin", "cantonese"),
-            "korean" to listOf("ko", "kor", "korean"),
-            "russian" to listOf("ru", "rus", "russian"),
-            "portuguese" to listOf("pt", "por", "portuguese"),
-            "italian" to listOf("it", "ita", "italian"),
-            "telugu" to listOf("te", "tel", "telugu"),
-            "tamil" to listOf("ta", "tam", "tamil"),
-            "kannada" to listOf("kn", "kan", "kannada"),
-            "malayalam" to listOf("ml", "mal", "malayalam"),
-            "bengali" to listOf("bn", "ben", "bengali"),
-            "marathi" to listOf("mr", "mar", "marathi"),
-            "gujarati" to listOf("gu", "guj", "gujarati"),
-            "punjabi" to listOf("pa", "pan", "punjabi"),
-            "arabic" to listOf("ar", "ara", "arabic"),
-            "turkish" to listOf("tr", "tur", "turkish"),
-            "vietnamese" to listOf("vi", "vie", "vietnamese"),
-            "thai" to listOf("th", "tha", "thai"),
-            "indonesian" to listOf("id", "ind", "indonesian")
-        )
-
-        fun getLanguageCodes(preferred: String?): List<String> {
-            if (preferred.isNullOrBlank() || preferred.equals("auto", ignoreCase = true) || preferred.equals("none", ignoreCase = true) || preferred.equals("auto (default)", ignoreCase = true)) {
-                return emptyList()
-            }
-            val key = preferred.trim().lowercase()
-            return LANGUAGE_MAP[key] ?: listOf(key)
-        }
-
-        fun matchesLanguage(language: String?, label: String?, preferred: String): Boolean {
-            if (preferred.isBlank() || preferred.equals("none", ignoreCase = true) || preferred.equals("auto", ignoreCase = true) || preferred.equals("auto (default)", ignoreCase = true)) {
-                return false
-            }
-            val pref = preferred.trim().lowercase()
-            val synonyms = getLanguageCodes(pref)
-            if (synonyms.isEmpty()) return false
-
-            val lang = language?.trim()?.lowercase()?.takeIf { it.isNotBlank() && it != "und" }
-            val lab = label?.trim()?.lowercase()?.takeIf { it.isNotBlank() }
-
-            // 1. Direct language code / tag match
-            if (lang != null) {
-                if (synonyms.any { s -> lang == s || lang.startsWith("$s-") || lang.startsWith("${s}_") }) {
-                    return true
-                }
-                // If the track explicitly defines another recognized language family, prevent accidental fallback
-                val belongsToOther = LANGUAGE_MAP.entries.any { (otherKey, otherSyns) ->
-                    otherKey != pref && otherSyns.any { s -> lang == s || lang.startsWith("$s-") || lang.startsWith("${s}_") }
-                }
-                if (belongsToOther) {
-                    return false
-                }
-            }
-
-            // 2. Tokenized whole-word match on label (prevents false positives like "clean" matching "en" or "stereo" matching "es")
-            if (lab != null) {
-                val words = lab.split(Regex("[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ]+")).filter { it.isNotBlank() }
-                if (words.any { word -> synonyms.any { s -> word.equals(s, ignoreCase = true) } }) {
-                    return true
-                }
-            }
-
-            return false
-        }
-
-        fun parseSavedAudioTrack(savedPref: String?): Triple<String?, String?, String?> {
-            if (savedPref.isNullOrBlank()) return Triple(null, null, null)
-            val parts = savedPref.split("|")
-            val id = parts.getOrNull(0)?.takeIf { it.isNotBlank() }
-            val lang = parts.getOrNull(1)?.takeIf { it.isNotBlank() }
-            val label = parts.getOrNull(2)?.takeIf { it.isNotBlank() }
-            return Triple(id, lang, label)
-        }
     }
 
     private val coroutineExceptionHandler = CoroutineExceptionHandler { _, throwable ->
@@ -187,7 +108,10 @@ class PlayerManager @Inject constructor(
     private var savedAudioPreferenceForVideo: String? = null
     private val activeExternalSubtitles = mutableListOf<MediaItem.SubtitleConfiguration>()
 
-    override val exoPlayer: ExoPlayer by lazy {
+    /** The live player instance. Created on first access (e.g. when playback or the media session needs it). */
+    override fun sessionPlayer(): ExoPlayer = exoPlayer
+
+    private val exoPlayer: ExoPlayer by lazy {
         val mediaCodecSelector = MediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
             val decoders = MediaCodecUtil.getDecoderInfos(mimeType, requiresSecureDecoder, requiresTunnelingDecoder)
             when (currentSettings.hardwareAccelerationMode) {
@@ -313,10 +237,10 @@ class PlayerManager @Inject constructor(
     private fun applyTrackSelectionPreferences(settings: UserSettings) {
         try {
             val builder = exoPlayer.trackSelectionParameters.buildUpon()
-            val audioLangs = getLanguageCodes(settings.preferredAudioLanguage)
+            val audioLangs = TrackSelectionPolicy.getLanguageCodes(settings.preferredAudioLanguage)
             builder.setPreferredAudioLanguages(*audioLangs.toTypedArray())
             if (settings.subtitlesEnabled && !settings.preferredSubtitleLanguage.isNullOrBlank()) {
-                val textLangs = getLanguageCodes(settings.preferredSubtitleLanguage)
+                val textLangs = TrackSelectionPolicy.getLanguageCodes(settings.preferredSubtitleLanguage)
                 builder.setPreferredTextLanguages(*textLangs.toTypedArray())
                 builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
             } else {
@@ -812,7 +736,7 @@ class PlayerManager @Inject constructor(
         }
     }
 
-    fun setVideoEqualizerEnabled(enabled: Boolean) {
+    override fun setVideoEqualizerEnabled(enabled: Boolean) {
         val currentVideo = _state.value.currentVideo ?: return
         val newEqState = _state.value.equalizerState.copy(
             enabled = enabled,
@@ -823,7 +747,7 @@ class PlayerManager @Inject constructor(
         saveEqualizerPreferences(currentVideo.id, newEqState)
     }
 
-    fun setVideoEqualizerPreset(preset: String) {
+    override fun setVideoEqualizerPreset(preset: String) {
         val currentVideo = _state.value.currentVideo ?: return
         val newEqState = _state.value.equalizerState.copy(preset = preset)
         _state.update { it.copy(equalizerState = newEqState) }
@@ -831,7 +755,7 @@ class PlayerManager @Inject constructor(
         saveEqualizerPreferences(currentVideo.id, newEqState)
     }
 
-    fun setVideoEqualizerBandLevels(levels: String) {
+    override fun setVideoEqualizerBandLevels(levels: String) {
         val currentVideo = _state.value.currentVideo ?: return
         val newEqState = _state.value.equalizerState.copy(bandLevels = levels)
         _state.update { it.copy(equalizerState = newEqState) }
@@ -839,7 +763,7 @@ class PlayerManager @Inject constructor(
         saveEqualizerPreferences(currentVideo.id, newEqState)
     }
 
-    fun setVideoEqualizerBassStrength(strength: Int) {
+    override fun setVideoEqualizerBassStrength(strength: Int) {
         val currentVideo = _state.value.currentVideo ?: return
         val newEqState = _state.value.equalizerState.copy(bassBoostStrength = strength)
         _state.update { it.copy(equalizerState = newEqState) }
@@ -1177,66 +1101,33 @@ class PlayerManager @Inject constructor(
         _state.update { it.copy(currentVideo = null, isBackgroundAudio = false, isMuted = false) }
     }
 
-    override fun release() {
-        logger.d(TAG, "release()")
-        becomingNoisyReceiver.unregister()
-        persistenceManager.stopPeriodicSave()
-        releaseLoudnessEnhancer()
-        releaseEqualizer()
-        releaseBassBoost()
-        seekPreviewLoader.releaseRetriever()
-        val livePlayback = getLivePlaybackState()
-        val currentVid = _state.value.currentVideo
+    /**
+     * Fire-and-forget playback start. Same playerScope + error capture the old
+     * command channel used for PlayerCommand.Play — promoted to a named entry
+     * point so UI callbacks don't need a coroutine or a command envelope.
+     */
+    override fun playNow(video: Video, startPositionMs: Long?) {
         playerScope.launch {
-            persistenceManager.saveImmediate(livePlayback, currentVid)
-            exoPlayer.release()
-            playerScope.cancel()
+            try {
+                play(video, startPositionMs)
+            } catch (e: Throwable) {
+                logger.e(TAG, "Unhandled error in playNow: ${e.message}", e)
+                _state.update {
+                    it.copy(
+                        currentVideo = video,
+                        error = PlaybackError.SourceError(
+                            message = "Cannot play video: ${e.localizedMessage ?: e.message ?: "Failed"}",
+                            cause = e,
+                            recoverable = false
+                        )
+                    )
+                }
+            }
         }
     }
 
-    override fun dispatch(command: PlayerCommand) {
-        when (command) {
-            is PlayerCommand.Play -> playerScope.launch {
-                try {
-                    play(command.video, command.startPositionMs)
-                } catch (e: Throwable) {
-                    logger.e(TAG, "Unhandled error in play dispatch: ${e.message}", e)
-                    _state.update {
-                        it.copy(
-                            currentVideo = command.video,
-                            error = PlaybackError.SourceError(
-                                message = "Cannot play video: ${e.localizedMessage ?: e.message ?: "Failed"}",
-                                cause = e,
-                                recoverable = false
-                            )
-                        )
-                    }
-                }
-            }
-            PlayerCommand.Pause -> pause()
-            PlayerCommand.Resume -> resume()
-            is PlayerCommand.SeekTo -> seekTo(command.positionMs)
-            is PlayerCommand.SeekRelative -> seekForward(command.offsetMs)
-            is PlayerCommand.SetSpeed -> setPlaybackSpeed(command.speed)
-            is PlayerCommand.SetVolume -> setVolume(command.volume)
-            is PlayerCommand.SetMuted -> setMuted(command.muted)
-            is PlayerCommand.SetRepeatMode -> setRepeatMode(command.mode)
-            is PlayerCommand.SetShuffle -> setShuffle(command.enabled)
-            is PlayerCommand.SelectAudioTrack -> selectAudioTrack(command.trackId)
-            is PlayerCommand.SelectSubtitleTrack -> selectSubtitleTrack(command.trackId)
-            is PlayerCommand.SelectVideoTrack -> selectVideoTrack(command.trackId)
-            is PlayerCommand.SetSubtitleDelay -> setSubtitleDelay(command.delayMs)
-            is PlayerCommand.AddExternalSubtitle -> addExternalSubtitle(command.uri, command.label, command.mimeType)
-            PlayerCommand.Stop -> stop()
-            PlayerCommand.Release -> release()
-            is PlayerCommand.SetFullscreen -> _state.update { it.copy(isFullscreenRequested = command.enabled) }
-            is PlayerCommand.SetControlsVisible -> _state.update { it.copy(areControlsVisible = command.visible) }
-            is PlayerCommand.SetScreenLocked -> _state.update { it.copy(isScreenLocked = command.locked) }
-            is PlayerCommand.SetInPictureInPicture -> _state.update { it.copy(isInPictureInPicture = command.inPip) }
-            is PlayerCommand.SetBackgroundAudio -> {
-                if (command.enabled) startBackgroundPlay() else stopBackgroundPlay()
-            }
-        }
+    override fun markInPictureInPicture(inPip: Boolean) {
+        _state.update { it.copy(isInPictureInPicture = inPip) }
     }
 
     private inner class PlayerEventListener : Player.Listener {
@@ -1294,11 +1185,9 @@ class PlayerManager @Inject constructor(
 
                     // Autoplay next in queue if available
                     val settings = settingsRepository.userSettings.first()
-                    if (settings.autoplayNextVideo) {
-                        val nextVideo = queue.next()
-                        if (nextVideo != null) {
-                            play(nextVideo)
-                        }
+                    val nextVideo = queue.next()
+                    if (nextVideo != null && AutoAdvancePolicy.shouldAdvance(settings.autoplayNextVideo, hasNext = true)) {
+                        play(nextVideo)
                     }
                 }
             }
@@ -1355,73 +1244,48 @@ class PlayerManager @Inject constructor(
 
             // Match remembered or preferred audio language if not yet initialized for this video session
             if (!audioTrackInitializedForSession && audio.isNotEmpty()) {
-                var matched = false
-                if (!savedAudioPreferenceForVideo.isNullOrBlank()) {
-                    val (savedId, savedLang, savedLabel) = parseSavedAudioTrack(savedAudioPreferenceForVideo)
-                    val matchingAudio = audio.firstOrNull { it.id == savedId }
-                        ?: if (!savedLang.isNullOrBlank()) {
-                            audio.firstOrNull { matchesLanguage(it.language, it.label, savedLang) }
-                        } else null
-                        ?: if (!savedLabel.isNullOrBlank()) {
-                            audio.firstOrNull { it.label.equals(savedLabel, ignoreCase = true) }
-                        } else null
-
-                    if (matchingAudio != null) {
+                when (val choice = TrackSelectionPolicy.chooseAudioTrack(
+                    available = audio,
+                    savedPreference = savedAudioPreferenceForVideo,
+                    preferredLanguage = currentSettings.preferredAudioLanguage
+                )) {
+                    is TrackSelectionPolicy.AudioChoice.Restored -> {
                         logger.i(
                             TAG,
-                            "Restoring remembered audio for video: ${matchingAudio.label} (${matchingAudio.language})"
+                            "Restoring remembered audio for video: ${choice.track.label} (${choice.track.language})"
                         )
-                        if (matchingAudio.id != selectedAudio) {
-                            trackManager.selectTrack(exoPlayer, C.TRACK_TYPE_AUDIO, matchingAudio.id)
-                            selectedAudio = matchingAudio.id
+                        if (choice.track.id != selectedAudio) {
+                            trackManager.selectTrack(exoPlayer, C.TRACK_TYPE_AUDIO, choice.track.id)
+                            selectedAudio = choice.track.id
                         }
-                        userSelectedAudioTrackForSession = matchingAudio.id
-                        matched = true
+                        userSelectedAudioTrackForSession = choice.track.id
                     }
-                }
-
-                if (!matched) {
-                    val preferredAudioLanguage = currentSettings.preferredAudioLanguage
-                    if (!preferredAudioLanguage.isNullOrBlank()) {
-                        val matchingAudio = audio.firstOrNull { track ->
-                            matchesLanguage(
-                                language = track.language,
-                                label = track.label,
-                                preferred = preferredAudioLanguage
-                            )
-                        }
-                        if (matchingAudio != null && matchingAudio.id != selectedAudio) {
+                    is TrackSelectionPolicy.AudioChoice.Preferred -> {
+                        if (choice.track.id != selectedAudio) {
                             logger.i(
                                 TAG,
-                                "Selecting default preferred audio: $preferredAudioLanguage -> ${matchingAudio.label} (${matchingAudio.language})"
+                                "Selecting default preferred audio: ${currentSettings.preferredAudioLanguage} -> ${choice.track.label} (${choice.track.language})"
                             )
-                            trackManager.selectTrack(exoPlayer, C.TRACK_TYPE_AUDIO, matchingAudio.id)
-                            selectedAudio = matchingAudio.id
+                            trackManager.selectTrack(exoPlayer, C.TRACK_TYPE_AUDIO, choice.track.id)
+                            selectedAudio = choice.track.id
                         }
                     }
+                    TrackSelectionPolicy.AudioChoice.Keep -> {}
                 }
                 audioTrackInitializedForSession = true
             }
 
             // Auto-enable subtitles if enabled in user settings and not explicitly turned off for this video
-            if (currentSettings.subtitlesEnabled && !userDisabledSubtitlesForSession) {
-                if (selectedSubs == null && subs.isNotEmpty()) {
-                    val preferredLang = currentSettings.preferredSubtitleLanguage
-                    val matchingSub = if (!preferredLang.isNullOrBlank()) {
-                        subs.find { track ->
-                            matchesLanguage(track.language, track.label, preferredLang)
-                        } ?: subs.first()
-                    } else {
-                        subs.first()
-                    }
-                    trackManager.selectTrack(exoPlayer, C.TRACK_TYPE_TEXT, matchingSub.id)
-                    selectedSubs = matchingSub.id
-                }
-            } else if (!currentSettings.subtitlesEnabled || userDisabledSubtitlesForSession) {
-                if (selectedSubs != null) {
-                    trackManager.selectTrack(exoPlayer, C.TRACK_TYPE_TEXT, null)
-                    selectedSubs = null
-                }
+            val desiredSubs = TrackSelectionPolicy.chooseSubtitleTrack(
+                available = subs,
+                currentlySelectedId = selectedSubs,
+                subtitlesEnabled = currentSettings.subtitlesEnabled,
+                userDisabledForSession = userDisabledSubtitlesForSession,
+                preferredLanguage = currentSettings.preferredSubtitleLanguage
+            )
+            if (desiredSubs != selectedSubs) {
+                trackManager.selectTrack(exoPlayer, C.TRACK_TYPE_TEXT, desiredSubs)
+                selectedSubs = desiredSubs
             }
 
             val finalAudio = audio.map { it.copy(isSelected = it.id == selectedAudio) }
@@ -1519,12 +1383,10 @@ class PlayerManager @Inject constructor(
 
                     // Autoplay next in queue if available
                     val settings = settingsRepository.userSettings.first()
-                    if (settings.autoplayNextVideo) {
-                        val nextVideo = queue.next()
-                        if (nextVideo != null) {
-                            logger.i(TAG, "Autoplaying next video after near-end EOF: ${nextVideo.displayName}")
-                            play(nextVideo)
-                        }
+                    val nextVideo = queue.next()
+                    if (nextVideo != null && AutoAdvancePolicy.shouldAdvance(settings.autoplayNextVideo, hasNext = true)) {
+                        logger.i(TAG, "Autoplaying next video after near-end EOF: ${nextVideo.displayName}")
+                        play(nextVideo)
                     }
                 }
                 return

@@ -98,11 +98,12 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.excavplayer.R
 import com.excavplayer.domain.model.*
-import com.excavplayer.player.core.PlayerManager
+import com.excavplayer.player.core.PlayerController
 import com.excavplayer.player.playback.PipHelper
 import androidx.compose.ui.graphics.asImageBitmap
 import com.excavplayer.ui.ExcavViewModel
@@ -603,7 +604,7 @@ fun PlayerScreen(
             factory = { ctx ->
                 PlayerView(ctx).apply {
                     activePlayerView = this
-                    this.player = vm.player.exoPlayer
+                    this.player = vm.player.sessionPlayer()
                     useController = false
                     keepScreenOn = state.playback.isPlaying
                     layoutParams = FrameLayout.LayoutParams(
@@ -630,7 +631,7 @@ fun PlayerScreen(
                         activeSurfaceView = surfaceView
                         val surface = surfaceView?.holder?.surface
                         if (surface != null && surface.isValid) {
-                            val fps = vm.player.exoPlayer.videoFormat?.frameRate ?: 0f
+                            val fps = (vm.player.sessionPlayer() as? ExoPlayer)?.videoFormat?.frameRate ?: 0f
                             if (settings.matchDisplayRefreshRate && fps > 1.0f) {
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                                     surface.setFrameRate(
@@ -861,7 +862,7 @@ fun PlayerScreen(
                             Button(
                                 onClick = {
                                     state.currentVideo?.let { vid ->
-                                        vm.player.dispatch(PlayerCommand.Play(vid))
+                                        vm.player.playNow(vid)
                                     }
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
@@ -906,7 +907,6 @@ fun PlayerScreen(
                         onClick = {
                             onUserInteraction()
                             isLocked = false
-                            vm.player.dispatch(PlayerCommand.SetScreenLocked(false))
                         },
                         modifier = Modifier
                             .size(lockBtnSize)
@@ -960,7 +960,6 @@ fun PlayerScreen(
                         onLock = {
                             onUserInteraction()
                             isLocked = true
-                            vm.player.dispatch(PlayerCommand.SetScreenLocked(true))
                         },
                         onPip = {
                             onUserInteraction()
@@ -976,7 +975,7 @@ fun PlayerScreen(
                                     sourceView = targetView
                                 )
                                 if (entered) {
-                                    vm.player.dispatch(PlayerCommand.SetInPictureInPicture(true))
+                                    vm.player.markInPictureInPicture(true)
                                 } else {
                                     controlsVisible = true
                                 }
@@ -1105,7 +1104,7 @@ fun PlayerScreen(
 @Composable
 private fun PlayerControlsOverlay(
     state: PlayerState,
-    player: PlayerManager,
+    player: PlayerController,
     isVeryCompact: Boolean = false,
     isCompact: Boolean = false,
     splitScale: Float = 1f,
@@ -1873,7 +1872,7 @@ private enum class SubtitleTab { TRACKS, ONLINE }
 @Composable
 private fun SubtitleSheet(
     state: PlayerState,
-    player: PlayerManager,
+    player: PlayerController,
     vm: ExcavViewModel,
     onOpenCustomization: () -> Unit = {},
     onPickSubtitle: () -> Unit,
@@ -1957,7 +1956,7 @@ private fun SubtitleSheet(
 @Composable
 private fun TracksTabContent(
     state: PlayerState,
-    player: PlayerManager,
+    player: PlayerController,
     vm: ExcavViewModel,
     onPickSubtitle: () -> Unit
 ) {
@@ -2573,7 +2572,7 @@ private fun SubtitleRadioRow(
 @Composable
 private fun AudioSheet(
     state: PlayerState,
-    player: PlayerManager,
+    player: PlayerController,
     onDismiss: () -> Unit
 ) {
     Column(
@@ -2644,7 +2643,7 @@ private fun AudioSheet(
 @Composable
 private fun SpeedSheet(
     state: PlayerState,
-    player: PlayerManager,
+    player: PlayerController,
     onDismiss: () -> Unit
 ) {
     val speedOptions = listOf(0.25f, 0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)

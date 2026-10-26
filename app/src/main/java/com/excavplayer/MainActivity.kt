@@ -26,10 +26,9 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.excavplayer.core.logging.AppLogger
 import com.excavplayer.data.database.mapper.toDomain
-import com.excavplayer.domain.model.PlayerCommand
 import com.excavplayer.library.VideoLibrary
 import com.excavplayer.media.thumbnail.ThumbnailLoader
-import com.excavplayer.player.core.PlayerManager
+import com.excavplayer.player.core.PlayerController
 import com.excavplayer.player.playback.PipHelper
 import com.excavplayer.ui.DeleteRequestEvent
 import dagger.hilt.android.AndroidEntryPoint
@@ -42,7 +41,7 @@ import javax.inject.Inject
 class MainActivity : ComponentActivity() {
 
     @Inject
-    lateinit var playerManager: PlayerManager
+    lateinit var playerController: PlayerController
 
     @Inject
     lateinit var videoLibrary: VideoLibrary
@@ -73,11 +72,11 @@ class MainActivity : ComponentActivity() {
     private val screenOffReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == Intent.ACTION_SCREEN_OFF) {
-                val state = playerManager.state.value
+                val state = playerController.state.value
                 val stopOnScreenOff = viewModel.userSettings.value.stopOnScreenOff
                 if (!state.isBackgroundAudio && stopOnScreenOff) {
                     logger.i("MainActivity", "Screen turned off while background audio is disabled and stopOnScreenOff is enabled -> pausing playback")
-                    playerManager.pause()
+                    playerController.pause()
                 } else {
                     logger.i("MainActivity", "Screen turned off (isBackgroundAudio=${state.isBackgroundAudio}, stopOnScreenOff=$stopOnScreenOff) -> continuing playback")
                 }
@@ -145,12 +144,10 @@ class MainActivity : ComponentActivity() {
             else -> contentResolver.getType(uri) ?: androidx.media3.common.MimeTypes.APPLICATION_SUBRIP
         }
         val label = if (cleanName.isNotBlank()) cleanName.substringBeforeLast('.') else "External Subtitle"
-        playerManager.dispatch(
-            PlayerCommand.AddExternalSubtitle(
-                uri = uri.toString(),
-                label = label,
-                mimeType = mimeType
-            )
+        playerController.addExternalSubtitle(
+            uri = uri.toString(),
+            label = label,
+            mimeType = mimeType
         )
     }
 
@@ -195,7 +192,7 @@ class MainActivity : ComponentActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 combine(
                     viewModel.isPlayerOpen,
-                    playerManager.state
+                    playerController.state
                 ) { isPlayerOpen, playerState ->
                     Pair(isPlayerOpen, playerState)
                 }.collect { (isPlayerOpen, playerState) ->
@@ -357,7 +354,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        val state = playerManager.state.value
+        val state = playerController.state.value
         if (viewModel.isPlayerOpen.value && state.playback.isPlaying && state.currentVideo != null) {
             pipHelper.enterPictureInPicture(this, state.currentVideo, state.playback.isPlaying)
         }
@@ -365,12 +362,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
-        playerManager.dispatch(PlayerCommand.SetInPictureInPicture(isInPictureInPictureMode))
+        playerController.markInPictureInPicture(isInPictureInPictureMode)
     }
 
     override fun onStop() {
         super.onStop()
-        val state = playerManager.state.value
+        val state = playerController.state.value
         val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
         val isScreenOff = powerManager?.isInteractive == false
         val isPip = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -382,11 +379,11 @@ class MainActivity : ComponentActivity() {
         // If screen turned off (in normal or PiP mode), pause unless background audio is enabled
         if (isScreenOff) {
             if (!state.isBackgroundAudio) {
-                playerManager.pause()
+                playerController.pause()
             }
         } else if (!isPip && !state.isBackgroundAudio) {
             // Screen is still on, app sent to background without PiP
-            playerManager.pause()
+            playerController.pause()
         }
     }
 

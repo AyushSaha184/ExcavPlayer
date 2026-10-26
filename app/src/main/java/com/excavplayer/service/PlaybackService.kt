@@ -8,7 +8,7 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.excavplayer.MainActivity
 import com.excavplayer.core.logging.AppLogger
-import com.excavplayer.player.core.PlayerManager
+import com.excavplayer.player.core.PlayerController
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -17,7 +17,7 @@ import javax.inject.Inject
 class PlaybackService : MediaSessionService() {
 
     @Inject
-    lateinit var playerManager: PlayerManager
+    lateinit var playerController: PlayerController
 
     @Inject
     lateinit var logger: AppLogger
@@ -42,7 +42,7 @@ class PlaybackService : MediaSessionService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        mediaSession = MediaSession.Builder(this, playerManager.exoPlayer)
+        mediaSession = MediaSession.Builder(this, playerController.sessionPlayer())
             .setSessionActivity(pendingIntent)
             .setCallback(MediaSessionCallback())
             .build()

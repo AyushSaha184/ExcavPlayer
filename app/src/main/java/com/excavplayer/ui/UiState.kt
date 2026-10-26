@@ -7,13 +7,12 @@ import com.excavplayer.core.result.ExcavResult
 import com.excavplayer.domain.derivation.LibraryDerivation
 import com.excavplayer.domain.derivation.VideoGroup
 import com.excavplayer.domain.model.Folder
-import com.excavplayer.domain.model.PlayerCommand
 import com.excavplayer.domain.model.RepeatMode
 import com.excavplayer.domain.model.UserSettings
 import com.excavplayer.domain.model.Video
 import com.excavplayer.domain.model.NaturalVideoComparator
 import com.excavplayer.library.VideoLibrary
-import com.excavplayer.player.core.PlayerManager
+import com.excavplayer.player.core.PlayerController
 import com.excavplayer.player.queue.PlaybackQueue
 import com.excavplayer.settings.SettingsManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -94,7 +93,7 @@ class ExcavViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val library: VideoLibrary,
     private val settingsManager: SettingsManager,
-    val player: PlayerManager,
+    val player: PlayerController,
     val queue: PlaybackQueue,
     val updateManager: AppUpdateManager,
     val subtitleHelper: SubtitleHelper,
@@ -271,14 +270,14 @@ class ExcavViewModel @Inject constructor(
         val items = if (activeList.any { it.id == video.id }) activeList else listOf(video)
         val index = items.indexOfFirst { it.id == video.id }.coerceAtLeast(0)
         queue.setQueue(items, index)
-        player.dispatch(PlayerCommand.Play(video, video.resumePositionMs))
+        player.playNow(video, video.resumePositionMs)
     }
 
     fun playQueueItem(index: Int) {
         logger.i(TAG, "playQueueItem at index: $index")
         val video = queue.moveTo(index)
         if (video != null) {
-            player.dispatch(PlayerCommand.Play(video, video.resumePositionMs))
+            player.playNow(video, video.resumePositionMs)
         } else {
             logger.w(TAG, "Queue item at index $index was null")
         }
