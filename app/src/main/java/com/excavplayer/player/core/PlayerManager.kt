@@ -1168,11 +1168,12 @@ class PlayerManager @Inject constructor(
                 playerScope.launch {
                     persistenceManager.saveImmediate(livePlayback, _state.value.currentVideo)
 
-                    // Autoplay next in queue if available
+                    // Autoplay next in queue if available. Decide from hasNext
+                    // first: advancing the queue without playing would hide the
+                    // "next episode" affordance and skip an item.
                     val settings = settingsRepository.userSettings.first()
-                    val nextVideo = queue.next()
-                    if (nextVideo != null && AutoAdvancePolicy.shouldAdvance(settings.autoplayNextVideo, hasNext = true)) {
-                        play(nextVideo)
+                    if (AutoAdvancePolicy.shouldAdvance(settings.autoplayNextVideo, queue.state.value.hasNext)) {
+                        queue.next()?.let { nextVideo -> play(nextVideo) }
                     }
                 }
             }
@@ -1372,12 +1373,15 @@ class PlayerManager @Inject constructor(
                 playerScope.launch {
                     persistenceManager.saveImmediate(completedPlayback, _state.value.currentVideo)
 
-                    // Autoplay next in queue if available
+                    // Autoplay next in queue if available. Decide from hasNext
+                    // first: advancing the queue without playing would hide the
+                    // "next episode" affordance and skip an item.
                     val settings = settingsRepository.userSettings.first()
-                    val nextVideo = queue.next()
-                    if (nextVideo != null && AutoAdvancePolicy.shouldAdvance(settings.autoplayNextVideo, hasNext = true)) {
-                        logger.i(TAG, "Autoplaying next video after near-end EOF: ${nextVideo.displayName}")
-                        play(nextVideo)
+                    if (AutoAdvancePolicy.shouldAdvance(settings.autoplayNextVideo, queue.state.value.hasNext)) {
+                        queue.next()?.let { nextVideo ->
+                            logger.i(TAG, "Autoplaying next video after near-end EOF: ${nextVideo.displayName}")
+                            play(nextVideo)
+                        }
                     }
                 }
                 return

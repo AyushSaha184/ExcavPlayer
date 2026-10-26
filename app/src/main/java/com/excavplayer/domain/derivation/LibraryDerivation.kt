@@ -257,6 +257,34 @@ object LibraryDerivation {
         return groups.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
     }
 
+    /**
+     * The ordered videos that form the playback context for [video] when the
+     * caller has no explicit list (continue-watching card, search result,
+     * external intent).
+     *
+     * A derived series group wins over the folder: it is the unit the user
+     * sees, episodes may span folders, and a folder can hold unrelated shows.
+     * Only when the video is not part of a group (single episode, movie) do we
+     * fall back to same-folder siblings, then to the whole library.
+     */
+    fun resolvePlaybackContext(
+        video: Video,
+        groups: List<VideoGroup>,
+        allVideos: List<Video>
+    ): List<Video> {
+        val group = groups.firstOrNull { group -> group.videos.any { it.id == video.id } }
+        if (group != null) return group.videos
+
+        val sameFolderVideos = allVideos
+            .filter { it.folderPath.isNotEmpty() && it.folderPath.equals(video.folderPath, ignoreCase = true) }
+            .sortedWith(NaturalVideoComparator)
+        if (sameFolderVideos.size > 1 && sameFolderVideos.any { it.id == video.id }) {
+            return sameFolderVideos
+        }
+
+        return allVideos
+    }
+
     fun computeFolderVideosMap(videos: List<Video>): Map<String, List<Video>> {
         if (videos.isEmpty()) return emptyMap()
         val map = mutableMapOf<String, MutableList<Video>>()

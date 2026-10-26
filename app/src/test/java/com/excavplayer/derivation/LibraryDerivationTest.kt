@@ -244,6 +244,70 @@ class LibraryDerivationTest {
         assertThat(groups.map { it.name }).containsExactly("Alpha S1", "Zeta S1").inOrder()
     }
 
+    // ── Playback context ─────────────────────────────────────────────
+
+    @Test
+    fun `resolvePlaybackContext prefers the series group across folders`() {
+        val ep2 = createTestVideo("2", "Show.S01E02.mp4", "/storage/emulated/0/Season 1")
+        val ep1 = createTestVideo("1", "Show.S01E01.mp4", "/storage/emulated/0/Other")
+        val movie = createTestVideo("3", "Movie.mp4", "/storage/emulated/0/Other")
+        val group = VideoGroup("group_show_s1", "Show S1", ep1.folderPath, listOf(ep1, ep2))
+
+        val context = LibraryDerivation.resolvePlaybackContext(
+            video = ep1,
+            groups = listOf(group),
+            allVideos = listOf(movie, ep2, ep1)
+        )
+
+        assertThat(context.map { it.id }).containsExactly("1", "2").inOrder()
+    }
+
+    @Test
+    fun `resolvePlaybackContext ignores groups that do not contain the video`() {
+        val target = createTestVideo("1", "Show.S01E01.mp4", "/storage/emulated/0/Shows")
+        val sibling = createTestVideo("2", "Show.S01E02.mp4", "/storage/emulated/0/Shows")
+        val other = createTestVideo("3", "Other.S01E01.mp4", "/storage/emulated/0/Elsewhere")
+        val otherGroup = VideoGroup("group_other_s1", "Other S1", other.folderPath, listOf(other))
+
+        val context = LibraryDerivation.resolvePlaybackContext(
+            video = target,
+            groups = listOf(otherGroup),
+            allVideos = listOf(other, sibling, target)
+        )
+
+        assertThat(context.map { it.id }).containsExactly("1", "2").inOrder()
+    }
+
+    @Test
+    fun `resolvePlaybackContext falls back to same-folder siblings in natural order`() {
+        val ep2 = createTestVideo("2", "Show.S01E02.mp4", "/storage/emulated/0/Shows")
+        val ep1 = createTestVideo("1", "Show.S01E01.mp4", "/storage/emulated/0/Shows")
+        val elsewhere = createTestVideo("3", "Other.mp4", "/storage/emulated/0/Movies")
+
+        val context = LibraryDerivation.resolvePlaybackContext(
+            video = ep1,
+            groups = emptyList(),
+            allVideos = listOf(elsewhere, ep2, ep1)
+        )
+
+        assertThat(context.map { it.id }).containsExactly("1", "2").inOrder()
+    }
+
+    @Test
+    fun `resolvePlaybackContext falls back to the library when the video is alone in its folder`() {
+        val target = createTestVideo("1", "Movie.mp4", "/storage/emulated/0/Movies")
+        val other = createTestVideo("2", "Other.mp4", "/storage/emulated/0/Elsewhere")
+        val allVideos = listOf(other, target)
+
+        val context = LibraryDerivation.resolvePlaybackContext(
+            video = target,
+            groups = emptyList(),
+            allVideos = allVideos
+        )
+
+        assertThat(context).isSameInstanceAs(allVideos)
+    }
+
     // ── Folder map ───────────────────────────────────────────────────
 
     @Test

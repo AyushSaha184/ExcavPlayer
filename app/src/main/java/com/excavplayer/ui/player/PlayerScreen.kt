@@ -2743,40 +2743,44 @@ fun FloatingSkipChapterPill(
                 else -> "Skip Segment"
             }
 
-            Surface(
+            Row(
                 modifier = Modifier
-                    .clip(ExcavShapes.Pill)
-                    .border(1.5.dp, ExcavPalette.BlueGlow, ExcavShapes.Pill)
+                    .playerGlass(RoundedCornerShape(32.dp))
                     .clickable {
                         onSeekTo(chapter.endTimeMs)
                         onHud(skipLabel, Icons.Default.FastForward)
-                    },
-                color = ExcavPalette.Ink.copy(alpha = 0.95f),
-                shadowElevation = 8.dp
-            ) {
-                Row(
-                    modifier = Modifier.padding(
-                        horizontal = if (isCompact) 10.dp else 18.dp,
-                        vertical = if (isCompact) 6.dp else 10.dp
+                    }
+                    .padding(
+                        horizontal = if (isCompact) 12.dp else 16.dp,
+                        vertical = if (isCompact) 7.dp else 9.dp
                     ),
-                    verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Circular chip echoing the player's glass transport controls
+                Box(
+                    modifier = Modifier
+                        .size(if (isCompact) 28.dp else 34.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.10f)),
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.FastForward,
                         contentDescription = null,
-                        tint = ExcavPalette.Blue,
-                        modifier = Modifier.size(if (isCompact) 15.dp else 20.dp)
-                    )
-                    Spacer(Modifier.width(if (isCompact) 5.dp else 8.dp))
-                    Text(
-                        text = skipLabel,
-                        color = ExcavPalette.Text,
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = if (isCompact) 11.5.sp else 14.sp
-                        )
+                        tint = Color.White,
+                        modifier = Modifier.size(if (isCompact) 16.dp else 19.dp)
                     )
                 }
+                Spacer(Modifier.width(if (isCompact) 9.dp else 12.dp))
+                Text(
+                    text = skipLabel,
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = if (isCompact) 11.5.sp else 13.sp
+                    ),
+                    maxLines = 1
+                )
             }
         }
     }
@@ -2839,36 +2843,57 @@ fun FloatingNextEpisodePill(
     ) {
         val nextVid = queue.items.getOrNull(queue.currentIndex + 1)
         if (nextVid != null) {
-            Surface(
+            Row(
                 modifier = Modifier
-                    .clip(ExcavShapes.Pill)
-                    .border(1.5.dp, ExcavPalette.BlueGlow, ExcavShapes.Pill)
+                    .playerGlass(RoundedCornerShape(32.dp))
                     .clickable {
                         onPlayNext(queue.currentIndex + 1)
-                    },
-                color = ExcavPalette.Ink.copy(alpha = 0.95f),
-                shadowElevation = 8.dp
-            ) {
-                Row(
-                    modifier = Modifier.padding(
-                        horizontal = if (isVeryCompact) 8.dp else if (isCompact) 10.dp else 16.dp,
-                        vertical = if (isVeryCompact) 5.dp else if (isCompact) 6.dp else 10.dp
+                    }
+                    .padding(
+                        horizontal = if (isVeryCompact) 10.dp else if (isCompact) 12.dp else 16.dp,
+                        vertical = if (isVeryCompact) 6.dp else if (isCompact) 7.dp else 9.dp
                     ),
-                    verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Circular chip echoing the player's glass transport controls
+                Box(
+                    modifier = Modifier
+                        .size(if (isVeryCompact) 24.dp else if (isCompact) 28.dp else 34.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.10f)),
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.SkipNext,
                         contentDescription = null,
-                        tint = ExcavPalette.Blue,
-                        modifier = Modifier.size(if (isVeryCompact) 14.dp else if (isCompact) 16.dp else 20.dp)
+                        tint = Color.White,
+                        modifier = Modifier.size(if (isVeryCompact) 14.dp else if (isCompact) 16.dp else 19.dp)
                     )
-                    Spacer(Modifier.width(if (isVeryCompact) 4.dp else if (isCompact) 5.dp else 8.dp))
+                }
+                Spacer(Modifier.width(if (isVeryCompact) 7.dp else if (isCompact) 9.dp else 12.dp))
+                Column(verticalArrangement = Arrangement.Center) {
                     Text(
-                        text = "Next: ${nextVid.displayName.take(if (isVeryCompact) 10 else if (isCompact) 14 else 18)}",
-                        color = ExcavPalette.Text,
+                        text = "Up next",
+                        color = ExcavPalette.TextMuted,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Medium,
+                            fontSize = if (isVeryCompact) 9.sp else 10.sp,
+                            letterSpacing = 0.4.sp
+                        ),
+                        maxLines = 1
+                    )
+                    Spacer(Modifier.height(1.dp))
+                    Text(
+                        text = nextVid.displayName,
+                        color = Color.White,
                         style = MaterialTheme.typography.bodyMedium.copy(
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.SemiBold,
                             fontSize = if (isVeryCompact) 10.5.sp else if (isCompact) 11.5.sp else 13.sp
+                        ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.widthIn(
+                            max = if (isVeryCompact) 118.dp else if (isCompact) 150.dp else 220.dp
                         )
                     )
                 }
