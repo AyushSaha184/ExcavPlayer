@@ -9,6 +9,7 @@ import android.webkit.MimeTypeMap
 import androidx.core.content.ContextCompat
 import com.excavplayer.core.logging.AppLogger
 import com.excavplayer.data.database.entity.VideoEntity
+import com.excavplayer.domain.derivation.LibraryDerivation
 import com.excavplayer.domain.model.MediaAvailability
 import com.excavplayer.domain.model.MediaSourceType
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -139,7 +140,10 @@ class StorageFileScanner @Inject constructor(
         if (dirNameLower in EXCLUDED_DIR_NAMES || dir.name.startsWith(".")) {
             return
         }
-        if (dir.absolutePath == "/storage/private" || dir.absolutePath.startsWith("/storage/private/")) {
+        // Full library exclusion rule for directory paths (private storage, trash,
+        // SAF Files, etc.) — single owner: LibraryDerivation. Traversal pruning above
+        // (EXCLUDED_DIR_NAMES) is scan-time concern and stays local.
+        if (LibraryDerivation.isExcludedFolderPath(dir.absolutePath)) {
             return
         }
 

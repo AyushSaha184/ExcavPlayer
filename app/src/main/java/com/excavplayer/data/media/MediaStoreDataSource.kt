@@ -11,6 +11,7 @@ import android.provider.MediaStore
 import com.excavplayer.core.coroutine.DispatcherProvider
 import com.excavplayer.core.logging.AppLogger
 import com.excavplayer.data.database.entity.VideoEntity
+import com.excavplayer.domain.derivation.LibraryDerivation
 import com.excavplayer.domain.model.MediaAvailability
 import com.excavplayer.domain.model.MediaSourceType
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -202,7 +203,9 @@ class MediaStoreDataSource @Inject constructor(
             if (dataColumn != -1 && !cursor.isNull(dataColumn)) {
                 val data = cursor.getString(dataColumn) ?: ""
                 if (data.isNotBlank()) {
-                    if (data.startsWith("/storage/private") || data.contains("/storage/private/")) {
+                    // Library exclusion rule on the raw file path (private storage,
+                    // trash folders, ...) — single owner: LibraryDerivation
+                    if (LibraryDerivation.isExcludedFolderPath(data)) {
                         continue
                     }
                     val lastSlash = data.lastIndexOf('/')
@@ -226,10 +229,9 @@ class MediaStoreDataSource @Inject constructor(
                 if (folderPath.isEmpty()) folderPath = "/storage/emulated/0/$folderName"
             }
 
-            if (folderPath == "/storage/private" || folderPath.startsWith("/storage/private/")) {
+            if (LibraryDerivation.isExcludedFolderPath(folderPath)) {
                 continue
             }
-
             videos.add(
                 VideoEntity(
                     id = stableId,

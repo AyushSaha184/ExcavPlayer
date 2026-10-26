@@ -1,5 +1,6 @@
 package com.excavplayer.ui.folders.logic
 
+import com.excavplayer.domain.derivation.LibraryDerivation
 import com.excavplayer.domain.model.Folder
 import com.excavplayer.domain.model.NaturalVideoComparator
 import com.excavplayer.domain.model.Video
@@ -45,30 +46,14 @@ data class FolderTree(
 
 object FolderTreeManager {
 
-    const val INTERNAL_STORAGE_ROOT = "/storage/emulated/0"
-    private const val INTERNAL_STORAGE_LABEL = "Internal Storage"
+    const val INTERNAL_STORAGE_ROOT = LibraryDerivation.INTERNAL_STORAGE_ROOT
+    private const val INTERNAL_STORAGE_LABEL = LibraryDerivation.INTERNAL_STORAGE_LABEL
 
     /**
      * Normalizes directory and file paths to canonical absolute Unix paths.
+     * Delegates to [LibraryDerivation.normalizeFolderPath] — the single owner.
      */
-    fun normalizePath(raw: String?): String {
-        var trimmed = raw.orEmpty().trim().trimEnd('/')
-        if (trimmed.startsWith("/sdcard")) {
-            trimmed = INTERNAL_STORAGE_ROOT + trimmed.removePrefix("/sdcard")
-        } else if (trimmed.startsWith("/mnt/sdcard")) {
-            trimmed = INTERNAL_STORAGE_ROOT + trimmed.removePrefix("/mnt/sdcard")
-        }
-        return when {
-            trimmed.isEmpty() ||
-            trimmed == INTERNAL_STORAGE_ROOT ||
-            trimmed == "/storage/emulated" ||
-            trimmed.equals(INTERNAL_STORAGE_LABEL, ignoreCase = true) -> INTERNAL_STORAGE_ROOT
-            trimmed.startsWith(INTERNAL_STORAGE_ROOT) -> trimmed
-            trimmed.startsWith("/storage/") -> trimmed
-            trimmed.startsWith("/") -> trimmed
-            else -> "$INTERNAL_STORAGE_ROOT/$trimmed"
-        }
-    }
+    fun normalizePath(raw: String?): String = LibraryDerivation.normalizeFolderPath(raw)
 
     /**
      * Builds a full directory tree hierarchy from a flat list of videos.
@@ -86,35 +71,9 @@ object FolderTreeManager {
             )
         }
 
-        // Filter out any corrupted, system-private, trash/recycle, or dummy external/SAF folders
-        val trashSegments = setOf(
-            ".trash", ".trashed", "trash", ".trashbin", "trashbin",
-            ".recycle", "recycle", ".recycler", "recycler",
-            ".securetrash", "recently_deleted", ".recently_deleted",
-            ".gallery_trash", "gallery_trash"
-        )
-        val validVideos = videos.filter { v ->
-            !v.id.startsWith("saf_") &&
-            !v.id.startsWith("transient_") &&
-            !v.folderName.equals("External Videos", ignoreCase = true) &&
-            !v.folderPath.equals("External Videos", ignoreCase = true) &&
-            !v.folderPath.contains("External Videos", ignoreCase = true) &&
-            !v.folderName.equals("SAF Files", ignoreCase = true) &&
-            !v.folderPath.equals("SAF Files", ignoreCase = true) &&
-            !v.folderPath.contains("SAF Files", ignoreCase = true) &&
-            !v.folderName.equals("Selected Folder", ignoreCase = true) &&
-            !v.folderPath.equals("Selected Folder", ignoreCase = true) &&
-            !v.folderPath.contains("Selected Folder", ignoreCase = true) &&
-            !v.folderName.equals("private", ignoreCase = true) &&
-            !v.folderPath.equals("private", ignoreCase = true) &&
-            !v.folderPath.endsWith("/private") &&
-            !v.folderPath.startsWith("/storage/private") &&
-            !v.uri.startsWith("/storage/private") &&
-            !v.uri.startsWith("content://com.android.providers.media.documents/") &&
-            !v.uri.startsWith("content://com.android.externalstorage.documents/") &&
-            // Exclude videos in trash/recycle folders (Xiaomi, Samsung, Huawei, etc.)
-            !v.folderPath.lowercase().split('/').any { it in trashSegments }
-        }
+        // Filter out anything the exclusion rule rejects (system-private, trash/recycle,
+        // dummy external/SAF folders) — single owner: LibraryDerivation
+        val validVideos = videos.filter { !LibraryDerivation.isExcludedFromLibrary(it) }
 
         // Group videos by their normalized immediate folder path
         val directVideosByFolder = mutableMapOf<String, MutableList<Video>>()

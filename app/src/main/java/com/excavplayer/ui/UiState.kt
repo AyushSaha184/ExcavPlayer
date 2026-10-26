@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.excavplayer.core.logging.AppLogger
 import com.excavplayer.core.result.ExcavResult
+import com.excavplayer.domain.derivation.LibraryDerivation
+import com.excavplayer.domain.derivation.VideoGroup
 import com.excavplayer.domain.model.Folder
 import com.excavplayer.domain.model.PlayerCommand
 import com.excavplayer.domain.model.RepeatMode
@@ -63,13 +65,6 @@ data class UserMessage(
     val actionLabel: String? = null
 )
 
-data class VideoGroup(
-    val id: String,
-    val name: String,
-    val path: String,
-    val videos: List<Video>
-)
-
 data class LibraryUiState(
     val videos: List<Video> = emptyList(),
     val continueWatching: List<Video> = emptyList(),
@@ -83,194 +78,6 @@ data class LibraryUiState(
     val isSyncing: Boolean = false,
     val loading: Boolean = true
 )
-
-fun normalizeFolderPath(raw: String?): String {
-    var trimmed = raw.orEmpty().trim().trimEnd('/')
-    if (trimmed.startsWith("/sdcard")) {
-        trimmed = "/storage/emulated/0" + trimmed.removePrefix("/sdcard")
-    } else if (trimmed.startsWith("/mnt/sdcard")) {
-        trimmed = "/storage/emulated/0" + trimmed.removePrefix("/mnt/sdcard")
-    }
-    return when {
-        trimmed.isEmpty() || trimmed == "/storage/emulated/0" || trimmed == "/storage/emulated" || trimmed.equals("Internal Storage", ignoreCase = true) -> "/storage/emulated/0"
-        trimmed.startsWith("/storage/emulated/0") -> trimmed
-        trimmed.startsWith("/storage/") -> trimmed
-        trimmed.startsWith("/") -> trimmed
-        else -> "/storage/emulated/0/$trimmed"
-    }
-}
-
-private val NOISE_TAGS = setOf(
-    "1080p", "720p", "480p", "360p", "2160p", "4k", "uhd", "fhd", "hd",
-    "x264", "x265", "h264", "h265", "hevc", "avc", "10bit", "8bit",
-    "web-dl", "webrip", "bluray", "bdrip", "dvdrip", "hdtv", "hdrip",
-    "aac", "aac2", "dts", "ac3", "ddp5", "ddp", "eac3", "flac", "mp3",
-    "repack", "proper", "remux", "dual", "multi", "eng", "ita", "sub",
-    "dub", "uncensored", "directors", "cut", "extended", "complete"
-)
-
-private val GENERIC_FOLDER_NAMES = setOf(
-    "0", "emulated", "storage", "internal storage", "videos", "video",
-    "dcim", "camera", "download", "downloads", "telegram", "whatsapp video",
-    "movies", "movie", "series", "tv shows", "tv", "media"
-)
-
-private fun cleanSeriesTitle(raw: String): String {
-    var name = raw.trim()
-    name = name.replace(Regex("""^\s*\[[^\]]+\]\s*"""), "")
-    name = name.replace(Regex("""^\s*\([^)]+\)\s*"""), "")
-    if (name.contains('.')) {
-        val ext = name.substringAfterLast('.').lowercase()
-        if (ext in setOf("mp4", "mkv", "avi", "webm", "mov", "flv", "ts", "m4v", "3gp")) {
-            name = name.substringBeforeLast('.')
-        }
-    }
-    name = name.replace('.', ' ').replace('_', ' ')
-
-    val tokens = name.split(Regex("""\s+""")).filter { it.isNotBlank() }
-    val cleanTokens = mutableListOf<String>()
-    for (token in tokens) {
-        val lower = token.lowercase().trim('(', ')', '[', ']', '{', '}', '-', '_', '.')
-        if (NOISE_TAGS.contains(lower) || lower.matches(Regex("""\d{3,4}p""")) || (lower.length == 4 && lower.startsWith("20") && lower.toIntOrNull() != null && cleanTokens.isNotEmpty())) {
-            break
-        }
-        val cleaned = token.trim('(', ')', '[', ']', '{', '}', '-', '_', '.')
-        if (cleaned.isNotBlank()) {
-            cleanTokens.add(cleaned)
-        }
-    }
-
-    val result = cleanTokens.joinToString(" ").trim()
-    return if (result.length >= 2) {
-        result.split(" ").joinToString(" ") { word ->
-            if (word.all { it.isUpperCase() } && word.length <= 4) word
-            else word.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
-        }
-    } else {
-        raw.trim()
-    }
-}
-
-private fun extractSeriesSeason(displayName: String, folderName: String): Pair<String, String>? {
-    val cleanName = displayName.trim()
-
-    // Pattern 1: S11E01 / S11.E01 / S11_E01 / S11 - E01 / Season 11 Episode 01
-    val sMatch = Regex("""(?i)(?:^|[\s._\-\(\[])(.+?)[.\s_\-]+(?:s|season)[.\s_\-]*(\d{1,2})[.\s_\-]*(?:e|ep|episode)[.\s_\-]*\d{1,3}""", RegexOption.IGNORE_CASE).find(cleanName)
-    if (sMatch != null) {
-        val rawSeries = sMatch.groupValues[1]
-        val seasonNum = sMatch.groupValues[2].toIntOrNull()
-        val seriesTitle = cleanSeriesTitle(rawSeries)
-        if (seriesTitle.isNotBlank()) {
-            val seasonStr = if (seasonNum != null) "S$seasonNum" else ""
-            val key = "${seriesTitle.lowercase()}_s${seasonNum ?: 0}"
-            val display = if (seasonNum != null) "$seriesTitle $seasonStr" else seriesTitle
-            return Pair(key, display)
-        }
-    }
-
-    // Pattern 2: 11x01 (e.g. Supernatural.11x01.mp4)
-    val xMatch = Regex("""(?i)(?:^|[\s._\-\(\[])(.+?)[.\s_\-]+(\d{1,2})x\d{1,3}""", RegexOption.IGNORE_CASE).find(cleanName)
-    if (xMatch != null) {
-        val rawSeries = xMatch.groupValues[1]
-        val seasonNum = xMatch.groupValues[2].toIntOrNull()
-        val seriesTitle = cleanSeriesTitle(rawSeries)
-        if (seriesTitle.isNotBlank() && seasonNum != null) {
-            val key = "${seriesTitle.lowercase()}_s$seasonNum"
-            val display = "$seriesTitle S$seasonNum"
-            return Pair(key, display)
-        }
-    }
-
-    // Pattern 3: S11 / Season 11 alone in file name
-    val sOnlyMatch = Regex("""(?i)(?:^|[\s._\-\(\[])(.+?)[.\s_\-]+(?:s|season)[.\s_\-]*(\d{1,2})(?:[.\s_\-]|\b)""", RegexOption.IGNORE_CASE).find(cleanName)
-    if (sOnlyMatch != null) {
-        val rawSeries = sOnlyMatch.groupValues[1]
-        val seasonNum = sOnlyMatch.groupValues[2].toIntOrNull()
-        val seriesTitle = cleanSeriesTitle(rawSeries)
-        if (seriesTitle.isNotBlank() && seasonNum != null) {
-            val key = "${seriesTitle.lowercase()}_s$seasonNum"
-            val display = "$seriesTitle S$seasonNum"
-            return Pair(key, display)
-        }
-    }
-
-    // Pattern 4: Anime episode format: [SubsPlease] Show - 01 (1080p).mkv
-    val animeMatch = Regex("""^(?:\[[^\]]+\]\s*)?(.+?)\s*[-_]\s*(?:(?:ep|episode)\s*)?(\d{1,4})(?:\s*\(.*?\))?(?:\s*\[.*?\])?(?:\.[\w\d]+)?$""", RegexOption.IGNORE_CASE).find(cleanName)
-    if (animeMatch != null) {
-        val rawSeries = animeMatch.groupValues[1]
-        val seriesTitle = cleanSeriesTitle(rawSeries)
-        if (seriesTitle.length >= 2 && !seriesTitle.all { it.isDigit() }) {
-            val folderSeason = Regex("""(?i)(?:s|season)[.\s_\-]*(\d{1,2})""").find(folderName)?.groupValues?.get(1)?.toIntOrNull()
-            val key = if (folderSeason != null) "${seriesTitle.lowercase()}_s$folderSeason" else seriesTitle.lowercase()
-            val display = if (folderSeason != null) "$seriesTitle S$folderSeason" else seriesTitle
-            return Pair(key, display)
-        }
-    }
-
-    // Pattern 5: Check folder name for Series/Season
-    if (folderName.isNotBlank() && !GENERIC_FOLDER_NAMES.contains(folderName.lowercase().trim())) {
-        val folderSeasonMatch = Regex("""(?i)(?:^|[\s._\-\(\[])(.+?)[.\s_\-]+(?:s|season)[.\s_\-]*(\d{1,2})""", RegexOption.IGNORE_CASE).find(folderName)
-        if (folderSeasonMatch != null) {
-            val rawSeries = folderSeasonMatch.groupValues[1]
-            val seasonNum = folderSeasonMatch.groupValues[2].toIntOrNull()
-            val seriesTitle = cleanSeriesTitle(rawSeries)
-            if (seriesTitle.isNotBlank() && seasonNum != null) {
-                return Pair("${seriesTitle.lowercase()}_s$seasonNum", "$seriesTitle S$seasonNum")
-            }
-        }
-    }
-
-    return null
-}
-
-private fun computeVideoGroups(videos: List<Video>, folders: List<Folder>): List<VideoGroup> {
-    if (videos.isEmpty()) return emptyList()
-
-    val groups = mutableListOf<VideoGroup>()
-    val groupedVideoIds = mutableSetOf<String>()
-
-    // Pass 1: Smart Series & Season pattern extraction
-    val seriesSeasonBuckets = mutableMapOf<String, Pair<String, MutableList<Video>>>()
-    for (video in videos) {
-        val extracted = extractSeriesSeason(video.displayName, video.folderName)
-        if (extracted != null) {
-            val (key, display) = extracted
-            val bucket = seriesSeasonBuckets.getOrPut(key) { Pair(display, mutableListOf()) }
-            bucket.second.add(video)
-        }
-    }
-
-    for ((key, pair) in seriesSeasonBuckets) {
-        val (displayName, vids) = pair
-        if (vids.size >= 2) {
-            val sortedVideos = vids.distinctBy { it.id }.sortedWith(NaturalVideoComparator)
-            groups.add(
-                VideoGroup(
-                    id = "group_$key",
-                    name = displayName,
-                    path = sortedVideos.firstOrNull()?.folderPath.orEmpty(),
-                    videos = sortedVideos
-                )
-            )
-            vids.forEach { groupedVideoIds.add(it.id) }
-        }
-    }
-
-    return groups.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
-}
-
-private fun computeFolderVideosMap(videos: List<Video>): Map<String, List<Video>> {
-    if (videos.isEmpty()) return emptyMap()
-    val map = mutableMapOf<String, MutableList<Video>>()
-    for (v in videos) {
-        val norm = normalizeFolderPath(v.folderPath)
-        map.getOrPut(norm) { mutableListOf() }.add(v)
-        if (v.folderName.isNotEmpty()) {
-            map.getOrPut(v.folderName.lowercase()) { mutableListOf() }.add(v)
-        }
-    }
-    return map.mapValues { (_, list) -> list.sortedWith(NaturalVideoComparator) }
-}
 
 data class OnlineSubtitleUiState(
     val query: String = "",
@@ -336,11 +143,6 @@ class ExcavViewModel @Inject constructor(
         folder?.let { library.observeVideosInFolder(it.path) } ?: flowOf(emptyList())
     }
 
-    private var cachedVideosRef: List<Video>? = null
-    private var cachedFoldersRef: List<Folder>? = null
-    private var cachedGroups: List<VideoGroup> = emptyList()
-    private var cachedFolderMap: Map<String, List<Video>> = emptyMap()
-
     @Suppress("UNCHECKED_CAST")
     val libraryState: StateFlow<LibraryUiState> = combine(
         library.observeVideos(),
@@ -361,25 +163,14 @@ class ExcavViewModel @Inject constructor(
         val currentFolderVideos = values[6] as List<Video>
         val settings = values[7] as UserSettings
 
-        val groups: List<VideoGroup>
-        val folderMap: Map<String, List<Video>>
-
-        if (videos === cachedVideosRef && folders === cachedFoldersRef) {
-            groups = cachedGroups
-            folderMap = cachedFolderMap
-        } else {
-            groups = computeVideoGroups(videos, folders)
-            folderMap = computeFolderVideosMap(videos)
-            cachedVideosRef = videos
-            cachedFoldersRef = folders
-            cachedGroups = groups
-            cachedFolderMap = folderMap
-        }
+        val derived = LibraryDerivation.derive(videos, folders)
+        val groups = derived.groups
+        val folderMap = derived.folderVideosMap
 
         val resolvedFolderVideos = if (currentFolderVideos.isNotEmpty()) {
             currentFolderVideos
         } else if (currentFolder != null) {
-            val norm = normalizeFolderPath(currentFolder.path)
+            val norm = LibraryDerivation.normalizeFolderPath(currentFolder.path)
             folderMap[norm] ?: folderMap[currentFolder.name.lowercase()].orEmpty()
         } else {
             emptyList()
@@ -588,9 +379,9 @@ class ExcavViewModel @Inject constructor(
             val allVids = mutableListOf<Video>()
             val allLibraryVideos = libraryState.value.videos
             for (f in folders) {
-                val normP = normalizeFolderPath(f.path)
+                val normP = LibraryDerivation.normalizeFolderPath(f.path)
                 val matching = allLibraryVideos.filter {
-                    val vNorm = normalizeFolderPath(it.folderPath)
+                    val vNorm = LibraryDerivation.normalizeFolderPath(it.folderPath)
                     vNorm == normP || vNorm.startsWith("$normP/")
                 }
                 if (matching.isNotEmpty()) {

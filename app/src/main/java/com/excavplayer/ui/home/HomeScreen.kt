@@ -55,7 +55,7 @@ import com.excavplayer.R
 import com.excavplayer.domain.model.Folder
 import com.excavplayer.domain.model.NaturalVideoComparator
 import com.excavplayer.domain.model.Video
-import com.excavplayer.ui.VideoGroup
+import com.excavplayer.domain.derivation.VideoGroup
 import com.excavplayer.ui.components.*
 import com.excavplayer.ui.theme.ExcavPalette
 import com.excavplayer.ui.theme.ExcavShapes

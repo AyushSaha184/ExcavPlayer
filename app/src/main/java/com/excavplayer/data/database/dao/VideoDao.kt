@@ -10,6 +10,8 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface VideoDao {
+    // mirrors LibraryDerivation.isExcludedFromLibrary — update both together
+    // (Room SQL cannot call Kotlin; LibraryDerivationTest + RoomDatabaseTest keep them in sync)
     @Query("""
         SELECT v.*, 
                p.current_position_ms AS resume_position_ms
@@ -37,6 +39,7 @@ interface VideoDao {
     """)
     fun observeAllVideosWithMetadata(): Flow<List<VideoWithMetadataTuple>>
 
+    // mirrors LibraryDerivation.isExcludedFromLibrary — update both together
     @Query("""
         SELECT v.*, 
                p.current_position_ms AS resume_position_ms
@@ -119,6 +122,7 @@ interface VideoDao {
     """)
     fun searchVideos(query: String): Flow<List<VideoWithMetadataTuple>>
 
+    // mirrors LibraryDerivation.isExcludedFromLibrary — update both together
     @Query("""
         SELECT folder_path, folder_name, COUNT(*) AS video_count, SUM(size_bytes) AS total_size_bytes
         FROM videos
@@ -193,6 +197,7 @@ interface VideoDao {
     @Query("SELECT id, uri FROM videos WHERE id LIKE 'fs_%'")
     suspend fun getAllFsVideos(): List<IdUriTuple>
 
+    // mirrors LibraryDerivation.isExcludedFromLibrary (purge variant) — update both together
     @Query("""
         DELETE FROM videos 
         WHERE folder_name = 'private' 

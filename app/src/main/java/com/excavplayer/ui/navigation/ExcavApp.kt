@@ -68,6 +68,7 @@ import kotlinx.coroutines.launch
 import com.excavplayer.R
 import com.excavplayer.ui.ExcavViewModel
 import com.excavplayer.ui.components.*
+import com.excavplayer.domain.derivation.LibraryDerivation
 import com.excavplayer.domain.model.Folder
 import com.excavplayer.ui.folders.*
 import com.excavplayer.ui.home.HomeScreen
@@ -103,11 +104,9 @@ fun ExcavApp(
         if (!restoredFolder && library.folders.isNotEmpty()) {
             val lastPath = settings.lastOpenedFolder
             if (lastPath != null && library.selectedFolder == null) {
-                val isSafOrExternal = lastPath.contains("SAF Files", ignoreCase = true) ||
-                        lastPath.contains("External Videos", ignoreCase = true) ||
-                        lastPath.contains("Selected Folder", ignoreCase = true) ||
-                        lastPath.startsWith("/storage/private")
-                if (!isSafOrExternal) {
+                if (LibraryDerivation.isExcludedFolderPath(lastPath)) {
+                    vm.setLastOpenedFolder(null)
+                } else {
                     val matched = library.folders.find { it.path == lastPath }
                     if (matched != null) {
                         vm.openFolder(matched)
@@ -115,8 +114,6 @@ fun ExcavApp(
                         val name = lastPath.trimEnd('/').substringAfterLast('/')
                         vm.openFolder(Folder(name = name, path = lastPath, videoCount = 0, totalSizeBytes = 0L))
                     }
-                } else {
-                    vm.setLastOpenedFolder(null)
                 }
             }
             restoredFolder = true

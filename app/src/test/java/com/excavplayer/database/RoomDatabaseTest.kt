@@ -128,4 +128,64 @@ class RoomDatabaseTest {
         // Foreign keys should cascade delete all associated records
         assertThat(playbackDao.getPlaybackState("v1")).isNull()
     }
+
+    // ── Exclusion-rule matrix ────────────────────────────────────────
+    // These queries mirror LibraryDerivation.isExcludedFromLibrary (see VideoDao).
+    // Each row of the matrix: the SQL must exclude exactly what the Kotlin
+    // predicate excludes for DB-shaped videos.
+
+    private fun excludedVideo(id: String, folderName: String, folderPath: String, uri: String? = null): VideoEntity =
+        createVideoEntity(id).copy(folderName = folderName, folderPath = folderPath, uri = uri ?: createVideoEntity(id).uri)
+
+    @Test
+    fun `observeAllVideosWithMetadata excludes special folders and keeps normal ones`() = runBlocking {
+        videoDao.insertVideos(
+            listOf(
+                createVideoEntity("normal"),
+                excludedVideo("ex1", "SAF Files", "/storage/emulated/0/SAF Files"),
+                excludedVideo("ex2", "External Videos", "External Videos"),
+                excludedVideo("ex3", "Selected Folder", "/storage/emulated/0/Selected Folder"),
+                excludedVideo("ex4", "private", "private"),
+                excludedVideo("ex5", "Movies", "/storage/private"),
+                excludedVideo("ex6", "Movies", "/storage/private/sub"),
+                excludedVideo("ex7", "Movies", "/x", uri = "content://com.android.providers.media.documents/document/1"),
+                excludedVideo("ex8", "Movies", "/x", uri = "content://com.android.externalstorage.documents/tree/1"),
+                excludedVideo("ex9", "Movies", "/x").copy(id = "saf_doc_1")
+            )
+        )
+
+        val visible = videoDao.observeAllVideosWithMetadata().first()
+        assertThat(visible.map { it.video.id }).containsExactly("normal").inOrder()
+    }
+
+    @Test
+    fun `observeFolders excludes special folders`() = runBlocking {
+        videoDao.insertVideos(
+            listOf(
+                createVideoEntity("normal").copy(folderName = "Movies", folderPath = "/storage/emulated/0/Movies"),
+                excludedVideo("ex1", "SAF Files", "SAF Files")
+            )
+        )
+
+        val folders = videoDao.observeFolders().first()
+        assertThat(folders.map { it.folderName }).containsExactly("Movies").inOrder()
+    }
+
+    @Test
+    fun `purgePrivateStorageVideos removes every excluded row`() = runBlocking {
+        videoDao.insertVideos(
+            listOf(
+                createVideoEntity("normal"),
+                excludedVideo("ex1", "private", "private"),
+                excludedVideo("ex2", "Movies", "/storage/private/x"),
+                excludedVideo("ex3", "SAF Files", "SAF Files"),
+                excludedVideo("ex4", "External Videos", "External Videos")
+            )
+        )
+
+        videoDao.purgePrivateStorageVideos()
+
+        val remaining = videoDao.getAllVideoIds()
+        assertThat(remaining).containsExactly("normal").inOrder()
+    }
 }
