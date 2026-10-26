@@ -210,7 +210,7 @@ fun ExcavApp(
                                     onRenameVideo = vm::renameVideo,
                                     onDeleteVideo = vm::deleteVideo,
                                     onDeleteVideos = { vm.deleteVideos(it) },
-                                    onDeleteFolders = { vm.deleteFolders(it, library.folderVideosMap) },
+                                    onDeleteFolders = { vm.deleteFolders(it) },
                                     onRenameFolder = { folder, newName -> vm.renameFolder(folder, newName) },
                                     gridState = foldersGridState,
                                     onSearch = { searchOpen = true },

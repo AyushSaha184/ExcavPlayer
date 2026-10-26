@@ -6,6 +6,8 @@ import com.excavplayer.core.logging.AppLogger
 import com.excavplayer.core.result.ExcavResult
 import com.excavplayer.domain.derivation.LibraryDerivation
 import com.excavplayer.domain.derivation.VideoGroup
+import com.excavplayer.domain.lifecycle.DeleteOutcome
+import com.excavplayer.domain.lifecycle.VideoLifecycle
 import com.excavplayer.domain.model.Folder
 import com.excavplayer.domain.model.RepeatMode
 import com.excavplayer.domain.model.UserSettings
@@ -32,16 +34,10 @@ import com.excavplayer.update.GitHubAsset
 import com.excavplayer.update.UpdateState
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
-import android.content.ContentResolver
 import android.content.Context
-import android.content.IntentSender
 import android.net.Uri
 import android.os.Build
-import android.provider.MediaStore
-import com.excavplayer.domain.model.MediaSourceType
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.receiveAsFlow
 import java.io.File
 import javax.inject.Inject
 import kotlinx.coroutines.flow.update
@@ -52,13 +48,6 @@ import com.excavplayer.subtitles.SubtitleSearchResult
 import com.excavplayer.subtitles.LanguageRegistry
 import com.excavplayer.subtitles.SubtitleLanguage
 import com.excavplayer.subtitles.SubtitleSource
-
-sealed interface DeleteRequestEvent {
-    data class MediaStoreDelete(
-        val intentSender: IntentSender,
-        val videoIds: List<String>
-    ) : DeleteRequestEvent
-}
 
 data class UserMessage(
     val id: Long = System.currentTimeMillis(),
@@ -95,6 +84,7 @@ data class OnlineSubtitleUiState(
 class ExcavViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val library: VideoLibrary,
+    private val lifecycle: VideoLifecycle,
     private val settings: SettingsRepository,
     val player: PlayerController,
     val queue: PlaybackQueue,
@@ -107,14 +97,19 @@ class ExcavViewModel @Inject constructor(
         private const val TAG = "ExcavViewModel"
     }
 
-    private val _deleteRequestEvents = Channel<DeleteRequestEvent>(Channel.BUFFERED)
-    val deleteRequestEvents = _deleteRequestEvents.receiveAsFlow()
+    /** System-approval delete requests waiting for the activity to fire the dialog. */
+    private val _pendingApproval = MutableStateFlow<DeleteOutcome.ApprovalRequired?>(null)
+    val pendingApproval: StateFlow<DeleteOutcome.ApprovalRequired?> = _pendingApproval.asStateFlow()
+
+    /** The activity consumes the approval right before firing the system dialog. */
+    fun onApprovalConsumed() {
+        _pendingApproval.value = null
+    }
 
     init {
         viewModelScope.launch {
             try {
-                library.purgeCorruptedEntries()
-                library.refresh(force = true)
+                lifecycle.refresh(force = true)
             } catch (e: Throwable) {
                 logger.w(TAG, "Startup media purge/refresh warning: ${e.message}")
             }
@@ -227,8 +222,7 @@ class ExcavViewModel @Inject constructor(
             _isRefreshing.value = true
             try {
                 logger.i(TAG, "User requested media library refresh")
-                library.purgeCorruptedEntries()
-                when (val result = library.refresh(force = true)) {
+                when (val result = lifecycle.refresh(force = true)) {
                     is ExcavResult.Success -> {
                         // Refreshed silently without toast banner
                     }
@@ -310,59 +304,21 @@ class ExcavViewModel @Inject constructor(
             if (videos.isEmpty()) return@launch
             logger.i(TAG, "deleteVideos: ${videos.size} items")
 
-            val mediaStoreUris = mutableListOf<Uri>()
-            val mediaStoreIds = mutableListOf<String>()
-            val directVideos = mutableListOf<Video>()
-
-            for (v in videos) {
-                val uri = Uri.parse(v.uri)
-                val isMediaStore = uri.scheme == ContentResolver.SCHEME_CONTENT &&
-                    v.sourceType != MediaSourceType.LOCAL_DOCUMENT &&
-                    v.sourceType != MediaSourceType.LOCAL_TREE
-
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && isMediaStore) {
-                    mediaStoreUris.add(uri)
-                    mediaStoreIds.add(v.id)
-                } else {
-                    directVideos.add(v)
-                }
-            }
-
-            var directSuccess = 0
-            for (vid in directVideos) {
-                when (library.deleteVideo(vid.id)) {
-                    is ExcavResult.Success -> directSuccess++
-                    else -> Unit
-                }
-            }
-
-            if (mediaStoreUris.isNotEmpty()) {
-                try {
-                    val pendingIntent = MediaStore.createDeleteRequest(context.contentResolver, mediaStoreUris)
-                    _deleteRequestEvents.send(
-                        DeleteRequestEvent.MediaStoreDelete(
-                            pendingIntent.intentSender,
-                            mediaStoreIds
-                        )
-                    )
-                } catch (e: Exception) {
-                    logger.e(TAG, "Failed to create MediaStore delete request", e)
-                    showMessage("Failed to request deletion: ${e.message}", isError = true)
-                }
-            } else if (directVideos.isNotEmpty()) {
-                if (directSuccess == directVideos.size) {
-                    showMessage("${directVideos.size} ${if (directVideos.size == 1) "video" else "videos"} deleted")
-                } else {
-                    showMessage("Deleted $directSuccess of ${directVideos.size} videos")
-                }
+            when (val outcome = lifecycle.deleteVideos(videos)) {
+                is DeleteOutcome.ApprovalRequired -> _pendingApproval.value = outcome
+                is DeleteOutcome.Deleted ->
+                    showMessage("${videos.size} ${if (videos.size == 1) "video" else "videos"} deleted")
+                is DeleteOutcome.Partial ->
+                    showMessage("Deleted ${outcome.deletedIds.size} of ${videos.size} videos")
             }
         }
     }
 
     fun onDeleteConfirmed(videoIds: List<String>) {
         viewModelScope.launch {
+            _pendingApproval.value = null
             logger.i(TAG, "onDeleteConfirmed for ${videoIds.size} videos")
-            when (val res = library.deleteVideosAfterConfirmation(videoIds)) {
+            when (val res = lifecycle.finalizeApprovedDeletion(videoIds)) {
                 is ExcavResult.Success -> {
                     showMessage("${videoIds.size} ${if (videoIds.size == 1) "video" else "videos"} deleted")
                 }
@@ -374,7 +330,12 @@ class ExcavViewModel @Inject constructor(
         }
     }
 
-    fun deleteFolders(folders: List<Folder>, folderVideosMap: Map<String, List<Video>>) {
+    /**
+     * Folder deletion: descendants come from the fresh library state via the
+     * folder-path prefix match, then the whole batch goes through the same
+     * deleteVideos pipeline. No stale folder-videos map involved.
+     */
+    fun deleteFolders(folders: List<Folder>) {
         viewModelScope.launch {
             if (folders.isEmpty()) return@launch
             logger.i(TAG, "deleteFolders: ${folders.size} folders")
@@ -386,12 +347,7 @@ class ExcavViewModel @Inject constructor(
                     val vNorm = LibraryDerivation.normalizeFolderPath(it.folderPath)
                     vNorm == normP || vNorm.startsWith("$normP/")
                 }
-                if (matching.isNotEmpty()) {
-                    allVids.addAll(matching)
-                } else {
-                    val fallback = folderVideosMap[normP] ?: folderVideosMap[f.name.lowercase()].orEmpty()
-                    allVids.addAll(fallback)
-                }
+                allVids.addAll(matching)
             }
             val distinctVids = allVids.distinctBy { it.id }
             if (distinctVids.isNotEmpty()) {

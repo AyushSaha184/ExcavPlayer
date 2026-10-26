@@ -21,6 +21,7 @@ interface VideoDao {
           AND v.folder_name != 'External Videos'
           AND v.folder_path != 'External Videos'
           AND v.folder_path NOT LIKE '%External Videos%'
+          AND (v.folder_name != 'External' OR v.folder_path != 'External') -- transient shared-in sentinel
           AND v.folder_name != 'SAF Files'
           AND v.folder_path != 'SAF Files'
           AND v.folder_path NOT LIKE '%SAF Files%'
@@ -49,6 +50,7 @@ interface VideoDao {
           AND v.folder_name != 'External Videos'
           AND v.folder_path != 'External Videos'
           AND v.folder_path NOT LIKE '%External Videos%'
+          AND (v.folder_name != 'External' OR v.folder_path != 'External') -- transient shared-in sentinel
           AND v.folder_name != 'SAF Files'
           AND v.folder_path != 'SAF Files'
           AND v.folder_path NOT LIKE '%SAF Files%'
@@ -130,6 +132,7 @@ interface VideoDao {
           AND folder_name != 'External Videos'
           AND folder_path != 'External Videos'
           AND folder_path NOT LIKE '%External Videos%'
+          AND (folder_name != 'External' OR folder_path != 'External') -- transient shared-in sentinel
           AND folder_name != 'SAF Files'
           AND folder_path != 'SAF Files'
           AND folder_path NOT LIKE '%SAF Files%'
@@ -209,6 +212,7 @@ interface VideoDao {
            OR folder_name = 'External Videos'
            OR folder_path = 'External Videos'
            OR folder_path LIKE '%External Videos%'
+           OR (folder_name = 'External' AND folder_path = 'External') -- transient shared-in sentinel
            OR folder_name = 'SAF Files'
            OR folder_path = 'SAF Files'
            OR folder_path LIKE '%SAF Files%'

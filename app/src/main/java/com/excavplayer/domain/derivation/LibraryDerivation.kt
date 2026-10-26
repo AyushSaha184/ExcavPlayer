@@ -40,6 +40,13 @@ object LibraryDerivation {
         "External Videos", "SAF Files", "Selected Folder", "private"
     )
 
+    /**
+     * Sentinel folder of transient shared-in videos (played without library
+     * registration). Excluded only on the exact name+path pair so real user
+     * folders that merely contain the word "External" are untouched.
+     */
+    const val TRANSIENT_EXTERNAL_FOLDER = "External"
+
     private val NOISE_TAGS = setOf(
         "1080p", "720p", "480p", "360p", "2160p", "4k", "uhd", "fhd", "hd",
         "x264", "x265", "h264", "h265", "hevc", "avc", "10bit", "8bit",
@@ -84,6 +91,7 @@ object LibraryDerivation {
     fun isExcludedFromLibrary(video: Video): Boolean {
         return video.id.startsWith("saf_") ||
             video.id.startsWith("transient_") ||
+            (video.folderName == TRANSIENT_EXTERNAL_FOLDER && video.folderPath == TRANSIENT_EXTERNAL_FOLDER) ||
             isExcludedFolderPath(video.folderPath) ||
             isExcludedFolderName(video.folderName) ||
             video.uri.startsWith("/storage/private") ||

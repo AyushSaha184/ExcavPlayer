@@ -2,6 +2,7 @@ package com.excavplayer
 
 import android.Manifest
 import android.content.Intent
+import android.content.IntentSender
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.net.Uri
@@ -30,7 +31,6 @@ import com.excavplayer.library.VideoLibrary
 import com.excavplayer.media.thumbnail.ThumbnailLoader
 import com.excavplayer.player.core.PlayerController
 import com.excavplayer.player.playback.PipHelper
-import com.excavplayer.ui.DeleteRequestEvent
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
@@ -44,9 +44,6 @@ class MainActivity : ComponentActivity() {
     lateinit var playerController: PlayerController
 
     @Inject
-    lateinit var videoLibrary: VideoLibrary
-
-    @Inject
     lateinit var pipHelper: PipHelper
 
     @Inject
@@ -57,6 +54,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var logger: AppLogger
+
+    @Inject
+    lateinit var videoLifecycle: com.excavplayer.domain.lifecycle.VideoLifecycle
 
     private var pendingDeleteIds: List<String> = emptyList()
 
@@ -108,10 +108,7 @@ class MainActivity : ComponentActivity() {
             if (isExternalLaunch) {
                 handleIncomingIntent(intent)
             }
-            lifecycleScope.launch {
-                videoLibrary.purgeCorruptedEntries()
-                videoLibrary.refresh(force = true)
-            }
+            fullLibraryRefresh()
         } else {
             logger.w("MainActivity", "Some permissions were denied: $permissions")
         }
@@ -122,10 +119,7 @@ class MainActivity : ComponentActivity() {
     ) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && android.os.Environment.isExternalStorageManager()) {
             logger.i("MainActivity", "All files access granted, triggering media sync")
-            lifecycleScope.launch {
-                videoLibrary.purgeCorruptedEntries()
-                videoLibrary.refresh(force = true)
-            }
+            fullLibraryRefresh()
         }
     }
 
@@ -175,14 +169,14 @@ class MainActivity : ComponentActivity() {
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.deleteRequestEvents.collect { event ->
-                    when (event) {
-                        is DeleteRequestEvent.MediaStoreDelete -> {
-                            pendingDeleteIds = event.videoIds
-                            deleteMediaLauncher.launch(
-                                IntentSenderRequest.Builder(event.intentSender).build()
-                            )
-                        }
+                viewModel.pendingApproval.collect { approval ->
+                    if (approval != null) {
+                        // Consume before launching so the approval fires exactly once
+                        viewModel.onApprovalConsumed()
+                        pendingDeleteIds = approval.videoIds
+                        deleteMediaLauncher.launch(
+                            IntentSenderRequest.Builder(approval.senderHandle as IntentSender).build()
+                        )
                     }
                 }
             }
@@ -279,8 +273,8 @@ class MainActivity : ComponentActivity() {
                         dateModifiedSeconds = System.currentTimeMillis() / 1000,
                         width = 0,
                         height = 0,
-                        folderName = "External",
-                        folderPath = "External",
+                        folderName = com.excavplayer.domain.derivation.LibraryDerivation.TRANSIENT_EXTERNAL_FOLDER,
+                        folderPath = com.excavplayer.domain.derivation.LibraryDerivation.TRANSIENT_EXTERNAL_FOLDER,
                         relativePath = "",
                         sourceType = com.excavplayer.domain.model.MediaSourceType.LOCAL_DOCUMENT,
                         availability = com.excavplayer.domain.model.MediaAvailability.AVAILABLE
@@ -294,13 +288,15 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** The single full-refresh funnel: purge transient entries, then sync. */
+    private fun fullLibraryRefresh() {
+        lifecycleScope.launch { videoLifecycle.refresh(force = true) }
+    }
+
     override fun onResume() {
         super.onResume()
         if (checkHasStoragePermission()) {
-            lifecycleScope.launch {
-                videoLibrary.purgeCorruptedEntries()
-                videoLibrary.refresh(force = true)
-            }
+            fullLibraryRefresh()
         }
     }
 
@@ -348,7 +344,7 @@ class MainActivity : ComponentActivity() {
                     } catch (_: Exception) {}
                 }
             }
-            lifecycleScope.launch { videoLibrary.refresh() }
+            lifecycleScope.launch { videoLifecycle.refresh(force = false) }
         }
     }
 

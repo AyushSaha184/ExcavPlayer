@@ -1,8 +1,10 @@
 package com.excavplayer.data.repository.di
 
 import com.excavplayer.data.datastore.SettingsRepositoryImpl
+import com.excavplayer.data.lifecycle.VideoLifecycleImpl
 import com.excavplayer.data.repository.PlaybackRepositoryImpl
 import com.excavplayer.data.repository.VideoRepositoryImpl
+import com.excavplayer.domain.lifecycle.VideoLifecycle
 import com.excavplayer.domain.repository.PlaybackRepository
 import com.excavplayer.domain.repository.SettingsRepository
 import com.excavplayer.domain.repository.VideoRepository
@@ -27,4 +29,8 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindSettingsRepository(impl: SettingsRepositoryImpl): SettingsRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindVideoLifecycle(impl: VideoLifecycleImpl): VideoLifecycle
 }
