@@ -54,8 +54,10 @@ fun SearchScreen(
 
     LaunchedEffect(Unit) {
         kotlinx.coroutines.delay(100)
-        focusRequester.requestFocus()
-        keyboardController?.show()
+        runCatching {
+            focusRequester.requestFocus()
+            keyboardController?.show()
+        }
     }
 
     Box(
@@ -142,7 +144,7 @@ fun SearchScreen(
                     modifier = Modifier
                         .weight(1f)
                         .height(40.dp)
-                        .liquidGlass(shape = pillShape)
+                        .lightweightLiquidGlass(shape = pillShape)
                         .border(
                             width = 0.5.dp,
                             color = Color.White.copy(alpha = 0.16f),
