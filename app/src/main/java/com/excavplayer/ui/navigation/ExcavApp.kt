@@ -29,6 +29,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -827,9 +828,73 @@ fun BackgroundPlayPill(
     val playback = playerState.playback
     val pillShape = remember { RoundedCornerShape(percent = 50) }
 
+    val swipeOffsetX = remember { androidx.compose.animation.core.Animatable(0f) }
+    val coroutineScope = rememberCoroutineScope()
+    var isDismissed by remember { mutableStateOf(false) }
+
+    LaunchedEffect(currentVideo.id) {
+        swipeOffsetX.snapTo(0f)
+        isDismissed = false
+    }
+
+    if (isDismissed) return
+
     Box(
         modifier = modifier
             .height(62.dp)
+            .graphicsLayer {
+                val translation = swipeOffsetX.value
+                translationX = translation
+                // Fade out smoothly as dragged past threshold (100dp)
+                val dragDistance = kotlin.math.abs(translation)
+                alpha = (1f - (dragDistance / 280f)).coerceIn(0f, 1f)
+            }
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragEnd = {
+                        val offset = swipeOffsetX.value
+                        val thresholdPx = 110.dp.toPx()
+                        if (kotlin.math.abs(offset) > thresholdPx) {
+                            coroutineScope.launch {
+                                val target = if (offset > 0) size.width.toFloat() * 1.5f else -size.width.toFloat() * 1.5f
+                                swipeOffsetX.animateTo(
+                                    targetValue = target,
+                                    animationSpec = tween(180, easing = FastOutSlowInEasing)
+                                )
+                                isDismissed = true
+                                vm.player.stop()
+                            }
+                        } else {
+                            coroutineScope.launch {
+                                swipeOffsetX.animateTo(
+                                    targetValue = 0f,
+                                    animationSpec = spring(
+                                        dampingRatio = 0.76f,
+                                        stiffness = Spring.StiffnessMediumLow
+                                    )
+                                )
+                            }
+                        }
+                    },
+                    onDragCancel = {
+                        coroutineScope.launch {
+                            swipeOffsetX.animateTo(
+                                targetValue = 0f,
+                                animationSpec = spring(
+                                    dampingRatio = 0.76f,
+                                    stiffness = Spring.StiffnessMediumLow
+                                )
+                            )
+                        }
+                    },
+                    onHorizontalDrag = { change: androidx.compose.ui.input.pointer.PointerInputChange, dragAmount: Float ->
+                        change.consume()
+                        coroutineScope.launch {
+                            swipeOffsetX.snapTo(swipeOffsetX.value + dragAmount)
+                        }
+                    }
+                )
+            }
             .liquidGlass(shape = pillShape)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },

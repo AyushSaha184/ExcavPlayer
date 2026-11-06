@@ -325,11 +325,6 @@ fun HomeScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    // Persistent Brand Title: ExcavPlayer Logo + Wordmark matching BitChord
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        HomeBrandTitle()
-                    }
-
                     // Storage Permission Warning Banner if permission is not granted
                     if (!hasStoragePermission) {
                         item(span = { GridItemSpan(maxLineSpan) }) {

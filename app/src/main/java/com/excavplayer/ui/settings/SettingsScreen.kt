@@ -505,11 +505,12 @@ private fun SettingsSectionHeader(title: String) {
 
 @Composable
 private fun SettingsCardContainer(content: @Composable ColumnScope.() -> Unit) {
+    val cardBorder = com.excavplayer.ui.components.adaptiveCardBorder()
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .clip(ExcavShapes.Card)
-            .border(1.dp, ExcavPalette.Line, ExcavShapes.Card),
+            .border(cardBorder, ExcavShapes.Card),
         color = ExcavPalette.SurfaceCard,
         content = { Column(content = content) }
     )

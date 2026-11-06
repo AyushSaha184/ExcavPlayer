@@ -1,6 +1,7 @@
 package com.excavplayer.ui.components
 
 import android.os.Build
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CornerBasedShape
@@ -51,6 +52,28 @@ private const val GLASS_RESOLUTION_SCALE = 0.33f
 
 internal val GLASS_EDGE_WIDTH = 0.5.dp
 internal val GLASS_EDGE_COLOR = Color.White.copy(alpha = 0.12f)
+
+/**
+ * Returns the adaptive border stroke used across card, folder, and item containers:
+ * - Liquid glass enabled: crisp refraction-style luminous white hairline border (GLASS_EDGE_COLOR)
+ * - Liquid glass off: neutral line border (ExcavPalette.Line)
+ */
+@Composable
+fun adaptiveCardBorder(
+    isSelected: Boolean = false,
+    selectedColor: Color = ExcavPalette.Gray
+): BorderStroke {
+    val isGlass = LocalLiquidGlassEnabled.current && isGlassSupported()
+    return remember(isGlass, isSelected, selectedColor) {
+        if (isSelected) {
+            BorderStroke(1.5.dp, selectedColor)
+        } else if (isGlass) {
+            BorderStroke(0.75.dp, Color.White.copy(alpha = 0.22f))
+        } else {
+            BorderStroke(1.dp, ExcavPalette.Line)
+        }
+    }
+}
 
 @Composable
 fun glassContentColor(): Color =

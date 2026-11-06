@@ -235,42 +235,36 @@ fun BrandHeader(
                 .padding(start = 18.dp, end = 18.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            AnimatedVisibility(
-                visible = isSelectionMode,
-                enter = fadeIn(tween(180)) + scaleIn(initialScale = 0.95f),
-                exit = fadeOut(tween(140))
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (iconBitmap != null) {
-                        Image(
-                            bitmap = iconBitmap,
-                            contentDescription = stringResource(R.string.cd_logo),
-                            modifier = Modifier
-                                .size(38.dp)
-                                .clip(RoundedCornerShape(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (iconBitmap != null) {
+                    Image(
+                        bitmap = iconBitmap,
+                        contentDescription = stringResource(R.string.cd_logo),
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                    )
+                } else {
+                    Image(
+                        painter = painterResource(id = R.mipmap.ic_launcher_foreground),
+                        contentDescription = stringResource(R.string.cd_logo),
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                    )
+                }
+                AnimatedVisibility(
+                    visible = isSelectionMode,
+                    enter = fadeIn(tween(180)) + scaleIn(initialScale = 0.95f),
+                    exit = fadeOut(tween(140))
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            text = "$selectedCount selected",
+                            color = ExcavPalette.Text,
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         )
-                    } else {
-                        Image(
-                            painter = painterResource(id = R.mipmap.ic_launcher_foreground),
-                            contentDescription = stringResource(R.string.cd_logo),
-                            modifier = Modifier
-                                .size(38.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                        )
-                    }
-                    AnimatedVisibility(
-                        visible = isSelectionMode,
-                        enter = fadeIn(tween(180)) + scaleIn(initialScale = 0.95f),
-                        exit = fadeOut(tween(140))
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Spacer(Modifier.width(12.dp))
-                            Text(
-                                text = "$selectedCount selected",
-                                color = ExcavPalette.Text,
-                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                            )
-                        }
                     }
                 }
             }
@@ -726,6 +720,7 @@ fun VideoCard(
         label = "selectionAlpha"
     )
 
+    val cardBorder = adaptiveCardBorder(isSelected = isSelected)
     Surface(
         modifier = modifier
             .fillMaxWidth()
@@ -734,9 +729,8 @@ fun VideoCard(
             }
             .clip(ExcavShapes.Card)
             .border(
-                if (isSelected) 1.5.dp else 1.dp,
-                if (isSelected) ExcavPalette.Gray else ExcavPalette.Line,
-                ExcavShapes.Card
+                border = cardBorder,
+                shape = ExcavShapes.Card
             )
             .tactilePress(
                 onClick = onClick,
@@ -1052,6 +1046,7 @@ fun GroupCard(
         label = "selectionAlpha"
     )
 
+    val cardBorder = adaptiveCardBorder(isSelected = isSelected)
     Surface(
         modifier = modifier
             .fillMaxWidth()
@@ -1060,15 +1055,14 @@ fun GroupCard(
             }
             .clip(cardShape)
             .border(
-                if (isSelected) 1.5.dp else 1.dp,
-                if (isSelected) ExcavPalette.Gray else Color(0xFF282F3B),
-                cardShape
+                border = cardBorder,
+                shape = cardShape
             )
             .tactilePress(
                 onClick = onClick,
                 onLongClick = onLongClick
             ),
-        color = if (isSelected) Color(0xFF1E2430) else Color(0xFF13171F)
+        color = if (isSelected) ExcavPalette.SurfaceCardHighlight else ExcavPalette.SurfaceCard
     ) {
         Column(
             modifier = Modifier.fillMaxWidth()
@@ -1185,6 +1179,7 @@ fun ContinueWatchingRowCard(
         label = "selectionAlpha"
     )
 
+    val cardBorder = adaptiveCardBorder(isSelected = isSelected)
     Surface(
         modifier = modifier
             .width(220.dp)
@@ -1193,9 +1188,8 @@ fun ContinueWatchingRowCard(
             }
             .clip(ExcavShapes.Card)
             .border(
-                if (isSelected) 1.5.dp else 1.dp,
-                if (isSelected) ExcavPalette.Gray else ExcavPalette.Line,
-                ExcavShapes.Card
+                border = cardBorder,
+                shape = ExcavShapes.Card
             )
             .tactilePress(
                 onClick = onClick,
@@ -1327,6 +1321,7 @@ fun FolderCard(
         label = "selectionAlpha"
     )
 
+    val cardBorder = adaptiveCardBorder(isSelected = isSelected)
     Surface(
         modifier = modifier
             .fillMaxWidth()
@@ -1335,15 +1330,14 @@ fun FolderCard(
             }
             .clip(cardShape)
             .border(
-                if (isSelected) 1.5.dp else 1.dp,
-                if (isSelected) ExcavPalette.Gray else Color(0xFF282F3B),
-                cardShape
+                border = cardBorder,
+                shape = cardShape
             )
             .tactilePress(
                 onClick = onClick,
                 onLongClick = onLongClick
             ),
-        color = if (isSelected) Color(0xFF1E2430) else Color(0xFF13171F)
+        color = if (isSelected) ExcavPalette.SurfaceCardHighlight else ExcavPalette.SurfaceCard
     ) {
         Column(
             modifier = Modifier.fillMaxWidth()
@@ -1566,6 +1560,7 @@ fun ListVideoRow(
         label = "selectionAlpha"
     )
 
+    val rowBorder = adaptiveCardBorder(isSelected = isSelected)
     Surface(
         modifier = modifier
             .fillMaxWidth()
@@ -1574,9 +1569,8 @@ fun ListVideoRow(
             }
             .clip(ExcavShapes.Row)
             .border(
-                if (isSelected) 1.5.dp else 1.dp,
-                if (isSelected) ExcavPalette.Gray else ExcavPalette.Line,
-                ExcavShapes.Row
+                border = rowBorder,
+                shape = ExcavShapes.Row
             )
             .tactilePress(
                 onClick = onClick,
@@ -2440,8 +2434,8 @@ fun RenameVideoDialog(
                         unfocusedBorderColor = ExcavPalette.Line,
                         focusedTextColor = ExcavPalette.Text,
                         unfocusedTextColor = ExcavPalette.Text,
-                        focusedContainerColor = Color(0x33141822),
-                        unfocusedContainerColor = Color(0x33141822)
+                        focusedContainerColor = ExcavPalette.SurfaceCardHighlight,
+                        unfocusedContainerColor = ExcavPalette.SurfaceCardHighlight
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )

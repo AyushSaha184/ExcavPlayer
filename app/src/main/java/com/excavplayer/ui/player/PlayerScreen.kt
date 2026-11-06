@@ -48,6 +48,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import com.excavplayer.ui.components.glassDialogSurface
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -135,7 +136,7 @@ private fun rubberClamp(raw: Float, limit: Float): Float {
 @Composable
 private fun Modifier.playerGlass(
     shape: androidx.compose.foundation.shape.CornerBasedShape = CircleShape,
-    fallbackBg: Color = Color(0xA6141822)
+    fallbackBg: Color = ExcavPalette.SurfaceCard
 ): Modifier = this.lightweightLiquidGlass(shape = shape, fallbackColor = fallbackBg)
 
 @Composable
@@ -1708,10 +1709,8 @@ private fun SheetContainer(
                     )
                     .heightIn(max = (maxSheetHeight * 0.88f).coerceAtLeast(200.dp))
                     .clip(RoundedCornerShape(22.dp))
-                    .darkUltraThinBlur(
-                        shape = RoundedCornerShape(22.dp),
-                        backgroundColor = Color(0xF20E121B),
-                        strokeColor = Color.White.copy(alpha = 0.20f)
+                    .glassDialogSurface(
+                        shape = RoundedCornerShape(22.dp)
                     )
             ) {
                 AnimatedContent(
@@ -2566,7 +2565,7 @@ fun SeekbarPreviewPopup(
                     .height(popupHeight)
                     .clip(RoundedCornerShape(12.dp))
                     .border(1.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(12.dp))
-                    .background(Color(0xE6121622))
+                    .background(ExcavPalette.SurfaceCard)
             ) {
                 // Extracted Frame or Placeholder
                 val bmp = previewBitmap
@@ -2581,7 +2580,7 @@ fun SeekbarPreviewPopup(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(Color(0xFF181E2C)),
+                            .background(ExcavPalette.SurfaceCardHighlight),
                         contentAlignment = Alignment.Center
                     ) {
                         CircularProgressIndicator(
@@ -3217,10 +3216,10 @@ private fun EqBadge(
     Box(
         modifier = modifier
             .clip(CircleShape)
-            .background(if (active) ExcavPalette.Primary.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.04f))
+            .background(if (active) Color.White.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.04f))
             .border(
                 1.dp,
-                if (active) ExcavPalette.Primary.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.08f),
+                if (active) Color.White.copy(alpha = 0.28f) else Color.White.copy(alpha = 0.08f),
                 CircleShape
             )
             .padding(horizontal = 8.dp, vertical = 7.dp),
@@ -3228,7 +3227,7 @@ private fun EqBadge(
     ) {
         Text(
             text = label,
-            color = if (active) ExcavPalette.Primary else ExcavPalette.TextMuted,
+            color = if (active) Color.White else ExcavPalette.TextMuted,
             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold, fontSize = 10.5.sp),
             textAlign = TextAlign.Center
         )
@@ -3324,7 +3323,7 @@ private fun SubtitleCustomizationSheet(
                 .clip(ExcavShapes.CardInner)
                 .background(
                     Brush.verticalGradient(
-                        listOf(Color(0xFF1B2333), Color(0xFF0E131F))
+                        listOf(ExcavPalette.SurfaceCardHighlight, ExcavPalette.SurfaceCard)
                     )
                 )
                 .border(1.dp, Color.White.copy(alpha = 0.12f), ExcavShapes.CardInner),
@@ -3488,15 +3487,12 @@ private fun SegmentedAnimatedPillBar(
     ) {
         Layout(
             content = {
-                // Animated Highlight Pill Background with spring glide
+                // Animated Highlight Pill Background with spring glide (neutral gray surface highlight)
                 Box(
                     modifier = Modifier
                         .clip(ExcavShapes.Pill)
-                        .background(
-                            Brush.horizontalGradient(
-                                listOf(ExcavPalette.Primary, ExcavPalette.Primary.copy(alpha = 0.85f))
-                            )
-                        )
+                        .background(Color.White.copy(alpha = 0.16f))
+                        .border(0.5.dp, Color.White.copy(alpha = 0.25f), ExcavShapes.Pill)
                 )
                 // Segment items
                 options.forEachIndexed { index, label ->
@@ -3528,7 +3524,7 @@ private fun SegmentedAnimatedPillBar(
                             text = label,
                             color = if (isSelected) Color.White else ExcavPalette.TextMuted,
                             style = MaterialTheme.typography.labelMedium.copy(
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
                                 fontSize = fontSize,
                                 letterSpacing = (-0.2).sp
                             ),
