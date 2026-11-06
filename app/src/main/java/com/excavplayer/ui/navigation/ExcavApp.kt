@@ -150,7 +150,7 @@ fun ExcavApp(
                     modifier = Modifier
                         .fillMaxSize()
                         .hazeSource(state = hazeState)
-                        .then(if (useGlass && appBackdrop != null) Modifier.layerBackdrop(appBackdrop) else Modifier)
+                        .then(if (useGlass) Modifier.layerBackdrop(appBackdrop!!) else Modifier)
                 ) {
                     if (library.loading) {
                             Box(

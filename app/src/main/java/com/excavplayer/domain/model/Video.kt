@@ -23,7 +23,8 @@ data class Video(
     val relativePath: String = "",
     val sourceType: MediaSourceType = MediaSourceType.LOCAL_MEDIASTORE,
     val availability: MediaAvailability = MediaAvailability.AVAILABLE,
-    val resumePositionMs: Long? = null
+    val resumePositionMs: Long? = null,
+    val isCompleted: Boolean = false
 ) {
     val aspectRatio: Float
         get() = if (height > 0 && width > 0) width.toFloat() / height.toFloat() else 16f / 9f

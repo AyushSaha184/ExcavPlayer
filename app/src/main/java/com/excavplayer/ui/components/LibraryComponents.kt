@@ -194,30 +194,44 @@ fun BrandHeader(
                 .padding(start = 18.dp, end = 18.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (isSelectionMode) {
-                if (iconBitmap != null) {
-                    Image(
-                        bitmap = iconBitmap,
-                        contentDescription = stringResource(R.string.cd_logo),
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                    )
-                } else {
-                    Image(
-                        painter = painterResource(id = R.mipmap.ic_launcher_foreground),
-                        contentDescription = stringResource(R.string.cd_logo),
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                    )
+            AnimatedVisibility(
+                visible = isSelectionMode || isScrolled,
+                enter = fadeIn(tween(180)) + scaleIn(initialScale = 0.95f),
+                exit = fadeOut(tween(140))
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (iconBitmap != null) {
+                        Image(
+                            bitmap = iconBitmap,
+                            contentDescription = stringResource(R.string.cd_logo),
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                        )
+                    } else {
+                        Image(
+                            painter = painterResource(id = R.mipmap.ic_launcher_foreground),
+                            contentDescription = stringResource(R.string.cd_logo),
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                        )
+                    }
+                    AnimatedVisibility(
+                        visible = isSelectionMode,
+                        enter = fadeIn(tween(180)) + scaleIn(initialScale = 0.95f),
+                        exit = fadeOut(tween(140))
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                text = "$selectedCount selected",
+                                color = ExcavPalette.Text,
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                            )
+                        }
+                    }
                 }
-                Spacer(Modifier.width(12.dp))
-                Text(
-                    text = "$selectedCount selected",
-                    color = ExcavPalette.Text,
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                )
             }
             Spacer(Modifier.weight(1f))
             GlassmorphicHeaderActions(
@@ -327,7 +341,7 @@ fun FoldersBrandHeader(
                     .padding(start = 18.dp, end = 18.dp, top = 6.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (isSelectionMode) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     if (iconBitmap != null) {
                         Image(
                             bitmap = iconBitmap,
@@ -345,12 +359,20 @@ fun FoldersBrandHeader(
                                 .clip(RoundedCornerShape(12.dp))
                         )
                     }
-                    Spacer(Modifier.width(12.dp))
-                    Text(
-                        text = "$selectedCount selected",
-                        color = ExcavPalette.Text,
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                    )
+                    AnimatedVisibility(
+                        visible = isSelectionMode,
+                        enter = fadeIn(tween(180)) + scaleIn(initialScale = 0.95f),
+                        exit = fadeOut(tween(140))
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                text = "$selectedCount selected",
+                                color = ExcavPalette.Text,
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                            )
+                        }
+                    }
                 }
                 Spacer(Modifier.weight(1f))
                 GlassmorphicHeaderActions(

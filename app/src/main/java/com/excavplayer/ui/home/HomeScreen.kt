@@ -604,11 +604,5 @@ fun HomeBrandTitle(
                 .aspectRatio(1f)
                 .clip(RoundedCornerShape(12.dp))
         )
-        Spacer(Modifier.width(14.dp))
-        Text(
-            text = "ExcavPlayer",
-            style = style.copy(fontWeight = FontWeight.Bold),
-            color = MaterialTheme.colorScheme.onBackground
-        )
     }
 }
