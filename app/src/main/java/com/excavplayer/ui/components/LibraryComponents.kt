@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.CornerBasedShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -42,6 +43,7 @@ import androidx.compose.material3.ripple
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.animation.animateColorAsState
@@ -127,6 +129,45 @@ fun Modifier.tactilePress(
 }
 
 @Composable
+fun Modifier.glassMenu(
+    shape: CornerBasedShape = RoundedCornerShape(14.dp)
+): Modifier = composed {
+    val isGlass = LocalLiquidGlassEnabled.current && isGlassSupported()
+    val removeDynamicBlur = LocalRemoveDynamicBlur.current
+    when {
+        isGlass -> Modifier.liquidGlass(shape = shape)
+        removeDynamicBlur -> Modifier
+            .clip(shape)
+            .background(ExcavPalette.SurfaceCard)
+            .border(1.dp, Color.White.copy(alpha = 0.16f), shape)
+        else -> Modifier.darkUltraThinBlur(
+            shape = shape,
+            backgroundColor = Color(0xF21C1C1E),
+            strokeColor = Color.White.copy(alpha = 0.16f)
+        )
+    }
+}
+
+fun Modifier.glassDialogSurface(
+    shape: CornerBasedShape = RoundedCornerShape(22.dp)
+): Modifier = composed {
+    val isGlass = LocalLiquidGlassEnabled.current && isGlassSupported()
+    val removeDynamicBlur = LocalRemoveDynamicBlur.current
+    when {
+        isGlass -> Modifier.liquidGlass(shape = shape)
+        removeDynamicBlur -> Modifier
+            .clip(shape)
+            .background(ExcavPalette.SurfaceCard)
+            .border(1.dp, Color.White.copy(alpha = 0.16f), shape)
+        else -> Modifier.darkUltraThinBlur(
+            shape = shape,
+            backgroundColor = Color(0xF21C1C1E),
+            strokeColor = Color.White.copy(alpha = 0.18f)
+        )
+    }
+}
+
+@Composable
 fun AnimatedDialogContainer(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit
@@ -195,7 +236,7 @@ fun BrandHeader(
             verticalAlignment = Alignment.CenterVertically
         ) {
             AnimatedVisibility(
-                visible = isSelectionMode || isScrolled,
+                visible = isSelectionMode,
                 enter = fadeIn(tween(180)) + scaleIn(initialScale = 0.95f),
                 exit = fadeOut(tween(140))
             ) {
@@ -584,9 +625,9 @@ fun BottomNav(
                                     imageVector = tab.icon,
                                     contentDescription = tab.label,
                                     tint = Color.White.copy(alpha = contentAlpha),
-                                    modifier = Modifier.size(24.dp)
+                                    modifier = Modifier.size(28.dp)
                                 )
-                                Spacer(Modifier.height(2.dp))
+                                Spacer(Modifier.height(1.dp))
                                 Text(
                                     text = tab.label,
                                     color = Color.White.copy(alpha = contentAlpha),
@@ -967,8 +1008,8 @@ fun GroupThumbnail(videos: List<Video>, modifier: Modifier = Modifier) {
             .background(
                 Brush.verticalGradient(
                     listOf(
-                        Color(0xFF2B3242),
-                        Color(0xFF1B202B)
+                        ExcavPalette.SurfaceCardHighlight,
+                        ExcavPalette.SurfaceCard
                     )
                 )
             ),
@@ -1838,11 +1879,7 @@ fun VideoOptionsMenu(
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
         border = null,
-        modifier = Modifier.darkUltraThinBlur(
-            shape = menuShape,
-            backgroundColor = Color(0xF2101216),
-            strokeColor = Color.White.copy(alpha = 0.16f)
-        )
+        modifier = Modifier.glassMenu(shape = menuShape)
     ) {
         if (onRemoveFromContinueWatching != null) {
             DropdownMenuItem(
@@ -1900,11 +1937,7 @@ fun VideoPropertiesDialog(video: Video, onDismiss: () -> Unit) {
             modifier = Modifier
                 .fillMaxWidth(0.90f)
                 .wrapContentHeight()
-                .darkUltraThinBlur(
-                    shape = RoundedCornerShape(22.dp),
-                    backgroundColor = Color(0xF210131B),
-                    strokeColor = Color.White.copy(alpha = 0.18f)
-                )
+                .glassDialogSurface(shape = RoundedCornerShape(22.dp))
                 .padding(22.dp)
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -1994,11 +2027,7 @@ fun BatchVideoOptionsMenu(
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
         border = null,
-        modifier = Modifier.darkUltraThinBlur(
-            shape = menuShape,
-            backgroundColor = Color(0xF2101216),
-            strokeColor = Color.White.copy(alpha = 0.16f)
-        )
+        modifier = Modifier.glassMenu(shape = menuShape)
     ) {
         if (selectedVideos.size == 1) {
             DropdownMenuItem(
@@ -2068,11 +2097,7 @@ fun BatchFolderOptionsMenu(
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
         border = null,
-        modifier = Modifier.darkUltraThinBlur(
-            shape = menuShape,
-            backgroundColor = Color(0xF2101216),
-            strokeColor = Color.White.copy(alpha = 0.16f)
-        )
+        modifier = Modifier.glassMenu(shape = menuShape)
     ) {
         // If multiple folders selected, remove rename option
         if (selectedFolders.size == 1 && onRename != null) {
@@ -2115,11 +2140,7 @@ fun MultiVideoPropertiesDialog(videos: List<Video>, onDismiss: () -> Unit) {
             modifier = Modifier
                 .fillMaxWidth(0.90f)
                 .wrapContentHeight()
-                .darkUltraThinBlur(
-                    shape = RoundedCornerShape(22.dp),
-                    backgroundColor = Color(0xF210131B),
-                    strokeColor = Color.White.copy(alpha = 0.18f)
-                )
+                .glassDialogSurface(shape = RoundedCornerShape(22.dp))
                 .padding(22.dp)
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -2178,11 +2199,7 @@ fun FolderPropertiesDialog(folders: List<Folder>, onDismiss: () -> Unit) {
             modifier = Modifier
                 .fillMaxWidth(0.90f)
                 .wrapContentHeight()
-                .darkUltraThinBlur(
-                    shape = RoundedCornerShape(22.dp),
-                    backgroundColor = Color(0xF210131B),
-                    strokeColor = Color.White.copy(alpha = 0.18f)
-                )
+                .glassDialogSurface(shape = RoundedCornerShape(22.dp))
                 .padding(22.dp)
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -2256,11 +2273,7 @@ fun BatchDeleteConfirmationDialog(
             modifier = Modifier
                 .fillMaxWidth(0.85f)
                 .wrapContentHeight()
-                .darkUltraThinBlur(
-                    shape = RoundedCornerShape(22.dp),
-                    backgroundColor = Color(0xF210131B),
-                    strokeColor = Color.White.copy(alpha = 0.18f)
-                )
+                .glassDialogSurface(shape = RoundedCornerShape(22.dp))
                 .padding(22.dp)
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -2325,11 +2338,7 @@ fun RenameFolderDialog(
             modifier = Modifier
                 .fillMaxWidth(0.90f)
                 .wrapContentHeight()
-                .darkUltraThinBlur(
-                    shape = RoundedCornerShape(22.dp),
-                    backgroundColor = Color(0xF210131B),
-                    strokeColor = Color.White.copy(alpha = 0.18f)
-                )
+                .glassDialogSurface(shape = RoundedCornerShape(22.dp))
                 .padding(22.dp)
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -2406,11 +2415,7 @@ fun RenameVideoDialog(
             modifier = Modifier
                 .fillMaxWidth(0.90f)
                 .wrapContentHeight()
-                .darkUltraThinBlur(
-                    shape = RoundedCornerShape(22.dp),
-                    backgroundColor = Color(0xF210131B),
-                    strokeColor = Color.White.copy(alpha = 0.18f)
-                )
+                .glassDialogSurface(shape = RoundedCornerShape(22.dp))
                 .padding(22.dp)
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -2484,11 +2489,7 @@ fun DeleteConfirmDialog(
             modifier = Modifier
                 .fillMaxWidth(0.90f)
                 .wrapContentHeight()
-                .darkUltraThinBlur(
-                    shape = RoundedCornerShape(22.dp),
-                    backgroundColor = Color(0xF210131B),
-                    strokeColor = Color.White.copy(alpha = 0.18f)
-                )
+                .glassDialogSurface(shape = RoundedCornerShape(22.dp))
                 .padding(22.dp)
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {

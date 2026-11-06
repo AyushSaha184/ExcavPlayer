@@ -33,4 +33,5 @@ interface SettingsRepository {
     suspend fun updateDialogueBoost(enabled: Boolean)
     suspend fun updateMatchDisplayRefreshRate(enabled: Boolean)
     suspend fun updateLiquidGlassEnabled(enabled: Boolean)
+    suspend fun updateRemoveDynamicBlur(enabled: Boolean)
 }

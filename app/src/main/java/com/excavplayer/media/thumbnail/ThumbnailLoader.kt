@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
@@ -15,7 +16,9 @@ import com.excavplayer.core.coroutine.DispatcherProvider
 import com.excavplayer.core.logging.AppLogger
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.anilbeesetti.nextlib.mediainfo.MediaThumbnailRetriever
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -28,6 +31,16 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.abs
 
+/**
+ * Production video thumbnail loader rebuilt from NextPlayer's VideoThumbnailDecoder pipeline:
+ * 1. L1 Memory Cache (bounded 1/8 heap)
+ * 2. L2 Disk Cache (persistent WEBP/JPEG storage)
+ * 3. Embedded Picture extraction (album art/poster/cover)
+ * 4. First frame extraction (t=0)
+ * 5. Solid color detection & rejection (10x10 inner grid sampling with RGB tolerance 30)
+ * 6. Percentage fallback (t=33% of video duration) when first frame is null or solid color
+ * 7. Dual retriever fallback: Android native MediaMetadataRetriever + NextLib MediaThumbnailRetriever (FFmpeg)
+ */
 @Singleton
 class ThumbnailLoader @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -37,15 +50,14 @@ class ThumbnailLoader @Inject constructor(
 
     companion object {
         private const val TAG = "ThumbnailLoader"
-        private const val DISK_CACHE_DIR = "thumbnails_v1"
-        private const val COMPRESSION_QUALITY = 85
-        private const val MAX_DISK_CACHE_SIZE_BYTES = 64L * 1024 * 1024 // 64 MB disk limit
+        private const val DISK_CACHE_DIR = "thumbnails_v2"
+        private const val COMPRESSION_QUALITY = 90
+        private const val MAX_DISK_CACHE_SIZE_BYTES = 64L * 1024 * 1024 // 64 MB
     }
 
-    private val diskCacheScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + dispatchers.io)
+    private val diskCacheScope = CoroutineScope(SupervisorJob() + dispatchers.io)
     private var lastTrimTimeMs = 0L
 
-    // Dynamic memory cache: 1/8th of available heap memory, clamped between 16MB and 64MB
     private val maxCacheSizeBytes = run {
         val maxMemory = Runtime.getRuntime().maxMemory()
         (maxMemory / 8).toInt().coerceIn(16 * 1024 * 1024, 64 * 1024 * 1024)
@@ -65,7 +77,6 @@ class ThumbnailLoader @Inject constructor(
         }
     }
 
-    // In-flight request deduplication map to prevent redundant concurrent decodes
     private val inFlightRequests = ConcurrentHashMap<String, Deferred<Bitmap?>>()
 
     init {
@@ -92,7 +103,7 @@ class ThumbnailLoader @Inject constructor(
         // 1. Check L1 Memory Cache
         memoryCache.get(cacheKey)?.let { return@withContext it }
 
-        // 2. Coalesce concurrent in-flight requests for the same key
+        // 2. Coalesce concurrent in-flight requests for identical cache key
         coroutineScope {
             var deferred = inFlightRequests[cacheKey]
             if (deferred == null) {
@@ -117,7 +128,7 @@ class ThumbnailLoader @Inject constructor(
         targetWidth: Int,
         targetHeight: Int
     ): Bitmap? {
-        // Double check L1 cache
+        // Double-check L1 memory cache
         memoryCache.get(cacheKey)?.let { return it }
 
         // 2. Check L2 Disk Cache
@@ -126,13 +137,14 @@ class ThumbnailLoader @Inject constructor(
             return diskBitmap
         }
 
-        // 3. Generate thumbnail from MediaStore / System / MediaMetadataRetriever / FFmpeg
+        // 3. Generate thumbnail using NextPlayer's hybrid extraction
         return try {
             val uri = Uri.parse(uriString)
             var bitmap: Bitmap? = null
 
+            // First: Quick platform MediaStore thumbnail check for content:// URIs
             if (uri.scheme == "content") {
-                bitmap = try {
+                try {
                     val contentThumb = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         context.contentResolver.loadThumbnail(uri, Size(targetWidth, targetHeight), null)
                     } else {
@@ -146,103 +158,83 @@ class ThumbnailLoader @Inject constructor(
                         )
                     }
                     if (contentThumb != null && !isSolidColor(contentThumb)) {
-                        contentThumb
+                        bitmap = contentThumb
                     } else {
                         contentThumb?.recycle()
-                        null
                     }
-                } catch (_: Throwable) {
-                    null
-                }
+                } catch (_: Throwable) {}
             }
 
+            // Dual retriever hybrid pipeline
             if (bitmap == null) {
-                val nativeRetriever = android.media.MediaMetadataRetriever()
+                val nativeRetriever = MediaMetadataRetriever()
                 var ffmpegRetriever: MediaThumbnailRetriever? = null
                 try {
-                    val path = uri.path?.let { Uri.decode(it) }
+                    setDataSourceSafe(nativeRetriever, uri, uriString)
                     try {
-                        if (uri.scheme == "file" && path != null) {
-                            nativeRetriever.setDataSource(path)
-                        } else if (uri.scheme == null && uriString.startsWith("/")) {
-                            nativeRetriever.setDataSource(uriString)
-                        } else {
-                            nativeRetriever.setDataSource(context, uri)
-                        }
-                    } catch (_: Throwable) {}
-
-                    try {
-                        ffmpegRetriever = MediaThumbnailRetriever().apply {
-                            if (uri.scheme == "file" && path != null) {
-                                setDataSource(path)
-                            } else if (uri.scheme == null && uriString.startsWith("/")) {
-                                setDataSource(uriString)
-                            } else {
-                                setDataSource(context, uri)
-                            }
-                        }
+                        val ffmpeg = MediaThumbnailRetriever()
+                        setDataSourceSafe(ffmpeg, uri, uriString)
+                        ffmpegRetriever = ffmpeg
                     } catch (_: Throwable) {
                         ffmpegRetriever = null
                     }
 
-                    // 1. First, try embedded picture (album art / poster / cover artwork)
-                    val embeddedPicture = try {
-                        nativeRetriever.embeddedPicture
-                    } catch (_: Throwable) { null }
-                        ?: try {
-                            ffmpegRetriever?.getEmbeddedPicture()
-                        } catch (_: Throwable) { null }
+                    // Step 1: Check embedded picture (album art / poster / cover artwork)
+                    val embeddedPicture = runCatching { nativeRetriever.embeddedPicture }.getOrNull()
+                        ?: runCatching { ffmpegRetriever?.getEmbeddedPicture() }.getOrNull()
 
                     val embeddedBitmap = embeddedPicture?.let { pictureBytes ->
-                        try {
+                        runCatching {
                             BitmapFactory.decodeByteArray(pictureBytes, 0, pictureBytes.size)
-                        } catch (_: Throwable) { null }
+                        }.getOrNull()
                     }
 
                     if (embeddedBitmap != null) {
                         bitmap = embeddedBitmap
                     } else {
-                        // 2. Video duration for offset calculation
-                        val videoDuration = try {
-                            nativeRetriever
-                                .extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)
-                                ?.toLongOrNull() ?: 0L
-                        } catch (_: Throwable) { 0L }
+                        // Video duration for percentage offset calculation
+                        val durationMs = runCatching {
+                            nativeRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
+                        }.getOrNull() ?: 0L
 
-                        // Helper to extract frame at timeUs
+                        // Helper to extract frame at timeUs using dual retrievers
                         fun extractFrame(timeUs: Long): Bitmap? {
                             var frame: Bitmap? = null
-                            try {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-                                    frame = nativeRetriever.getScaledFrameAtTime(
+                            // Try native scaled frame first (API 27+)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                                frame = runCatching {
+                                    nativeRetriever.getScaledFrameAtTime(
                                         timeUs,
-                                        android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
+                                        MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
                                         targetWidth,
                                         targetHeight
                                     )
-                                }
-                                if (frame == null) {
-                                    frame = nativeRetriever.getFrameAtTime(
+                                }.getOrNull()
+                            }
+                            if (frame == null) {
+                                frame = runCatching {
+                                    nativeRetriever.getFrameAtTime(
                                         timeUs,
-                                        android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC
+                                        MediaMetadataRetriever.OPTION_CLOSEST_SYNC
                                     )
-                                }
-                            } catch (_: Throwable) {}
-
+                                }.getOrNull()
+                            }
+                            // Fallback to FFmpeg retriever
                             if (frame == null && ffmpegRetriever != null) {
-                                try {
-                                    frame = ffmpegRetriever.getFrameAtTime(timeUs)
-                                } catch (_: Throwable) {}
+                                frame = runCatching {
+                                    ffmpegRetriever.getFrameAtTime(timeUs)
+                                }.getOrNull()
                             }
                             return frame
                         }
 
-                        // 3. Hybrid strategy: Try t=0 first, if null or solid-color (e.g. black intro), try 33%
+                        // Step 2 & 3: Try first frame (t = 0), test for solid color rejection
                         var frame = extractFrame(0L)
                         if (frame == null || isSolidColor(frame)) {
-                            if (videoDuration > 0) {
-                                val offsetUs = (videoDuration * 0.33f * 1000L).toLong()
-                                val secondFrame = extractFrame(offsetUs)
+                            // Step 4: Fallback to frame at 33% of duration
+                            if (durationMs > 0L) {
+                                val timeUs = (durationMs * 0.33f * 1000L).toLong()
+                                val secondFrame = extractFrame(timeUs)
                                 if (secondFrame != null) {
                                     frame?.recycle()
                                     frame = secondFrame
@@ -252,13 +244,20 @@ class ThumbnailLoader @Inject constructor(
                         bitmap = frame
                     }
                 } finally {
-                    try { nativeRetriever.release() } catch (_: Throwable) {}
-                    try { ffmpegRetriever?.release() } catch (_: Throwable) {}
+                    runCatching {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            nativeRetriever.close()
+                        } else {
+                            @Suppress("DEPRECATION")
+                            nativeRetriever.release()
+                        }
+                    }
+                    runCatching { ffmpegRetriever?.release() }
                 }
             }
 
             if (bitmap != null) {
-                // Scale if dimensions significantly exceed target dimensions
+                // Normalize and downsample if dimensions significantly exceed target dimensions
                 if (bitmap.width > targetWidth || bitmap.height > targetHeight) {
                     val scale = minOf(
                         targetWidth.toFloat() / bitmap.width,
@@ -277,7 +276,7 @@ class ThumbnailLoader @Inject constructor(
 
                 // Cache into L1 Memory immediately
                 memoryCache.put(cacheKey, bitmap)
-                // Cache into L2 Disk asynchronously without blocking UI return
+                // Save to L2 Disk asynchronously
                 diskCacheScope.launch {
                     saveToDiskCache(cacheKey, bitmap)
                 }
@@ -289,9 +288,34 @@ class ThumbnailLoader @Inject constructor(
         }
     }
 
+    private fun setDataSourceSafe(retriever: MediaMetadataRetriever, uri: Uri, uriString: String) {
+        val path = uri.path?.let { Uri.decode(it) }
+        when {
+            uri.scheme == "file" && path != null -> retriever.setDataSource(path)
+            uri.scheme == null && uriString.startsWith("/") -> retriever.setDataSource(uriString)
+            else -> retriever.setDataSource(context, uri)
+        }
+    }
+
+    private fun setDataSourceSafe(retriever: MediaThumbnailRetriever, uri: Uri, uriString: String) {
+        val path = uri.path?.let { Uri.decode(it) }
+        when {
+            uri.scheme == "file" && path != null -> retriever.setDataSource(path)
+            uri.scheme == null && uriString.startsWith("/") -> retriever.setDataSource(uriString)
+            else -> retriever.setDataSource(context, uri)
+        }
+    }
+
+    /**
+     * Checks if a bitmap is mostly a solid color.
+     * Samples a 10x10 grid inside the inner 80% boundary of the bitmap, comparing pixels against
+     * the reference color with an RGB tolerance of 30.
+     * Returns true if threshold (default 70%) or more of sampled pixels are similar.
+     */
     internal fun isSolidColor(bitmap: Bitmap, threshold: Float = 0.7f): Boolean {
         val width = bitmap.width
         val height = bitmap.height
+        if (width <= 0 || height <= 0) return true
 
         // Sample a grid in the center region (avoiding edges which may be black letterbox bars)
         val marginX = width / 10
@@ -299,7 +323,6 @@ class ThumbnailLoader @Inject constructor(
         val sampleAreaRight = width - marginX
         val sampleAreaBottom = height - marginY
 
-        // Create a grid of sample points
         val gridSize = 10
         val stepX = (sampleAreaRight - marginX) / gridSize
         val stepY = (sampleAreaBottom - marginY) / gridSize
@@ -320,13 +343,11 @@ class ThumbnailLoader @Inject constructor(
 
         if (sampledColors.isEmpty()) return false
 
-        // Use the first color as reference
         val referenceColor = sampledColors[0]
         val referenceR = (referenceColor shr 16) and 0xFF
         val referenceG = (referenceColor shr 8) and 0xFF
         val referenceB = referenceColor and 0xFF
 
-        // Count similar colors (within RGB tolerance of 30)
         val tolerance = 30
         val similarCount = sampledColors.count { color ->
             val r = (color shr 16) and 0xFF
@@ -356,7 +377,7 @@ class ThumbnailLoader @Inject constructor(
             val md = MessageDigest.getInstance("SHA-256")
             val digest = md.digest(key.toByteArray(Charsets.UTF_8))
             digest.joinToString("") { "%02x".format(it) }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             key.hashCode().toString()
         }
     }
@@ -416,6 +437,7 @@ class ThumbnailLoader @Inject constructor(
         listOf(
             buildCacheKey(uriString, 120, 90),
             buildCacheKey(uriString, 240, 160),
+            buildCacheKey(uriString, 320, 180),
             buildCacheKey(uriString, 360, 240),
             buildCacheKey(uriString, 480, 320)
         ).forEach { key ->
@@ -439,7 +461,6 @@ class ThumbnailLoader @Inject constructor(
         }
     }
 
-    // ComponentCallbacks2 memory trimming
     @Suppress("DEPRECATION")
     override fun onTrimMemory(level: Int) {
         when (level) {

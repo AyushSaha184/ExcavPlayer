@@ -26,8 +26,13 @@ import com.excavplayer.ui.components.backdrop.highlight.HighlightElement
 import com.excavplayer.ui.components.backdrop.internal.ShapeProvider
 import com.excavplayer.ui.components.backdrop.shadow.Shadow
 
+import com.excavplayer.ui.theme.ExcavPalette
+
 /** Whether liquid glass is enabled — backed by user settings. */
 val LocalLiquidGlassEnabled = staticCompositionLocalOf { false }
+
+/** Whether dynamic blur is completely removed (solid colors used) when liquid glass is off. */
+val LocalRemoveDynamicBlur = staticCompositionLocalOf { false }
 
 /** The backdrop content (app UI) that a liquid glass surface samples from. */
 val LocalAppBackdrop = staticCompositionLocalOf<Backdrop?> { null }
@@ -62,7 +67,7 @@ fun glassIndicatorColor(): Color =
 @Composable
 fun Modifier.lightweightLiquidGlass(
     shape: CornerBasedShape,
-    fallbackColor: Color = Color(0x66141720),
+    fallbackColor: Color = Color(0xF21C1C1E),
 ): Modifier {
     val useGlass = LocalLiquidGlassEnabled.current && isGlassSupported()
     val glassTint = if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) {
@@ -112,10 +117,15 @@ fun Modifier.liquidGlass(
     surfaceTint: Color? = null,
 ): Modifier {
     val isEnabled = LocalLiquidGlassEnabled.current && isGlassSupported()
+    val removeDynamicBlur = LocalRemoveDynamicBlur.current
     val backdrop = LocalAppBackdrop.current
     if (!isEnabled || backdrop == null) {
-        // Fallback to translucent dark surface with border
-        val fallbackTint = surfaceTint ?: MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f)
+        // Fallback to solid or frosted dark surface with subtle border
+        val fallbackTint = when {
+            removeDynamicBlur -> ExcavPalette.SurfaceCard
+            surfaceTint != null -> surfaceTint
+            else -> ExcavPalette.SurfaceCard.copy(alpha = 0.88f)
+        }
         return clip(shape)
             .background(fallbackTint, shape)
             .border(GLASS_EDGE_WIDTH, GLASS_EDGE_COLOR, shape)

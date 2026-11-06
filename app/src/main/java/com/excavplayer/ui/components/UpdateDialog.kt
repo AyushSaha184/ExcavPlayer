@@ -47,10 +47,8 @@ fun UpdateDialog(
                     modifier = Modifier
                         .fillMaxWidth(0.90f)
                         .wrapContentHeight()
-                        .darkUltraThinBlur(
-                            shape = RoundedCornerShape(26.dp),
-                            backgroundColor = Color(0xF210131B),
-                            strokeColor = Color.White.copy(alpha = 0.18f)
+                        .glassDialogSurface(
+                            shape = RoundedCornerShape(26.dp)
                         )
                         .padding(22.dp)
                 ) {
@@ -259,10 +257,8 @@ fun UpdateDialog(
                     modifier = Modifier
                         .fillMaxWidth(0.88f)
                         .wrapContentHeight()
-                        .darkUltraThinBlur(
-                            shape = RoundedCornerShape(26.dp),
-                            backgroundColor = Color(0xF210131B),
-                            strokeColor = Color.White.copy(alpha = 0.18f)
+                        .glassDialogSurface(
+                            shape = RoundedCornerShape(26.dp)
                         )
                         .padding(22.dp)
                 ) {
@@ -370,10 +366,8 @@ fun UpdateDialog(
                     modifier = Modifier
                         .fillMaxWidth(0.88f)
                         .wrapContentHeight()
-                        .darkUltraThinBlur(
-                            shape = RoundedCornerShape(26.dp),
-                            backgroundColor = Color(0xF210131B),
-                            strokeColor = Color.White.copy(alpha = 0.18f)
+                        .glassDialogSurface(
+                            shape = RoundedCornerShape(26.dp)
                         )
                         .padding(22.dp)
                 ) {

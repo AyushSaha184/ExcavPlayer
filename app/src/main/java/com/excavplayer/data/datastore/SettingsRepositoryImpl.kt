@@ -63,6 +63,7 @@ class SettingsRepositoryImpl @Inject constructor(
         val KEY_DIALOGUE_BOOST = booleanPreferencesKey("dialogue_boost")
         val KEY_MATCH_DISPLAY_REFRESH_RATE = booleanPreferencesKey("match_display_refresh_rate")
         val KEY_LIQUID_GLASS = booleanPreferencesKey("liquid_glass_enabled")
+        val KEY_REMOVE_DYNAMIC_BLUR = booleanPreferencesKey("remove_dynamic_blur")
     }
 
     override val userSettings: Flow<UserSettings> = context.dataStore.data
@@ -108,7 +109,8 @@ class SettingsRepositoryImpl @Inject constructor(
                 hardwareAccelerationEnabled = hwMode != "Disabled",
                 dialogueBoostEnabled = preferences[KEY_DIALOGUE_BOOST] ?: false,
                 matchDisplayRefreshRate = preferences[KEY_MATCH_DISPLAY_REFRESH_RATE] ?: false,
-                liquidGlassEnabled = preferences[KEY_LIQUID_GLASS] ?: true
+                liquidGlassEnabled = preferences[KEY_LIQUID_GLASS] ?: true,
+                removeDynamicBlur = preferences[KEY_REMOVE_DYNAMIC_BLUR] ?: false
             )
         }
         .flowOn(dispatchers.io)
@@ -255,6 +257,11 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun updateLiquidGlassEnabled(enabled: Boolean) {
         logger.i(TAG, "updateLiquidGlassEnabled: $enabled")
         edit(KEY_LIQUID_GLASS) { it[KEY_LIQUID_GLASS] = enabled }
+    }
+
+    override suspend fun updateRemoveDynamicBlur(enabled: Boolean) {
+        logger.i(TAG, "updateRemoveDynamicBlur: $enabled")
+        edit(KEY_REMOVE_DYNAMIC_BLUR) { it[KEY_REMOVE_DYNAMIC_BLUR] = enabled }
     }
 
     /**

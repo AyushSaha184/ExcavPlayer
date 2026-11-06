@@ -38,6 +38,7 @@ import com.excavplayer.ui.components.darkUltraThinBlur
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.excavplayer.ui.components.AnimatedDialogContainer
+import com.excavplayer.ui.components.glassDialogSurface
 import com.excavplayer.ui.components.LocalHazeState
 import com.excavplayer.ui.components.IosSwitch
 import com.excavplayer.ui.components.isGlassSupported
@@ -55,12 +56,12 @@ private enum class SettingDialog {
 @Composable
 fun SettingsScreen(
     vm: ExcavViewModel,
-    onBack: (() -> Unit)? = null
+    onBack: (() -> Unit)? = null,
+    scrollState: androidx.compose.foundation.ScrollState = rememberScrollState()
 ) {
     val settings by vm.userSettings.collectAsStateWithLifecycle()
     var activeDialog by rememberSaveable { mutableStateOf(SettingDialog.NONE) }
 
-    val scrollState = rememberScrollState()
     val isScrolled by remember {
         derivedStateOf {
             scrollState.value > 10
@@ -242,13 +243,27 @@ fun SettingsScreen(
             SettingsSectionHeader(title = "Appearance & Effects")
             SettingsCardContainer {
                 val glassSupported = isGlassSupported()
+                val isLiquidGlassActive = settings.liquidGlassEnabled && glassSupported
                 SettingsSwitchRow(
                     icon = SfIcons.AutoAwesome,
                     title = "Liquid Glass",
                     subtitle = if (glassSupported) "Real refracting glass on the floating nav bar and buttons. When off, normal blur is used everywhere." else "Requires Android 12 or newer",
-                    checked = settings.liquidGlassEnabled && glassSupported,
+                    checked = isLiquidGlassActive,
                     enabled = glassSupported,
                     onCheckedChange = { vm.setLiquidGlassEnabled(it) }
+                )
+                SettingsDivider()
+                SettingsSwitchRow(
+                    icon = Icons.Default.BlurOff,
+                    title = "Remove dynamic blur",
+                    subtitle = if (isLiquidGlassActive) {
+                        "Only available when Liquid Glass is turned off"
+                    } else {
+                        "Removes all types of blur across the app and player, using solid colors instead."
+                    },
+                    checked = settings.removeDynamicBlur && !isLiquidGlassActive,
+                    enabled = !isLiquidGlassActive,
+                    onCheckedChange = { vm.setRemoveDynamicBlur(it) }
                 )
             }
 
@@ -628,10 +643,8 @@ private fun <T> RadioChoiceDialog(
             modifier = Modifier
                 .fillMaxWidth(0.90f)
                 .wrapContentHeight()
-                .darkUltraThinBlur(
-                    shape = RoundedCornerShape(22.dp),
-                    backgroundColor = Color(0xE6101216),
-                    strokeColor = Color.White.copy(alpha = 0.18f)
+                .glassDialogSurface(
+                    shape = RoundedCornerShape(22.dp)
                 )
                 .padding(22.dp)
         ) {

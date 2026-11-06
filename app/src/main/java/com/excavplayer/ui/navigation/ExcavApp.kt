@@ -135,6 +135,8 @@ fun ExcavApp(
 
     val homeGridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
     val foldersGridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+    val folderContentGridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+    val settingsScrollState = androidx.compose.foundation.rememberScrollState()
 
     Scaffold(
         containerColor = ExcavPalette.Ink,
@@ -221,12 +223,14 @@ fun ExcavApp(
                                     onDeleteFolders = { vm.deleteFolders(it) },
                                     onRenameFolder = { folder, newName -> vm.renameFolder(folder, newName) },
                                     gridState = foldersGridState,
+                                    folderContentGridState = folderContentGridState,
                                     onSearch = { searchOpen = true },
                                     onRefresh = { vm.refreshLibrary() }
                                 )
                                 MainTab.SETTINGS -> SettingsScreen(
                                     vm = vm,
-                                    onBack = { tab = MainTab.HOME }
+                                    onBack = { tab = MainTab.HOME },
+                                    scrollState = settingsScrollState
                                 )
                             }
                         }
@@ -263,8 +267,14 @@ fun ExcavApp(
                         derivedStateOf {
                             when (tab) {
                                 MainTab.HOME -> homeGridState.firstVisibleItemIndex > 0 || homeGridState.firstVisibleItemScrollOffset > 30
-                                MainTab.FOLDERS -> foldersGridState.firstVisibleItemIndex > 0 || foldersGridState.firstVisibleItemScrollOffset > 30
-                                else -> false
+                                MainTab.FOLDERS -> {
+                                    if (library.selectedFolder != null) {
+                                        folderContentGridState.firstVisibleItemIndex > 0 || folderContentGridState.firstVisibleItemScrollOffset > 30
+                                    } else {
+                                        foldersGridState.firstVisibleItemIndex > 0 || foldersGridState.firstVisibleItemScrollOffset > 30
+                                    }
+                                }
+                                MainTab.SETTINGS -> settingsScrollState.value > 30
                             }
                         }
                     }
@@ -444,7 +454,8 @@ fun BottomDock(
             val currentNavbarWidth = lerp(expandedNavbarWidth, collapsedNavbarWidth, collapseProgress)
 
             val collapsedPillWidth = (totalWidth - collapsedNavbarWidth - searchWidth - spacing * 2f).coerceAtLeast(0.dp)
-            val currentPillWidth = lerp(expandedNavbarWidth, collapsedPillWidth, collapseProgress)
+            val expandedPillWidth = totalWidth
+            val currentPillWidth = lerp(expandedPillWidth, collapsedPillWidth, collapseProgress)
 
             val currentPillOffsetX = lerp(0.dp, collapsedNavbarWidth + spacing, collapseProgress)
             val expandedOffsetY = lerp(0.dp, barHeight + spacing, audioActiveProgress)

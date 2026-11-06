@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.CornerBasedShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ripple
 import androidx.compose.material.icons.Icons
@@ -62,16 +63,23 @@ fun GlassmorphicItem(
     modifier: Modifier = Modifier,
     hazeState: HazeState = LocalHazeState.current,
     cornerRadius: Int = 20,
-    containerColor: Color = Color(0x66141720),
-    hazeStyle: HazeBlurStyle = CupertinoMaterials.ultraThin(containerColor = containerColor),
+    containerColor: Color = Color(0xF21C1C1E),
+    hazeStyle: HazeBlurStyle = CupertinoMaterials.regular(containerColor = containerColor),
     content: @Composable BoxScope.() -> Unit
 ) {
+    val removeDynamicBlur = LocalRemoveDynamicBlur.current
     val shape = remember(cornerRadius) { RoundedCornerShape(cornerRadius.dp) }
 
     Box(
         modifier = modifier
             .clip(shape)
-            .hazeBlur(input = HazeInput.Sources(hazeState), style = hazeStyle)
+            .then(
+                if (removeDynamicBlur) {
+                    Modifier.background(ExcavPalette.SurfaceCard)
+                } else {
+                    Modifier.hazeBlur(input = HazeInput.Sources(hazeState), style = hazeStyle)
+                }
+            )
             .border(
                 width = 1.dp,
                 brush = Brush.verticalGradient(
@@ -307,7 +315,7 @@ fun Modifier.glassmorphicBlur(
     shape: Shape = RoundedCornerShape(24.dp),
     backgroundColor: Color? = null,
     surfaceBrush: Brush? = null,
-    strokeColor: Color = Color.White.copy(alpha = 0.35f),
+    strokeColor: Color = Color.White.copy(alpha = 0.28f),
     strokeWidth: Dp = 1.dp
 ): Modifier = this
     .clip(shape)
@@ -317,17 +325,17 @@ fun Modifier.glassmorphicBlur(
         val fillBrush = surfaceBrush ?: if (backgroundColor != null) {
             Brush.verticalGradient(
                 colors = listOf(
-                    backgroundColor.copy(alpha = (backgroundColor.alpha * 1.25f).coerceAtMost(1f)),
+                    backgroundColor.copy(alpha = (backgroundColor.alpha * 1.15f).coerceAtMost(1f)),
                     backgroundColor,
-                    backgroundColor.copy(alpha = (backgroundColor.alpha * 0.7f))
+                    backgroundColor.copy(alpha = (backgroundColor.alpha * 0.85f))
                 )
             )
         } else {
             Brush.verticalGradient(
                 colors = listOf(
-                    Color(0x33283244),
-                    Color(0x2619202E),
-                    Color(0x3810141D)
+                    Color(0xF01C1C1E),
+                    Color(0xE6141416),
+                    Color(0xFF0D0D0F)
                 )
             )
         }
@@ -350,7 +358,7 @@ fun Modifier.glassmorphicBlur(
  */
 fun Modifier.darkUltraThinBlur(
     shape: Shape = RoundedCornerShape(20.dp),
-    backgroundColor: Color = Color(0xDE101216),
+    backgroundColor: Color = Color(0xF21C1C1E),
     strokeColor: Color = Color.White.copy(alpha = 0.16f),
     strokeWidth: Dp = 1.dp
 ): Modifier = this
@@ -360,9 +368,9 @@ fun Modifier.darkUltraThinBlur(
         val strokePx = strokeWidth.toPx()
         val fillBrush = Brush.verticalGradient(
             colors = listOf(
-                backgroundColor.copy(alpha = (backgroundColor.alpha * 1.15f).coerceAtMost(0.96f)),
+                backgroundColor.copy(alpha = (backgroundColor.alpha * 1.05f).coerceAtMost(0.98f)),
                 backgroundColor,
-                backgroundColor.copy(alpha = (backgroundColor.alpha * 0.85f))
+                backgroundColor.copy(alpha = (backgroundColor.alpha * 0.90f))
             )
         )
         val borderBrush = Brush.verticalGradient(
@@ -386,24 +394,35 @@ fun Modifier.darkUltraThinBlur(
     }
 
 /**
- * Standard dark ultra-thin glassmorphic dialog container.
+ * Standard dark ultra-thin glassmorphic dialog container with optional real Liquid Glass.
  */
 @Composable
 fun GlassmorphicDialog(
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
-    shape: Shape = RoundedCornerShape(22.dp),
+    shape: CornerBasedShape = RoundedCornerShape(22.dp),
     content: @Composable () -> Unit
 ) {
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismissRequest,
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
     ) {
+        val isGlass = LocalLiquidGlassEnabled.current && isGlassSupported()
+        val removeDynamicBlur = LocalRemoveDynamicBlur.current
         Box(
             modifier = modifier
                 .fillMaxWidth(0.90f)
                 .wrapContentHeight()
-                .darkUltraThinBlur(shape = shape)
+                .then(
+                    when {
+                        isGlass -> Modifier.liquidGlass(shape = shape)
+                        removeDynamicBlur -> Modifier
+                            .clip(shape)
+                            .background(ExcavPalette.SurfaceCard)
+                            .border(1.dp, Color.White.copy(alpha = 0.16f), shape)
+                        else -> Modifier.darkUltraThinBlur(shape = shape)
+                    }
+                )
                 .padding(22.dp)
         ) {
             content()

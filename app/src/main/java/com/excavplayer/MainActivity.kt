@@ -216,6 +216,7 @@ class MainActivity : ComponentActivity() {
             ExcavTheme {
                 val settings by viewModel.userSettings.collectAsStateWithLifecycle()
                 val isGlass = settings.liquidGlassEnabled && isGlassSupported()
+                val removeDynamicBlur = settings.removeDynamicBlur && !isGlass
                 val windowBackground = Color.Black
                 val paintBackdrop: ContentDrawScope.() -> Unit = remember(windowBackground) {
                     {
@@ -227,6 +228,7 @@ class MainActivity : ComponentActivity() {
 
                 androidx.compose.runtime.CompositionLocalProvider(
                     LocalLiquidGlassEnabled provides isGlass,
+                    com.excavplayer.ui.components.LocalRemoveDynamicBlur provides removeDynamicBlur,
                     LocalAppBackdrop provides appBackdrop,
                     com.excavplayer.ui.components.LocalThumbnailLoader provides thumbnailLoader,
                     com.excavplayer.ui.components.LocalSeekPreviewLoader provides seekPreviewLoader

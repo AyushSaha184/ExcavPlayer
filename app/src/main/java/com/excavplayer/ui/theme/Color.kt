@@ -8,7 +8,7 @@ object ExcavPalette {
     val InkElevated = Color(0xFF0D0D0F)
     val SurfaceCard = Color(0xFF1C1C1E)
     val SurfaceCardHighlight = Color(0xFF2C2C2E)
-    val Glass = Color(0x66141720)
+    val Glass = Color(0xF21C1C1E)
     val GlassStrong = Color(0xF01C1C1E)
     val Line = Color(0xFF2C2C2E)
     val LineSubtle = Color(0x2E8E8E93)

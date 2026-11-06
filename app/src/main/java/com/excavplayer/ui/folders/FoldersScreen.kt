@@ -75,6 +75,7 @@ fun FoldersScreen(
     onDeleteFolders: (List<Folder>) -> Unit = {},
     onRenameFolder: (Folder, String) -> Unit = { _, _ -> },
     gridState: LazyGridState = rememberLazyGridState(),
+    folderContentGridState: LazyGridState = rememberLazyGridState(),
     onSearch: () -> Unit = {},
     onRefresh: (() -> Unit)? = null
 ) {
@@ -304,10 +305,8 @@ fun FoldersScreen(
                 val directVideos = remember(tree, currentNorm) { FolderTreeManager.getDirectVideos(tree, currentNorm) }
                 val previews = remember(tree, currentNorm) { FolderTreeManager.getSubfolderPreviews(tree, currentNorm) }
 
-                val folderGridState = remember(currentFolder.path) { LazyGridState() }
-
                 LazyVerticalGrid(
-                    state = folderGridState,
+                    state = folderContentGridState,
                     columns = GridCells.Adaptive(160.dp),
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = statusBarTop + 96.dp, bottom = 90.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp),

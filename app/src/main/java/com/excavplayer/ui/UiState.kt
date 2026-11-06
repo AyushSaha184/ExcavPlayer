@@ -530,6 +530,12 @@ class ExcavViewModel @Inject constructor(
         }
     }
 
+    fun setRemoveDynamicBlur(enabled: Boolean) {
+        viewModelScope.launch {
+            settings.updateRemoveDynamicBlur(enabled)
+        }
+    }
+
     fun setEqualizerEnabled(enabled: Boolean) {
         player.setVideoEqualizerEnabled(enabled)
     }
