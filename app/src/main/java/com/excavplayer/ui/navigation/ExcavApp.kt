@@ -19,6 +19,8 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -60,6 +62,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -311,17 +314,33 @@ fun ExcavApp(
                 onDismiss = { vm.dismissUpdate() }
             )
 
-            // Fullscreen Player with slide and fade in animation, and smooth slide and fade out
+            // Fullscreen Player with bottom-dock collapse and expansion animation
             AnimatedVisibility(
                 visible = playerOpen,
-                enter = slideInVertically(
-                    initialOffsetY = { it / 3 },
-                    animationSpec = tween(260, easing = FastOutSlowInEasing)
-                ) + fadeIn(tween(220)),
-                exit = slideOutVertically(
-                    targetOffsetY = { it / 3 },
-                    animationSpec = tween(220, easing = FastOutSlowInEasing)
-                ) + fadeOut(tween(180)),
+                enter = if (reducedMotion) {
+                    fadeIn(excavTween(ExcavMotion.Ui))
+                } else {
+                    slideInVertically(
+                        initialOffsetY = { it / 4 },
+                        animationSpec = excavTween(ExcavMotion.Container, ExcavEaseDrawer)
+                    ) + scaleIn(
+                        initialScale = 0.94f,
+                        transformOrigin = TransformOrigin(0.5f, 1f),
+                        animationSpec = excavTween(ExcavMotion.Container, ExcavEaseDrawer)
+                    ) + fadeIn(excavTween(ExcavMotion.Ui))
+                },
+                exit = if (reducedMotion) {
+                    fadeOut(excavTween(ExcavMotion.Ui))
+                } else {
+                    slideOutVertically(
+                        targetOffsetY = { it / 2 },
+                        animationSpec = excavTween(ExcavMotion.Container, ExcavEaseDrawer)
+                    ) + scaleOut(
+                        targetScale = 0.90f,
+                        transformOrigin = TransformOrigin(0.5f, 1f),
+                        animationSpec = excavTween(ExcavMotion.Container, ExcavEaseDrawer)
+                    ) + fadeOut(excavTween(ExcavMotion.Ui))
+                },
                 modifier = Modifier.fillMaxSize()
             ) {
                 PlayerScreen(
