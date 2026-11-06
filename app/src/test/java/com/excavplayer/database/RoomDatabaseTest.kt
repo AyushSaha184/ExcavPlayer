@@ -70,6 +70,27 @@ class RoomDatabaseTest {
         assertThat(allVideos).hasSize(2)
         assertThat(allVideos[0].video.id).isEqualTo("v1")
         assertThat(allVideos[0].resumePositionMs).isNull()
+        assertThat(allVideos[0].isCompleted).isFalse()
+    }
+
+    @Test
+    fun `observeAllVideosWithMetadata correctly computes isCompleted when playback status is ENDED even if position is reset`() = runBlocking {
+        val v1 = createVideoEntity("v1")
+        videoDao.insertVideo(v1)
+
+        playbackDao.upsertPlaybackState(
+            PlaybackEntity(
+                videoId = "v1",
+                currentPositionMs = 0L,
+                durationMs = 100000L,
+                playbackStatus = "ENDED"
+            )
+        )
+
+        val videos = videoDao.observeAllVideosWithMetadata().first()
+        assertThat(videos).hasSize(1)
+        assertThat(videos[0].resumePositionMs).isEqualTo(0L)
+        assertThat(videos[0].isCompleted).isTrue()
     }
 
     @Test

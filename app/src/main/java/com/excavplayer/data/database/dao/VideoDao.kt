@@ -14,7 +14,8 @@ interface VideoDao {
     // (Room SQL cannot call Kotlin; LibraryDerivationTest + RoomDatabaseTest keep them in sync)
     @Query("""
         SELECT v.*, 
-               p.current_position_ms AS resume_position_ms
+               p.current_position_ms AS resume_position_ms,
+               COALESCE(p.playback_status = 'ENDED' OR (p.current_position_ms > 0 AND v.duration_ms > 0 AND p.current_position_ms >= v.duration_ms * 0.95), 0) AS is_completed
         FROM videos v
         LEFT JOIN playback_states p ON v.id = p.video_id
         WHERE v.availability = 'AVAILABLE'
@@ -58,7 +59,8 @@ interface VideoDao {
     // mirrors LibraryDerivation.isExcludedFromLibrary — update both together
     @Query("""
         SELECT v.*, 
-               p.current_position_ms AS resume_position_ms
+               p.current_position_ms AS resume_position_ms,
+               COALESCE(p.playback_status = 'ENDED' OR (p.current_position_ms > 0 AND v.duration_ms > 0 AND p.current_position_ms >= v.duration_ms * 0.95), 0) AS is_completed
         FROM videos v
         LEFT JOIN playback_states p ON v.id = p.video_id
         WHERE v.availability = 'AVAILABLE'
@@ -101,7 +103,8 @@ interface VideoDao {
 
     @Query("""
         SELECT v.*, 
-               p.current_position_ms AS resume_position_ms
+               p.current_position_ms AS resume_position_ms,
+               COALESCE(p.playback_status = 'ENDED' OR (p.current_position_ms > 0 AND v.duration_ms > 0 AND p.current_position_ms >= v.duration_ms * 0.95), 0) AS is_completed
         FROM videos v
         LEFT JOIN playback_states p ON v.id = p.video_id
         WHERE v.id = :id AND v.availability = 'AVAILABLE'
@@ -110,7 +113,8 @@ interface VideoDao {
 
     @Query("""
         SELECT v.*, 
-               p.current_position_ms AS resume_position_ms
+               p.current_position_ms AS resume_position_ms,
+               COALESCE(p.playback_status = 'ENDED' OR (p.current_position_ms > 0 AND v.duration_ms > 0 AND p.current_position_ms >= v.duration_ms * 0.95), 0) AS is_completed
         FROM videos v
         LEFT JOIN playback_states p ON v.id = p.video_id
         WHERE v.id = :id
@@ -122,7 +126,8 @@ interface VideoDao {
 
     @Query("""
         SELECT v.*, 
-               p.current_position_ms AS resume_position_ms
+               p.current_position_ms AS resume_position_ms,
+               COALESCE(p.playback_status = 'ENDED' OR (p.current_position_ms > 0 AND v.duration_ms > 0 AND p.current_position_ms >= v.duration_ms * 0.95), 0) AS is_completed
         FROM videos v
         LEFT JOIN playback_states p ON v.id = p.video_id
         WHERE (
@@ -161,7 +166,8 @@ interface VideoDao {
 
     @Query("""
         SELECT v.*, 
-               p.current_position_ms AS resume_position_ms
+               p.current_position_ms AS resume_position_ms,
+               COALESCE(p.playback_status = 'ENDED' OR (p.current_position_ms > 0 AND v.duration_ms > 0 AND p.current_position_ms >= v.duration_ms * 0.95), 0) AS is_completed
         FROM videos v
         LEFT JOIN playback_states p ON v.id = p.video_id
         WHERE v.display_name LIKE '%' || :query || '%' AND v.availability = 'AVAILABLE'
@@ -214,7 +220,8 @@ interface VideoDao {
 
     @Query("""
         SELECT v.*, 
-               p.current_position_ms AS resume_position_ms
+               p.current_position_ms AS resume_position_ms,
+               COALESCE(p.playback_status = 'ENDED' OR (p.current_position_ms > 0 AND v.duration_ms > 0 AND p.current_position_ms >= v.duration_ms * 0.95), 0) AS is_completed
         FROM videos v
         INNER JOIN playback_states p ON v.id = p.video_id
         LEFT JOIN dismissed_continue_watching d ON v.id = d.video_id

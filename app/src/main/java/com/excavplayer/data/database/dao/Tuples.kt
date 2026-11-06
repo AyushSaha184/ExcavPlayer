@@ -13,7 +13,8 @@ data class FolderTuple(
 
 data class VideoWithMetadataTuple(
     @Embedded val video: VideoEntity,
-    @ColumnInfo(name = "resume_position_ms") val resumePositionMs: Long?
+    @ColumnInfo(name = "resume_position_ms") val resumePositionMs: Long?,
+    @ColumnInfo(name = "is_completed") val isCompleted: Boolean = false
 )
 
 data class IdUriTuple(

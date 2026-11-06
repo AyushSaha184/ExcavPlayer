@@ -725,26 +725,27 @@ fun VideoCard(
                     )
                 }
 
-                if (video.durationMs > 0) {
-                    val isFinished = (video.resumePositionMs ?: 0L).toFloat() / video.durationMs >= 0.95f
-                    if (isFinished) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.BottomStart)
-                                .padding(6.dp)
-                                .size(18.dp)
-                                .background(ExcavPalette.Ink.copy(alpha = 0.88f), CircleShape)
-                                .border(0.5.dp, ExcavPalette.Line, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = "Watched",
-                                tint = Color.White,
-                                modifier = Modifier.size(12.dp)
-                            )
-                        }
+                val isFinished = video.isCompleted || (video.durationMs > 0 && (video.resumePositionMs ?: 0L).toFloat() / video.durationMs >= 0.95f)
+                if (isFinished) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(6.dp)
+                            .size(18.dp)
+                            .background(ExcavPalette.Ink.copy(alpha = 0.88f), CircleShape)
+                            .border(0.5.dp, ExcavPalette.Line, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Watched",
+                            tint = Color.White,
+                            modifier = Modifier.size(12.dp)
+                        )
                     }
+                }
+
+                if (video.durationMs > 0) {
                     Text(
                         text = video.formattedDuration,
                         color = ExcavPalette.Text,
@@ -857,6 +858,25 @@ fun PosterCard(
                             .border(0.5.dp, ExcavPalette.Line, RoundedCornerShape(4.dp))
                             .padding(horizontal = 5.dp, vertical = 1.5.dp)
                     )
+                }
+                val isFinished = video.isCompleted || (video.durationMs > 0 && (video.resumePositionMs ?: 0L).toFloat() / video.durationMs >= 0.95f)
+                if (isFinished) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(6.dp)
+                            .size(18.dp)
+                            .background(ExcavPalette.Ink.copy(alpha = 0.88f), CircleShape)
+                            .border(0.5.dp, ExcavPalette.Line, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Watched",
+                            tint = Color.White,
+                            modifier = Modifier.size(12.dp)
+                        )
+                    }
                 }
                 if (video.durationMs > 0) {
                     Text(
@@ -1533,6 +1553,25 @@ fun ListVideoRow(
                     .clip(RoundedCornerShape(10.dp))
             ) {
                 Thumbnail(video, Modifier.fillMaxSize())
+                val isFinished = video.isCompleted || (video.durationMs > 0 && resumePos.toFloat() / video.durationMs >= 0.95f)
+                if (isFinished) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(4.dp)
+                            .size(16.dp)
+                            .background(ExcavPalette.Ink.copy(alpha = 0.88f), CircleShape)
+                            .border(0.5.dp, ExcavPalette.Line, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Watched",
+                            tint = Color.White,
+                            modifier = Modifier.size(11.dp)
+                        )
+                    }
+                }
                 if (video.durationMs > 0) {
                     Text(
                         text = video.formattedDuration,

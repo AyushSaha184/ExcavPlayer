@@ -34,11 +34,12 @@ fun VideoWithMetadataTuple.toDomain(): Video {
         relativePath = video.relativePath,
         sourceType = runCatching { MediaSourceType.valueOf(video.sourceType) }.getOrDefault(MediaSourceType.LOCAL_MEDIASTORE),
         availability = runCatching { MediaAvailability.valueOf(video.availability) }.getOrDefault(MediaAvailability.AVAILABLE),
-        resumePositionMs = resumePositionMs
+        resumePositionMs = resumePositionMs,
+        isCompleted = isCompleted
     )
 }
 
-fun VideoEntity.toDomain(resumePositionMs: Long? = null): Video {
+fun VideoEntity.toDomain(resumePositionMs: Long? = null, isCompleted: Boolean = false): Video {
     return Video(
         id = id,
         uri = uri,
@@ -58,7 +59,8 @@ fun VideoEntity.toDomain(resumePositionMs: Long? = null): Video {
         relativePath = relativePath,
         sourceType = runCatching { MediaSourceType.valueOf(sourceType) }.getOrDefault(MediaSourceType.LOCAL_MEDIASTORE),
         availability = runCatching { MediaAvailability.valueOf(availability) }.getOrDefault(MediaAvailability.AVAILABLE),
-        resumePositionMs = resumePositionMs
+        resumePositionMs = resumePositionMs,
+        isCompleted = isCompleted
     )
 }
 

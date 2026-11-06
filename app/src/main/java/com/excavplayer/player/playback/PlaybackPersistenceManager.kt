@@ -101,14 +101,22 @@ class PlaybackPersistenceManager @Inject constructor(
             val thresholdMs = com.excavplayer.domain.policy.PlaybackThresholdPolicy.seekStepMs(settings.resumeThresholdPercent)
             val isCompleted = duration > 0 && (
                 remainingMs <= thresholdMs ||
-                (currentPos.toFloat() / duration.toFloat()) >= settings.resumeThresholdPercent
+                (currentPos.toFloat() / duration.toFloat()) >= settings.resumeThresholdPercent ||
+                state.playbackStatus == com.excavplayer.domain.model.PlaybackStatus.ENDED
             )
 
             // Persist Playback State (for AutoResume / Continue Watching)
             if (settings.autoResume) {
                 if (isCompleted) {
-                    // If finished or near the beginning, reset position to 0 so next play starts from start
-                    playbackRepository.savePlaybackState(state.copy(currentPositionMs = 0L, videoId = videoId))
+                    // If finished or near the beginning, reset position to 0 so next play starts from start,
+                    // and mark status as ENDED so watched status is preserved.
+                    playbackRepository.savePlaybackState(
+                        state.copy(
+                            currentPositionMs = 0L,
+                            videoId = videoId,
+                            playbackStatus = com.excavplayer.domain.model.PlaybackStatus.ENDED
+                        )
+                    )
                 } else {
                     playbackRepository.savePlaybackState(state.copy(videoId = videoId))
                 }
