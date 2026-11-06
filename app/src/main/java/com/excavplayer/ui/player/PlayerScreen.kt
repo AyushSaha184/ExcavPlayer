@@ -56,8 +56,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.Layout
-import com.excavplayer.subtitles.SubtitleLanguage
-import com.excavplayer.subtitles.SubtitleSearchResult
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -1871,12 +1869,8 @@ private fun ChaptersSheet(
 }
 
 // -----------------------------------------------------------------------------------------
-// Subtitles Sheet (Track Selection & Online Subtitles)
+// Subtitles Sheet (Track Selection & Subtitle Delay)
 // -----------------------------------------------------------------------------------------
-private enum class SubtitleTab { TRACKS, ONLINE }
-
-
-
 @Composable
 private fun SubtitleSheet(
     state: PlayerState,
@@ -1886,14 +1880,12 @@ private fun SubtitleSheet(
     onPickSubtitle: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    var selectedTab by rememberSaveable { mutableStateOf(SubtitleTab.TRACKS) }
-
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 14.dp)
     ) {
-        // Header with Title and Animated Pill Tab Bar beside each other
+        // Header with Title and Customization Button
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1923,52 +1915,9 @@ private fun SubtitleSheet(
                     )
                 }
             }
-            SegmentedAnimatedPillBar(
-                options = listOf("Tracks", "Online Sub"),
-                selectedIndex = if (selectedTab == SubtitleTab.TRACKS) 0 else 1,
-                onSelectIndex = { selectedTab = if (it == 0) SubtitleTab.TRACKS else SubtitleTab.ONLINE },
-                compact = true
-            )
         }
 
-        // Animated Page Transition
-        AnimatedContent(
-            targetState = selectedTab,
-            transitionSpec = {
-                if (targetState == SubtitleTab.ONLINE) {
-                    (slideInHorizontally { width -> width / 3 } + fadeIn(animationSpec = tween(200))) togetherWith
-                    (slideOutHorizontally { width -> -width / 3 } + fadeOut(animationSpec = tween(200)))
-                } else {
-                    (slideInHorizontally { width -> -width / 3 } + fadeIn(animationSpec = tween(200))) togetherWith
-                    (slideOutHorizontally { width -> width / 3 } + fadeOut(animationSpec = tween(200)))
-                }
-            },
-            label = "subtitleTabTransition"
-        ) { tab ->
-            when (tab) {
-                SubtitleTab.TRACKS -> TracksTabContent(
-                    state = state,
-                    player = player,
-                    vm = vm,
-                    onPickSubtitle = onPickSubtitle
-                )
-                SubtitleTab.ONLINE -> OnlineSubTabContent(
-                    state = state,
-                    vm = vm
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun TracksTabContent(
-    state: PlayerState,
-    player: PlayerController,
-    vm: ExcavViewModel,
-    onPickSubtitle: () -> Unit
-) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+        // Subtitle Tracks List
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -2005,9 +1954,9 @@ private fun TracksTabContent(
         // -------------------------------------------------------------------------
         // Subtitle Delay Control (Player Seekbar Style, Range: -5.0s .. +5.0s)
         // -------------------------------------------------------------------------
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(16.dp))
         HorizontalDivider(color = ExcavPalette.Line.copy(alpha = 0.4f), thickness = 0.6.dp)
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(14.dp))
 
         var sliderValue by remember(state.subtitleDelayMs) {
             mutableFloatStateOf((state.subtitleDelayMs / 1000f).coerceIn(-5.0f, 5.0f))
@@ -2085,7 +2034,7 @@ private fun TracksTabContent(
             }
 
             // Move the slider down a bit
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(14.dp))
 
             // Player seekbar style Slider (-5.0s .. +5.0s)
             ExcavSleekSlider(
@@ -2146,7 +2095,7 @@ private fun TracksTabContent(
             }
         }
 
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(10.dp))
 
         // Action Row: -0.1s, Add subtitles, +0.1s
         Row(
@@ -2236,314 +2185,7 @@ private fun TracksTabContent(
     }
 }
 
-@Composable
-private fun OnlineSubTabContent(
-    state: PlayerState,
-    vm: ExcavViewModel
-) {
-    val onlineState by vm.onlineSubtitleState.collectAsStateWithLifecycle()
-    val videoTitle = remember(state.currentVideo) {
-        val raw = state.currentVideo?.displayName.orEmpty()
-        com.excavplayer.subtitles.cleanVideoTitle(raw).formatted
-    }
 
-    LaunchedEffect(videoTitle) {
-        if (onlineState.query.isBlank() && videoTitle.isNotBlank()) {
-            vm.updateSubtitleQuery(videoTitle)
-            vm.searchOnlineSubtitles(videoTitle)
-        }
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(max = 380.dp)
-    ) {
-        // Search Input Bar (No leading icon, SVG close icon for clear, SVG search icon for action)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(Color.White.copy(alpha = 0.06f))
-                .border(1.dp, ExcavPalette.Line, RoundedCornerShape(14.dp))
-                .padding(horizontal = 12.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            BasicTextField(
-                value = onlineState.query,
-                onValueChange = { vm.updateSubtitleQuery(it) },
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodyMedium.copy(
-                    color = Color.White,
-                    fontSize = 13.sp
-                ),
-                cursorBrush = SolidColor(ExcavPalette.Primary),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { vm.searchOnlineSubtitles() }),
-                modifier = Modifier.weight(1f),
-                decorationBox = { innerTextField ->
-                    if (onlineState.query.isEmpty()) {
-                        Text(
-                            text = "Search subtitles...",
-                            color = ExcavPalette.TextMuted.copy(alpha = 0.6f),
-                            fontSize = 13.sp
-                        )
-                    }
-                    innerTextField()
-                }
-            )
-            if (onlineState.query.isNotEmpty()) {
-                IconButton(
-                    onClick = { vm.updateSubtitleQuery("") },
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Clear",
-                        tint = ExcavPalette.TextMuted,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            }
-            IconButton(
-                onClick = { vm.searchOnlineSubtitles() },
-                modifier = Modifier.size(30.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Search,
-                    contentDescription = "Search",
-                    tint = ExcavPalette.Primary,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-        }
-
-        Spacer(Modifier.height(10.dp))
-
-        // Content Area: Pure Loading Animation, Error, Results, or Empty
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f, fill = false),
-            contentAlignment = Alignment.Center
-        ) {
-            when {
-                onlineState.isSearching -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 32.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(26.dp),
-                            color = ExcavPalette.Primary,
-                            strokeWidth = 2.5.dp
-                        )
-                    }
-                }
-                onlineState.errorMessage != null && onlineState.searchResults.isEmpty() -> {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            text = onlineState.errorMessage.orEmpty(),
-                            color = ExcavPalette.TextMuted,
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
-                            textAlign = TextAlign.Center
-                        )
-                        Surface(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable { vm.searchOnlineSubtitles() },
-                            color = Color.White.copy(alpha = 0.08f)
-                        ) {
-                            Text(
-                                text = "Retry",
-                                color = ExcavPalette.Primary,
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                            )
-                        }
-                    }
-                }
-                onlineState.searchResults.isNotEmpty() -> {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 280.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        items(onlineState.searchResults, key = { "${it.source}_${it.id}" }) { result ->
-                            val isDownloading = result.id in onlineState.downloadingIds
-                            val isDownloaded = result.id in onlineState.downloadedMap
-                            val isApplied = onlineState.appliedSubtitleId == result.id
-
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .clickable(enabled = !isDownloading) {
-                                        if (isDownloaded && !isApplied) {
-                                            vm.applyDownloadedResult(result)
-                                        } else if (!isDownloaded) {
-                                            vm.downloadAndApplySubtitle(result, videoTitle)
-                                        }
-                                    },
-                                color = if (isApplied) ExcavPalette.Primary.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.04f),
-                                border = if (isApplied) BorderStroke(1.dp, ExcavPalette.Primary.copy(alpha = 0.4f)) else null,
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(
-                                        modifier = Modifier.weight(1f),
-                                        verticalArrangement = Arrangement.spacedBy(3.dp)
-                                    ) {
-                                        Text(
-                                            text = result.title.ifBlank { result.fileName },
-                                            color = ExcavPalette.Text,
-                                            style = MaterialTheme.typography.bodyMedium.copy(
-                                                fontWeight = FontWeight.Medium,
-                                                fontSize = 12.sp
-                                            ),
-                                            maxLines = 2,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                        Row(
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            // Language badge
-                                            Surface(
-                                                color = ExcavPalette.Primary.copy(alpha = 0.2f),
-                                                shape = RoundedCornerShape(4.dp)
-                                            ) {
-                                                Text(
-                                                    text = result.language.uppercase(),
-                                                    color = ExcavPalette.Primary,
-                                                    style = MaterialTheme.typography.labelSmall.copy(
-                                                        fontSize = 9.sp,
-                                                        fontWeight = FontWeight.Bold
-                                                    ),
-                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                                                )
-                                            }
-                                            // Source badge
-                                            Surface(
-                                                color = Color.White.copy(alpha = 0.08f),
-                                                shape = RoundedCornerShape(4.dp)
-                                            ) {
-                                                Text(
-                                                    text = result.source,
-                                                    color = ExcavPalette.TextMuted,
-                                                    style = MaterialTheme.typography.labelSmall.copy(
-                                                        fontSize = 9.sp
-                                                    ),
-                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                                                )
-                                            }
-                                            if (result.hearingImpaired) {
-                                                Text(
-                                                    text = "CC",
-                                                    color = ExcavPalette.TextMuted,
-                                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp)
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    Spacer(Modifier.width(8.dp))
-
-                                    // Action Area: Spinner -> "Applied" -> "Apply" -> Download Icon
-                                    Box(
-                                        modifier = Modifier.padding(end = 2.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        if (isDownloading) {
-                                            CircularProgressIndicator(
-                                                modifier = Modifier.size(18.dp),
-                                                color = ExcavPalette.Primary,
-                                                strokeWidth = 2.dp
-                                            )
-                                        } else if (isApplied) {
-                                            Surface(
-                                                color = ExcavPalette.Primary.copy(alpha = 0.2f),
-                                                shape = RoundedCornerShape(8.dp)
-                                            ) {
-                                                Text(
-                                                    text = "Applied",
-                                                    color = ExcavPalette.Primary,
-                                                    style = MaterialTheme.typography.labelSmall.copy(
-                                                        fontWeight = FontWeight.Bold,
-                                                        fontSize = 11.sp
-                                                    ),
-                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                                )
-                                            }
-                                        } else if (isDownloaded) {
-                                            Surface(
-                                                modifier = Modifier
-                                                    .clip(RoundedCornerShape(8.dp))
-                                                    .border(1.dp, ExcavPalette.Primary, RoundedCornerShape(8.dp))
-                                                    .clickable { vm.applyDownloadedResult(result) },
-                                                color = ExcavPalette.Primary.copy(alpha = 0.12f)
-                                            ) {
-                                                Text(
-                                                    text = "Apply",
-                                                    color = ExcavPalette.Primary,
-                                                    style = MaterialTheme.typography.labelSmall.copy(
-                                                        fontWeight = FontWeight.Bold,
-                                                        fontSize = 11.sp
-                                                    ),
-                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                                )
-                                            }
-                                        } else {
-                                            IconButton(
-                                                onClick = { vm.downloadAndApplySubtitle(result, videoTitle) },
-                                                modifier = Modifier.size(32.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Download,
-                                                    contentDescription = "Download",
-                                                    tint = ExcavPalette.Primary,
-                                                    modifier = Modifier.size(20.dp)
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                else -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 24.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Search for online subtitles above",
-                            color = ExcavPalette.TextMuted,
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp)
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
 
 @Composable
 private fun SubtitleRadioRow(

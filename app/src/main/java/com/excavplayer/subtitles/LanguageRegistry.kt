@@ -1,9 +1,10 @@
 package com.excavplayer.subtitles
 
+data class SubtitleLanguage(val name: String, val code: String)
+
 /**
- * The single table of languages ExcavPlayer knows: display names for the UI,
- * search-API codes for the subtitle providers, and the track-selection alias
- * vocabulary shared with the player's track policy.
+ * The single table of languages ExcavPlayer knows: display names for the UI
+ * and the track-selection alias vocabulary shared with the player's track policy.
  *
  * Every language lookup routes here; no other file may hold a language table.
  */

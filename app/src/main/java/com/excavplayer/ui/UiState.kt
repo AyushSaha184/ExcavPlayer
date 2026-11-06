@@ -41,12 +41,6 @@ import java.io.File
 import javax.inject.Inject
 import kotlinx.coroutines.flow.update
 import com.excavplayer.R
-import com.excavplayer.subtitles.SubtitleHelper
-import com.excavplayer.subtitles.SubtitleSearchOutcome
-import com.excavplayer.subtitles.SubtitleSearchResult
-import com.excavplayer.subtitles.LanguageRegistry
-import com.excavplayer.subtitles.SubtitleLanguage
-import com.excavplayer.subtitles.SubtitleSource
 
 data class UserMessage(
     val id: Long = System.currentTimeMillis(),
@@ -69,16 +63,6 @@ data class LibraryUiState(
     val loading: Boolean = true
 )
 
-data class OnlineSubtitleUiState(
-    val query: String = "",
-    val isSearching: Boolean = false,
-    val searchResults: List<SubtitleSearchResult> = emptyList(),
-    val downloadingIds: Set<String> = emptySet(),
-    val downloadedMap: Map<String, File> = emptyMap(),
-    val appliedSubtitleId: String? = null,
-    val errorMessage: String? = null
-)
-
 @HiltViewModel
 class ExcavViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -88,7 +72,6 @@ class ExcavViewModel @Inject constructor(
     val player: PlayerController,
     val queue: PlaybackQueue,
     val updateManager: AppUpdateManager,
-    val subtitleHelper: SubtitleHelper,
     private val logger: AppLogger
 ) : ViewModel() {
 
@@ -590,144 +573,6 @@ class ExcavViewModel @Inject constructor(
 
     fun installApk(file: File) {
         updateManager.installApk(file)
-    }
-
-    // -------------------------------------------------------------------------------------
-    // Online Subtitles
-    // -------------------------------------------------------------------------------------
-    private val _onlineSubtitleState = MutableStateFlow(OnlineSubtitleUiState())
-    val onlineSubtitleState: StateFlow<OnlineSubtitleUiState> = _onlineSubtitleState.asStateFlow()
-
-    fun updateSubtitleQuery(query: String) {
-        _onlineSubtitleState.update { it.copy(query = query) }
-    }
-
-    fun searchOnlineSubtitles(queryOverride: String? = null) {
-        val q = (queryOverride ?: _onlineSubtitleState.value.query).trim()
-        if (q.isBlank()) return
-
-        val preferredLang = userSettings.value.preferredSubtitleLanguage
-        val langCode = if (preferredLang.isNullOrBlank() || preferredLang.equals("auto", ignoreCase = true) || preferredLang.equals("auto (default)", ignoreCase = true)) {
-            "en"
-        } else {
-            // Providers take search-API codes, not display names ("English" -> "en")
-            LanguageRegistry.nameToCode(preferredLang.trim()) ?: preferredLang.trim().lowercase()
-        }
-
-        viewModelScope.launch {
-            _onlineSubtitleState.update { it.copy(isSearching = true, errorMessage = null) }
-            try {
-                when (val outcome = subtitleHelper.searchOnlineSubtitles(
-                    query = q,
-                    languageCode = langCode,
-                    source = SubtitleSource.ALL
-                )) {
-                    is SubtitleSearchOutcome.Results -> _onlineSubtitleState.update {
-                        it.copy(isSearching = false, searchResults = outcome.items, errorMessage = null)
-                    }
-                    is SubtitleSearchOutcome.NoResults -> _onlineSubtitleState.update {
-                        it.copy(isSearching = false, searchResults = emptyList(), errorMessage = "No subtitles found for \"$q\"")
-                    }
-                    is SubtitleSearchOutcome.NetworkError -> {
-                        logger.e(TAG, "Subtitle search unreachable: ${outcome.cause.message}")
-                        _onlineSubtitleState.update {
-                            it.copy(
-                                isSearching = false,
-                                searchResults = emptyList(),
-                                errorMessage = context.getString(R.string.subtitle_search_connection_error)
-                            )
-                        }
-                    }
-                    is SubtitleSearchOutcome.ParseError -> {
-                        logger.e(TAG, "Subtitle search parse failures: ${outcome.messages.joinToString()}")
-                        _onlineSubtitleState.update {
-                            it.copy(isSearching = false, searchResults = emptyList(), errorMessage = "Subtitle search failed")
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                logger.e(TAG, "Subtitle search failed: ${e.message}", e)
-                _onlineSubtitleState.update {
-                    it.copy(
-                        isSearching = false,
-                        errorMessage = e.message ?: "Failed to search subtitles"
-                    )
-                }
-            }
-        }
-    }
-
-    fun downloadAndApplySubtitle(result: SubtitleSearchResult, videoTitle: String) {
-        viewModelScope.launch {
-            _onlineSubtitleState.update {
-                it.copy(downloadingIds = it.downloadingIds + result.id, errorMessage = null)
-            }
-            try {
-                val dlResult = subtitleHelper.downloadAndSaveSubtitle(result, videoTitle)
-                val file = dlResult.getOrElse { e ->
-                    logger.e(TAG, "Subtitle download failed: ${e.message}", e)
-                    _onlineSubtitleState.update {
-                        it.copy(
-                            downloadingIds = it.downloadingIds - result.id,
-                            errorMessage = context.getString(R.string.subtitle_download_failed)
-                        )
-                    }
-                    return@launch
-                }
-                val updatedMap = _onlineSubtitleState.value.downloadedMap + (result.id to file)
-
-                val shouldApplyImmediately = _onlineSubtitleState.value.appliedSubtitleId == null
-
-                if (shouldApplyImmediately) {
-                    val uri = Uri.fromFile(file).toString()
-                    val mimeType = subtitleHelper.inferMimeTypeFromUri(Uri.fromFile(file))
-                    val label = if (result.fileName.isNotBlank()) {
-                        result.fileName.substringBeforeLast('.')
-                    } else {
-                        "${result.language} (${result.source})"
-                    }
-                    player.addExternalSubtitle(uri, label, mimeType)
-
-                    _onlineSubtitleState.update {
-                        it.copy(
-                            downloadingIds = it.downloadingIds - result.id,
-                            downloadedMap = updatedMap,
-                            appliedSubtitleId = result.id
-                        )
-                    }
-                    showMessage("Subtitle applied: $label")
-                } else {
-                    _onlineSubtitleState.update {
-                        it.copy(
-                            downloadingIds = it.downloadingIds - result.id,
-                            downloadedMap = updatedMap
-                        )
-                    }
-                }
-            } catch (e: Exception) {
-                logger.e(TAG, "Subtitle download failed: ${e.message}", e)
-                _onlineSubtitleState.update {
-                    it.copy(
-                        downloadingIds = it.downloadingIds - result.id,
-                        errorMessage = "Download failed: ${e.message}"
-                    )
-                }
-            }
-        }
-    }
-
-    fun applyDownloadedResult(result: SubtitleSearchResult) {
-        val file = _onlineSubtitleState.value.downloadedMap[result.id] ?: return
-        val uri = Uri.fromFile(file).toString()
-        val mimeType = subtitleHelper.inferMimeTypeFromUri(Uri.fromFile(file))
-        val label = if (result.fileName.isNotBlank()) {
-            result.fileName.substringBeforeLast('.')
-        } else {
-            "${result.language} (${result.source})"
-        }
-        player.addExternalSubtitle(uri, label, mimeType)
-        _onlineSubtitleState.update { it.copy(appliedSubtitleId = result.id) }
-        showMessage("Subtitle applied: $label")
     }
 
     fun setSubtitleDelay(delayMs: Long) {
