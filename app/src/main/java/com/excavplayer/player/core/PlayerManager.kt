@@ -6,8 +6,10 @@ import android.net.Uri
 import com.excavplayer.service.PlaybackService
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Metadata
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
@@ -117,7 +119,14 @@ class PlayerManager @Inject constructor(
 
     private val exoPlayer: ExoPlayer by lazy {
         val mediaCodecSelector = MediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
-            val decoders = MediaCodecUtil.getDecoderInfos(mimeType, requiresSecureDecoder, requiresTunnelingDecoder)
+            var decoders = MediaCodecUtil.getDecoderInfos(mimeType, requiresSecureDecoder, requiresTunnelingDecoder)
+
+            // If Dolby Vision has no hardware decoders on this device, fall back to HEVC
+            // so Profile 7 and Profile 8 videos decode seamlessly via their HDR10 base layer
+            if (decoders.isEmpty() && mimeType.equals(MimeTypes.VIDEO_DOLBY_VISION, ignoreCase = true)) {
+                decoders = MediaCodecUtil.getDecoderInfos(MimeTypes.VIDEO_H265, requiresSecureDecoder, requiresTunnelingDecoder)
+            }
+
             when (currentSettings.hardwareAccelerationMode) {
                 "Disabled" -> {
                     // Pure software decoding: prioritize software decoders
@@ -398,6 +407,8 @@ class PlayerManager @Inject constructor(
                     error = null,
                     isBackgroundAudio = false,
                     isMuted = false,
+                    isHdr = false,
+                    isUnsupportedDolbyVisionProfile5 = false,
                     chapters = emptyList(),
                     subtitleDelayMs = initialDelay,
                     equalizerState = initialEqState,
@@ -1327,12 +1338,49 @@ class PlayerManager @Inject constructor(
                 _state.value.chapters
             }
 
+            var isHdrVideo = false
+            var isUnsupportedDvProfile5 = false
+            val hasDvHardware = try {
+                MediaCodecUtil.getDecoderInfos(MimeTypes.VIDEO_DOLBY_VISION, false, false).isNotEmpty()
+            } catch (e: Throwable) {
+                false
+            }
+
+            for (group in tracks.groups) {
+                if (group.type == C.TRACK_TYPE_VIDEO) {
+                    val mediaTrackGroup = group.mediaTrackGroup
+                    for (i in 0 until mediaTrackGroup.length) {
+                        if (group.isTrackSelected(i)) {
+                            val format = mediaTrackGroup.getFormat(i)
+                            if (isFormatHdr(format)) {
+                                isHdrVideo = true
+                            }
+                            if (isFormatDolbyVisionProfile5(format) && !hasDvHardware) {
+                                isUnsupportedDvProfile5 = true
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (!isHdrVideo) {
+                val currentFormat = exoPlayer.videoFormat
+                if (isFormatHdr(currentFormat)) {
+                    isHdrVideo = true
+                }
+                if (isFormatDolbyVisionProfile5(currentFormat) && !hasDvHardware) {
+                    isUnsupportedDvProfile5 = true
+                }
+            }
+
             _state.update {
                 it.copy(
                     availableAudioTracks = finalAudio,
                     availableVideoTracks = video,
                     availableSubtitleTracks = finalSubs,
                     chapters = updatedChapters,
+                    isHdr = isHdrVideo,
+                    isUnsupportedDolbyVisionProfile5 = isUnsupportedDvProfile5,
                     playback = it.playback.copy(
                         selectedAudioTrackId = savedAudioPreferenceForVideo ?: selectedAudio,
                         selectedVideoTrackId = selectedVideo,
@@ -1340,6 +1388,31 @@ class PlayerManager @Inject constructor(
                     )
                 )
             }
+        }
+
+        private fun isFormatHdr(format: Format?): Boolean {
+            if (format == null) return false
+            val colorInfo = format.colorInfo
+            if (colorInfo != null) {
+                val transfer = colorInfo.colorTransfer
+                if (transfer == C.COLOR_TRANSFER_ST2084 || transfer == C.COLOR_TRANSFER_HLG) {
+                    return true
+                }
+            }
+            val mime = format.sampleMimeType.orEmpty()
+            val codecs = format.codecs.orEmpty()
+            return mime.equals(MimeTypes.VIDEO_DOLBY_VISION, ignoreCase = true) ||
+                   codecs.contains("dvh1", ignoreCase = true) ||
+                   codecs.contains("dvhe", ignoreCase = true) ||
+                   codecs.contains("dva1", ignoreCase = true) ||
+                   codecs.contains("dvav", ignoreCase = true)
+        }
+
+        private fun isFormatDolbyVisionProfile5(format: Format?): Boolean {
+            if (format == null) return false
+            val codecs = format.codecs.orEmpty()
+            return codecs.contains(Regex("""\b(dvh1|dvhe|dva1|dvav)\.05\.""", RegexOption.IGNORE_CASE)) ||
+                   codecs.contains(".05.")
         }
 
 

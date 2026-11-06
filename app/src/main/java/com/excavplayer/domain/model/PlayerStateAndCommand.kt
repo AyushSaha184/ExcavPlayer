@@ -25,5 +25,7 @@ data class PlayerState(
     val isInPictureInPicture: Boolean = false,
     val isBackgroundAudio: Boolean = false,
     val equalizerState: EqualizerState = EqualizerState(),
-    val isMuted: Boolean = false
+    val isMuted: Boolean = false,
+    val isHdr: Boolean = false,
+    val isUnsupportedDolbyVisionProfile5: Boolean = false
 )

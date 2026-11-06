@@ -80,6 +80,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import com.excavplayer.domain.model.EqualizerState
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.Job
@@ -243,6 +244,40 @@ fun PlayerScreen(
     }
 
     val isPip = (activity?.isInPictureInPictureMode == true) || state.isInPictureInPicture
+
+    // Dynamic HDR Window Color Mode:
+    // Only switch on ActivityInfo.COLOR_MODE_HDR when the player is in exclusive fullscreen mode
+    // (i.e. NOT in multi-window / split-screen, and NOT in PiP).
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val configuration = LocalConfiguration.current
+        val isInMultiWindow = activity?.isInMultiWindowMode == true
+        val isFullscreen = !isInMultiWindow && !isPip
+        val shouldEnableHdr = state.isHdr && isFullscreen
+        DisposableEffect(shouldEnableHdr, activity) {
+            val window = activity?.window
+            if (window != null) {
+                window.colorMode = if (shouldEnableHdr) {
+                    ActivityInfo.COLOR_MODE_HDR
+                } else {
+                    ActivityInfo.COLOR_MODE_DEFAULT
+                }
+            }
+            onDispose {
+                window?.colorMode = ActivityInfo.COLOR_MODE_DEFAULT
+            }
+        }
+    }
+
+    // Dolby Vision Profile 5 Unsupported Device Notification Toast
+    LaunchedEffect(state.isUnsupportedDolbyVisionProfile5) {
+        if (state.isUnsupportedDolbyVisionProfile5) {
+            android.widget.Toast.makeText(
+                context,
+                "Dolby Vision Profile 5: Device lacks Dolby Vision hardware licensing. Colors may appear tinted.",
+                android.widget.Toast.LENGTH_LONG
+            ).show()
+        }
+    }
 
     // Set initial screen orientation based on user settings
     LaunchedEffect(Unit) {
@@ -1131,6 +1166,7 @@ private fun PlayerControlsOverlay(
 ) {
     // One collected position snapshot for the whole overlay
     val position by player.playbackPosition.collectAsStateWithLifecycle()
+    var profile5WarningDismissed by rememberSaveable { mutableStateOf(false) }
 
     CompositionLocalProvider(
         LocalRippleConfiguration provides null,
@@ -1292,6 +1328,47 @@ private fun PlayerControlsOverlay(
                         tint = Color.White,
                         modifier = Modifier.size(topIconSize)
                     )
+                }
+            }
+
+            // Dolby Vision Profile 5 Unsupported Licensing Notice
+            if (state.isUnsupportedDolbyVisionProfile5 && !profile5WarningDismissed && !state.isInPictureInPicture) {
+                Row(
+                    modifier = Modifier
+                        .padding(top = topBtnSize + 10.dp)
+                        .align(Alignment.TopCenter)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xE62A1500))
+                        .border(0.75.dp, Color(0xFFFFB74D).copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.WarningAmber,
+                        contentDescription = null,
+                        tint = Color(0xFFFFB74D),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "Dolby Vision Profile 5: Device lacks Dolby hardware licensing. Colors may appear tinted.",
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp),
+                        maxLines = 2,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    IconButton(
+                        onClick = { profile5WarningDismissed = true },
+                        modifier = Modifier.size(20.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Dismiss",
+                            tint = Color.White.copy(alpha = 0.7f),
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
                 }
             }
 
