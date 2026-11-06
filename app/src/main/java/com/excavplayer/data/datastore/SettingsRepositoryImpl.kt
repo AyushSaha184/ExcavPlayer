@@ -62,6 +62,7 @@ class SettingsRepositoryImpl @Inject constructor(
         val KEY_HARDWARE_ACCELERATION_MODE = stringPreferencesKey("hardware_acceleration_mode")
         val KEY_DIALOGUE_BOOST = booleanPreferencesKey("dialogue_boost")
         val KEY_MATCH_DISPLAY_REFRESH_RATE = booleanPreferencesKey("match_display_refresh_rate")
+        val KEY_LIQUID_GLASS = booleanPreferencesKey("liquid_glass_enabled")
     }
 
     override val userSettings: Flow<UserSettings> = context.dataStore.data
@@ -106,7 +107,8 @@ class SettingsRepositoryImpl @Inject constructor(
                 hardwareAccelerationMode = hwMode,
                 hardwareAccelerationEnabled = hwMode != "Disabled",
                 dialogueBoostEnabled = preferences[KEY_DIALOGUE_BOOST] ?: false,
-                matchDisplayRefreshRate = preferences[KEY_MATCH_DISPLAY_REFRESH_RATE] ?: false
+                matchDisplayRefreshRate = preferences[KEY_MATCH_DISPLAY_REFRESH_RATE] ?: false,
+                liquidGlassEnabled = preferences[KEY_LIQUID_GLASS] ?: true
             )
         }
         .flowOn(dispatchers.io)
@@ -248,6 +250,11 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun updateMatchDisplayRefreshRate(enabled: Boolean) {
         logger.i(TAG, "updateMatchDisplayRefreshRate: $enabled")
         edit(KEY_MATCH_DISPLAY_REFRESH_RATE) { it[KEY_MATCH_DISPLAY_REFRESH_RATE] = enabled }
+    }
+
+    override suspend fun updateLiquidGlassEnabled(enabled: Boolean) {
+        logger.i(TAG, "updateLiquidGlassEnabled: $enabled")
+        edit(KEY_LIQUID_GLASS) { it[KEY_LIQUID_GLASS] = enabled }
     }
 
     /**

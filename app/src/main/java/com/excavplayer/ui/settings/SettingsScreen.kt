@@ -38,7 +38,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.excavplayer.ui.components.AnimatedDialogContainer
 import com.excavplayer.ui.components.LocalHazeState
-import com.excavplayer.ui.components.SleekSwitch
+import com.excavplayer.ui.components.IosSwitch
+import com.excavplayer.ui.components.isGlassSupported
+import com.excavplayer.ui.icons.SfIcons
 import com.excavplayer.ui.theme.ExcavPalette
 import com.excavplayer.ui.theme.ExcavShapes
 import dev.chrisbanes.haze.hazeSource
@@ -83,7 +85,7 @@ fun SettingsScreen(
             SettingsSectionHeader(title = "Playback")
             SettingsCardContainer {
                 SettingsSwitchRow(
-                    icon = Icons.Default.PictureInPicture,
+                    icon = SfIcons.Playback,
                     title = "Auto Resume",
                     subtitle = "Automatically resume from last position",
                     checked = settings.autoResume,
@@ -91,7 +93,7 @@ fun SettingsScreen(
                 )
                 SettingsDivider()
                 SettingsSwitchRow(
-                    icon = Icons.Default.SkipNext,
+                    icon = SfIcons.Play,
                     title = "Autoplay Next Video",
                     subtitle = "Automatically play next video in queue",
                     checked = settings.autoplayNextVideo,
@@ -99,7 +101,7 @@ fun SettingsScreen(
                 )
                 SettingsDivider()
                 SettingsSwitchRow(
-                    icon = Icons.Default.ScreenLockPortrait,
+                    icon = SfIcons.Display,
                     title = "Pause when Screen Turns Off",
                     subtitle = "Automatically stop playback when device screen locks",
                     checked = settings.stopOnScreenOff,
@@ -107,14 +109,14 @@ fun SettingsScreen(
                 )
                 SettingsDivider()
                 SettingsNavRow(
-                    icon = Icons.Default.Memory,
+                    icon = SfIcons.Performance,
                     title = "Hardware Acceleration",
                     subtitle = settings.hardwareAccelerationMode,
                     onClick = { activeDialog = SettingDialog.HARDWARE_ACCELERATION }
                 )
                 SettingsDivider()
                 SettingsSwitchRow(
-                    icon = Icons.Default.Sync,
+                    icon = SfIcons.Repeat,
                     title = "Match Display Refresh Rate",
                     subtitle = null,
                     checked = settings.matchDisplayRefreshRate,
@@ -122,14 +124,14 @@ fun SettingsScreen(
                 )
                 SettingsDivider()
                 SettingsNavRow(
-                    icon = Icons.Default.Speed,
+                    icon = SfIcons.Speed,
                     title = "Default Playback Speed",
                     subtitle = "${settings.defaultPlaybackSpeed}x",
                     onClick = { activeDialog = SettingDialog.SPEED }
                 )
                 SettingsDivider()
                 SettingsNavRow(
-                    icon = Icons.Default.Repeat,
+                    icon = SfIcons.Repeat,
                     title = "Default Repeat Mode",
                     subtitle = when (settings.defaultRepeatMode) {
                         RepeatMode.OFF -> "Off"
@@ -140,7 +142,7 @@ fun SettingsScreen(
                 )
                 SettingsDivider()
                 SettingsNavRow(
-                    icon = Icons.Default.Timer,
+                    icon = SfIcons.Speed,
                     title = "Select seek duration",
                     subtitle = when {
                         settings.resumeThresholdPercent >= 0.99f -> "5 seconds"
@@ -153,21 +155,21 @@ fun SettingsScreen(
                 )
                 SettingsDivider()
                 SettingsNavRow(
-                    icon = Icons.Default.ScreenRotation,
+                    icon = SfIcons.Orientation,
                     title = "Default Screen Orientation",
                     subtitle = settings.defaultScreenOrientation,
                     onClick = { activeDialog = SettingDialog.ORIENTATION }
                 )
                 SettingsDivider()
                 SettingsNavRow(
-                    icon = Icons.Default.AspectRatio,
+                    icon = SfIcons.Display,
                     title = "Default Media Fit",
                     subtitle = settings.defaultMediaFit,
                     onClick = { activeDialog = SettingDialog.MEDIA_FIT }
                 )
                 SettingsDivider()
                 SettingsSwitchRow(
-                    icon = Icons.Default.History,
+                    icon = SfIcons.Home,
                     title = "Continue Watching",
                     subtitle = "Show in-progress videos on home screen",
                     checked = settings.continueWatchingEnabled,
@@ -181,7 +183,7 @@ fun SettingsScreen(
             SettingsSectionHeader(title = "Audio & Media")
             SettingsCardContainer {
                 SettingsSwitchRow(
-                    icon = Icons.Default.Headphones,
+                    icon = SfIcons.Headphones,
                     title = "Headset Detection",
                     subtitle = "Auto pause when disconnected / resume when connected",
                     checked = settings.headsetDetectionEnabled,
@@ -189,7 +191,7 @@ fun SettingsScreen(
                 )
                 SettingsDivider()
                 SettingsSwitchRow(
-                    icon = Icons.Default.Timelapse,
+                    icon = SfIcons.Subtitles,
                     title = "Auto Enable Subtitles",
                     subtitle = "When subtitles are available in media",
                     checked = settings.subtitlesEnabled,
@@ -197,14 +199,14 @@ fun SettingsScreen(
                 )
                 SettingsDivider()
                 SettingsNavRow(
-                    icon = Icons.Default.Subtitles,
+                    icon = SfIcons.Language,
                     title = "Default Subtitle Language",
                     subtitle = settings.preferredSubtitleLanguage ?: "English",
                     onClick = { activeDialog = SettingDialog.SUB_LANG }
                 )
                 SettingsDivider()
                 SettingsNavRow(
-                    icon = Icons.Default.MusicNote,
+                    icon = SfIcons.Volume,
                     title = "Default Audio Track",
                     subtitle = settings.preferredAudioLanguage ?: "English",
                     onClick = { activeDialog = SettingDialog.AUDIO_LANG }
@@ -217,7 +219,7 @@ fun SettingsScreen(
             SettingsSectionHeader(title = "Gestures")
             SettingsCardContainer {
                 SettingsSwitchRow(
-                    icon = Icons.Default.Tune,
+                    icon = SfIcons.Brightness,
                     title = "Brightness Gesture",
                     subtitle = "Swipe left side of screen",
                     checked = settings.brightnessGestureEnabled,
@@ -225,7 +227,7 @@ fun SettingsScreen(
                 )
                 SettingsDivider()
                 SettingsSwitchRow(
-                    icon = Icons.Default.ControlCamera,
+                    icon = SfIcons.Volume,
                     title = "Volume Gesture",
                     subtitle = "Swipe right side of screen",
                     checked = settings.volumeGestureEnabled,
@@ -235,12 +237,28 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(20.dp))
 
-            // Section 4: System & Updates
+            // Section 4: Appearance & Effects
+            SettingsSectionHeader(title = "Appearance & Effects")
+            SettingsCardContainer {
+                val glassSupported = isGlassSupported()
+                SettingsSwitchRow(
+                    icon = SfIcons.AutoAwesome,
+                    title = "Liquid Glass",
+                    subtitle = if (glassSupported) "Real refracting glass on the floating nav bar and buttons. When off, normal blur is used everywhere." else "Requires Android 12 or newer",
+                    checked = settings.liquidGlassEnabled && glassSupported,
+                    enabled = glassSupported,
+                    onCheckedChange = { vm.setLiquidGlassEnabled(it) }
+                )
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            // Section 5: System & Updates
             val context = LocalContext.current
             SettingsSectionHeader(title = "System & Updates")
             SettingsCardContainer {
                 SettingsSwitchRow(
-                    icon = Icons.Default.Sync,
+                    icon = SfIcons.Refresh,
                     title = "Auto Rescan on Startup",
                     subtitle = "Scan folders for new media on app launch",
                     checked = settings.autoRescanOnLaunch,
@@ -248,14 +266,14 @@ fun SettingsScreen(
                 )
                 SettingsDivider()
                 SettingsNavRow(
-                    icon = Icons.Default.SystemUpdate,
+                    icon = SfIcons.AutoAwesome,
                     title = "Check for Updates",
                     subtitle = "Current version: v${com.excavplayer.BuildConfig.VERSION_NAME}",
                     onClick = { vm.checkForUpdates(isManualCheck = true) }
                 )
                 SettingsDivider()
                 SettingsNavRow(
-                    icon = Icons.Default.Code,
+                    icon = SfIcons.Advanced,
                     title = "GitHub Repository",
                     subtitle = "View source code & issues",
                     onClick = {
@@ -265,7 +283,7 @@ fun SettingsScreen(
                 )
                 SettingsDivider()
                 SettingsNavRow(
-                    icon = Icons.Default.Info,
+                    icon = SfIcons.Info,
                     title = "Releases & Changelog",
                     subtitle = "View version history & download APKs",
                     onClick = {
@@ -486,7 +504,7 @@ private fun SettingsDivider() {
     HorizontalDivider(
         color = ExcavPalette.Line.copy(alpha = 0.5f),
         thickness = 0.5.dp,
-        modifier = Modifier.padding(start = 58.dp)
+        modifier = Modifier.padding(start = 52.dp)
     )
 }
 
@@ -496,34 +514,27 @@ private fun SettingsSwitchRow(
     title: String,
     subtitle: String? = null,
     checked: Boolean,
+    enabled: Boolean = true,
     onCheckedChange: (Boolean) -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onCheckedChange(!checked) }
+            .clickable(enabled = enabled) { onCheckedChange(!checked) }
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(34.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .border(1.dp, ExcavPalette.Line, RoundedCornerShape(8.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = ExcavPalette.Text,
-                modifier = Modifier.size(19.dp)
-            )
-        }
-        Spacer(Modifier.width(12.dp))
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = if (enabled) ExcavPalette.Text else ExcavPalette.TextMuted.copy(alpha = 0.4f),
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(
                 text = title,
-                color = ExcavPalette.Text,
+                color = if (enabled) ExcavPalette.Text else ExcavPalette.TextMuted,
                 style = MaterialTheme.typography.bodyLarge.copy(
                     fontWeight = FontWeight.Medium,
                     fontSize = 15.sp
@@ -539,8 +550,9 @@ private fun SettingsSwitchRow(
             }
         }
         Spacer(Modifier.width(8.dp))
-        SleekSwitch(
+        IosSwitch(
             checked = checked,
+            enabled = enabled,
             onCheckedChange = onCheckedChange
         )
     }
@@ -560,21 +572,13 @@ private fun SettingsNavRow(
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(34.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .border(1.dp, ExcavPalette.Line, RoundedCornerShape(8.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = ExcavPalette.Text,
-                modifier = Modifier.size(19.dp)
-            )
-        }
-        Spacer(Modifier.width(12.dp))
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = ExcavPalette.Text,
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(
                 text = title,
@@ -591,6 +595,13 @@ private fun SettingsNavRow(
                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp)
             )
         }
+        Spacer(Modifier.width(8.dp))
+        Icon(
+            imageVector = SfIcons.ChevronRight,
+            contentDescription = null,
+            tint = ExcavPalette.TextMuted,
+            modifier = Modifier.size(16.dp)
+        )
     }
 }
 

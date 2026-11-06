@@ -60,9 +60,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.animation.core.snap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntSize
+import kotlin.math.abs
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -191,52 +194,30 @@ fun BrandHeader(
                 .padding(start = 18.dp, end = 18.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (iconBitmap != null) {
-                Image(
-                    bitmap = iconBitmap,
-                    contentDescription = stringResource(R.string.cd_logo),
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                )
-            } else {
-                Image(
-                    painter = painterResource(id = R.mipmap.ic_launcher_foreground),
-                    contentDescription = stringResource(R.string.cd_logo),
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            AnimatedContent(
-                targetState = isSelectionMode,
-                transitionSpec = {
-                    (fadeIn(tween(180)) + scaleIn(initialScale = 0.95f))
-                        .togetherWith(fadeOut(tween(140)))
-                },
-                label = "header_selection_title"
-            ) { inSelection ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (inSelection) {
-                        Text(
-                            text = "$selectedCount selected",
-                            color = ExcavPalette.Text,
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        )
-                    } else {
-                        Text(
-                            text = "Excav",
-                            color = ExcavPalette.Text,
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                        )
-                        Text(
-                            text = "Player",
-                            color = ExcavPalette.TextMuted,
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                        )
-                    }
+            if (isSelectionMode) {
+                if (iconBitmap != null) {
+                    Image(
+                        bitmap = iconBitmap,
+                        contentDescription = stringResource(R.string.cd_logo),
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                    )
+                } else {
+                    Image(
+                        painter = painterResource(id = R.mipmap.ic_launcher_foreground),
+                        contentDescription = stringResource(R.string.cd_logo),
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                    )
                 }
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    text = "$selectedCount selected",
+                    color = ExcavPalette.Text,
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                )
             }
             Spacer(Modifier.weight(1f))
             GlassmorphicHeaderActions(
@@ -346,52 +327,30 @@ fun FoldersBrandHeader(
                     .padding(start = 18.dp, end = 18.dp, top = 6.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (iconBitmap != null) {
-                    Image(
-                        bitmap = iconBitmap,
-                        contentDescription = stringResource(R.string.cd_logo),
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                    )
-                } else {
-                    Image(
-                        painter = painterResource(id = R.mipmap.ic_launcher_foreground),
-                        contentDescription = stringResource(R.string.cd_logo),
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                    )
-                }
-                Spacer(Modifier.width(12.dp))
-                AnimatedContent(
-                    targetState = isSelectionMode,
-                    transitionSpec = {
-                        (fadeIn(tween(180)) + scaleIn(initialScale = 0.95f))
-                            .togetherWith(fadeOut(tween(140)))
-                    },
-                    label = "folders_header_selection_title"
-                ) { inSelection ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (inSelection) {
-                            Text(
-                                text = "$selectedCount selected",
-                                color = ExcavPalette.Text,
-                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                            )
-                        } else {
-                            Text(
-                                text = "Excav",
-                                color = ExcavPalette.Text,
-                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                            )
-                            Text(
-                                text = "Player",
-                                color = ExcavPalette.TextMuted,
-                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                            )
-                        }
+                if (isSelectionMode) {
+                    if (iconBitmap != null) {
+                        Image(
+                            bitmap = iconBitmap,
+                            contentDescription = stringResource(R.string.cd_logo),
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                        )
+                    } else {
+                        Image(
+                            painter = painterResource(id = R.mipmap.ic_launcher_foreground),
+                            contentDescription = stringResource(R.string.cd_logo),
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                        )
                     }
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        text = "$selectedCount selected",
+                        color = ExcavPalette.Text,
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    )
                 }
                 Spacer(Modifier.weight(1f))
                 GlassmorphicHeaderActions(
@@ -477,6 +436,10 @@ fun FoldersBrandHeader(
     }
 }
 
+private val BitChordGlassSpring = spring<Float>(dampingRatio = 0.72f, stiffness = 320f)
+private const val BITCHORD_STRETCH = 0.16f
+private const val BITCHORD_SQUASH = 0.5f
+
 @Composable
 fun BottomNav(
     selected: MainTab,
@@ -485,151 +448,134 @@ fun BottomNav(
     isCompact: Boolean = false,
     onExpandRequest: (() -> Unit)? = null
 ) {
-    val entries = MainTab.entries
+    val pillShape = remember { RoundedCornerShape(percent = 50) }
 
-    GlassmorphicItem(
-        modifier = modifier.height(64.dp),
-        cornerRadius = 32,
-        containerColor = Color(0x66141822)
+    Box(
+        modifier = modifier
+            .height(62.dp)
+            .liquidGlass(shape = pillShape)
+            .padding(horizontal = 4.dp, vertical = 4.dp),
+        contentAlignment = Alignment.Center
     ) {
         if (isCompact) {
-            // Compact circular state on left (when player pill is enlarged)
+            // Compact circular state: shows single Home button
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { onExpandRequest?.invoke() },
+                        indication = ripple(bounded = true, radius = 28.dp),
+                        onClick = { onExpandRequest?.invoke() }
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = selected.icon,
-                    contentDescription = selected.label,
+                    imageVector = Icons.Default.Home,
+                    contentDescription = "Home",
                     tint = Color.White,
-                    modifier = Modifier.size(29.dp)
+                    modifier = Modifier.size(28.dp)
                 )
             }
         } else {
-            // SmoothBottomNavigation: fixed-size sliding capsule indicator without bouncy size changes
-            BoxWithConstraints(
+            var rowSize by remember { mutableStateOf(IntSize.Zero) }
+            val density = LocalDensity.current
+            val entries = MainTab.entries
+            val n = entries.size
+            val selectedIndex = entries.indexOf(selected).coerceAtLeast(0)
+            val gapPx = with(density) { 4.dp.toPx() }
+
+            val tabWidthPx = if (rowSize.width > 0 && n > 0) {
+                (rowSize.width - gapPx * (n - 1)) / n
+            } else 0f
+            val tabStepPx = if (rowSize.width > 0 && n > 0) {
+                (rowSize.width + gapPx) / n
+            } else 0f
+
+            val pillTargetPx = if (tabStepPx > 0f) selectedIndex * tabStepPx else 0f
+
+            val animatedPillOffset by animateFloatAsState(
+                targetValue = pillTargetPx,
+                animationSpec = BitChordGlassSpring,
+                label = "tabPillOffset"
+            )
+
+            val lag = if (tabStepPx > 0f) {
+                (abs(pillTargetPx - animatedPillOffset) / tabStepPx).coerceIn(0f, 1f)
+            } else 0f
+
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 3.dp, vertical = 3.dp)
+                    .onSizeChanged { rowSize = it }
             ) {
-                val totalWidth = maxWidth
-                val selectedIndex = entries.indexOf(selected).coerceAtLeast(0)
-                val pillWidth = 110.dp.coerceAtMost(totalWidth)
-                val pillHalfWidth = pillWidth / 2f
-                val availableRemaining = (totalWidth - pillWidth).coerceAtLeast(0.dp)
-
-                val animatedIndex by animateFloatAsState(
-                    targetValue = selectedIndex.toFloat(),
-                    animationSpec = tween(
-                        durationMillis = 180,
-                        easing = ExcavEaseInOut
-                    ),
-                    label = "tabIndicatorIndex"
-                )
-
-                val currentPillCenter = when {
-                    animatedIndex <= 1f -> androidx.compose.ui.unit.lerp(pillHalfWidth, totalWidth / 2f, animatedIndex)
-                    else -> androidx.compose.ui.unit.lerp(totalWidth / 2f, totalWidth - pillHalfWidth, animatedIndex - 1f)
+                // Liquid sliding highlight indicator with fluid stretch and squash
+                if (tabWidthPx > 0f) {
+                    Box(
+                        modifier = Modifier
+                            .width(with(density) { tabWidthPx.toDp() })
+                            .fillMaxHeight()
+                            .graphicsLayer {
+                                translationX = animatedPillOffset
+                                scaleX = 1f + lag * BITCHORD_STRETCH
+                                scaleY = 1f - lag * BITCHORD_STRETCH * BITCHORD_SQUASH
+                            }
+                            .clip(pillShape)
+                            .background(Color.White.copy(alpha = 0.16f))
+                            .border(
+                                width = 0.5.dp,
+                                color = Color.White.copy(alpha = 0.28f),
+                                shape = pillShape
+                            )
+                    )
                 }
 
-                // Single sliding highlight capsule indicator
-                Box(
-                    modifier = Modifier
-                        .offset(x = (currentPillCenter - pillHalfWidth).coerceAtLeast(0.dp))
-                        .width(pillWidth)
-                        .fillMaxHeight()
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.18f))
-                        .border(
-                            width = 0.5.dp,
-                            color = Color.White.copy(alpha = 0.30f),
-                            shape = CircleShape
-                        )
-                )
-
-                // Tabs and interactive touch targets
-                Box(modifier = Modifier.fillMaxSize()) {
-                    // Tab visual contents dynamically shifted to give space to selected pill
+                // Tabs Row
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     entries.forEachIndexed { index, tab ->
-                        val isSelected = selected == tab
-                        val tabCenter = when (index) {
-                            0 -> when {
-                                animatedIndex <= 1f -> androidx.compose.ui.unit.lerp(pillHalfWidth, availableRemaining * 0.25f, animatedIndex)
-                                else -> availableRemaining * 0.25f
-                            }
-                            1 -> when {
-                                animatedIndex <= 1f -> androidx.compose.ui.unit.lerp(pillWidth + availableRemaining * 0.25f, totalWidth / 2f, animatedIndex)
-                                else -> androidx.compose.ui.unit.lerp(totalWidth / 2f, availableRemaining * 0.75f, animatedIndex - 1f)
-                            }
-                            else -> when {
-                                animatedIndex <= 1f -> androidx.compose.ui.unit.lerp(pillWidth + availableRemaining * 0.75f, totalWidth - availableRemaining * 0.25f, animatedIndex)
-                                else -> androidx.compose.ui.unit.lerp(totalWidth - availableRemaining * 0.25f, totalWidth - pillHalfWidth, animatedIndex - 1f)
-                            }
-                        }
-
+                        val isSelected = index == selectedIndex
                         val contentAlpha by animateFloatAsState(
                             targetValue = if (isSelected) 1.0f else 0.60f,
-                            animationSpec = tween(160),
-                            label = "tabAlpha"
+                            animationSpec = tween(180),
+                            label = "tabContentAlpha"
                         )
 
                         Box(
                             modifier = Modifier
-                                .offset(x = tabCenter - pillHalfWidth)
-                                .width(pillWidth)
-                                .fillMaxHeight(),
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                    onClick = { onSelect(tab) }
+                                ),
                             contentAlignment = Alignment.Center
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
                             ) {
                                 Icon(
                                     imageVector = tab.icon,
                                     contentDescription = tab.label,
                                     tint = Color.White.copy(alpha = contentAlpha),
-                                    modifier = Modifier.size(27.dp)
+                                    modifier = Modifier.size(24.dp)
                                 )
-                                AnimatedVisibility(
-                                    visible = isSelected,
-                                    enter = fadeIn(tween(120, easing = ExcavEaseOut)),
-                                    exit = fadeOut(tween(90))
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Spacer(Modifier.width(8.dp))
-                                        Text(
-                                            text = tab.label,
-                                            color = Color.White.copy(alpha = contentAlpha),
-                                            style = MaterialTheme.typography.labelMedium.copy(
-                                                fontSize = 12.6.sp,
-                                                fontWeight = FontWeight.Bold
-                                            ),
-                                            maxLines = 1,
-                                            softWrap = false
-                                        )
-                                    }
-                                }
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    text = tab.label,
+                                    color = Color.White.copy(alpha = contentAlpha),
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 10.sp,
+                                        letterSpacing = 0.5.sp,
+                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                                    ),
+                                    maxLines = 1
+                                )
                             }
-                        }
-                    }
-
-                    // Clickable partition row spanning entire width for comfortable touch targeting
-                    Row(modifier = Modifier.fillMaxSize()) {
-                        entries.forEach { tab ->
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight()
-                                    .clickable(
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = null
-                                    ) { onSelect(tab) }
-                            )
                         }
                     }
                 }

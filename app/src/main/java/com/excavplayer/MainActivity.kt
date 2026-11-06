@@ -30,6 +30,15 @@ import com.excavplayer.data.database.mapper.toDomain
 import com.excavplayer.library.VideoLibrary
 import com.excavplayer.media.thumbnail.ThumbnailLoader
 import com.excavplayer.player.core.PlayerController
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.ContentDrawScope
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.excavplayer.ui.components.LocalAppBackdrop
+import com.excavplayer.ui.components.LocalLiquidGlassEnabled
+import com.excavplayer.ui.components.isGlassSupported
+import com.excavplayer.ui.components.backdrop.backdrops.rememberLayerBackdrop
 import com.excavplayer.player.playback.PipHelper
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.combine
@@ -205,7 +214,20 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             ExcavTheme {
+                val settings by viewModel.userSettings.collectAsStateWithLifecycle()
+                val isGlass = settings.liquidGlassEnabled && isGlassSupported()
+                val windowBackground = Color.Black
+                val paintBackdrop: ContentDrawScope.() -> Unit = remember(windowBackground) {
+                    {
+                        drawRect(windowBackground)
+                        drawContent()
+                    }
+                }
+                val appBackdrop = rememberLayerBackdrop(onDraw = paintBackdrop)
+
                 androidx.compose.runtime.CompositionLocalProvider(
+                    LocalLiquidGlassEnabled provides isGlass,
+                    LocalAppBackdrop provides appBackdrop,
                     com.excavplayer.ui.components.LocalThumbnailLoader provides thumbnailLoader,
                     com.excavplayer.ui.components.LocalSeekPreviewLoader provides seekPreviewLoader
                 ) {

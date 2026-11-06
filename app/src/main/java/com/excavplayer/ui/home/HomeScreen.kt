@@ -7,10 +7,13 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -322,6 +325,11 @@ fun HomeScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
+                    // Persistent Brand Title: ExcavPlayer Logo + Wordmark matching BitChord
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        HomeBrandTitle()
+                    }
+
                     // Storage Permission Warning Banner if permission is not granted
                     if (!hasStoragePermission) {
                         item(span = { GridItemSpan(maxLineSpan) }) {
@@ -572,6 +580,35 @@ fun HomeScreen(
                 selectedVideoIds = emptySet()
             },
             onDismiss = { renameVideoTarget = null }
+        )
+    }
+}
+
+@Composable
+fun HomeBrandTitle(
+    modifier: Modifier = Modifier
+) {
+    val style = MaterialTheme.typography.displayLarge
+    val logoHeight = with(LocalDensity.current) { (style.fontSize * 0.9f).toDp() }
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Image(
+            painter = painterResource(R.drawable.app_logo),
+            contentDescription = null,
+            modifier = Modifier
+                .height(logoHeight)
+                .aspectRatio(1f)
+                .clip(RoundedCornerShape(12.dp))
+        )
+        Spacer(Modifier.width(14.dp))
+        Text(
+            text = "ExcavPlayer",
+            style = style.copy(fontWeight = FontWeight.Bold),
+            color = MaterialTheme.colorScheme.onBackground
         )
     }
 }

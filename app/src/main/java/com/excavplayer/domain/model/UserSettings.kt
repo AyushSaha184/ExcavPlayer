@@ -26,7 +26,8 @@ data class UserSettings(
     val hardwareAccelerationMode: String = "Automatic",
     val hardwareAccelerationEnabled: Boolean = true,
     val dialogueBoostEnabled: Boolean = false,
-    val matchDisplayRefreshRate: Boolean = false) {
+    val matchDisplayRefreshRate: Boolean = false,
+    val liquidGlassEnabled: Boolean = true) {
     val seekDurationSeconds: Int
         get() = com.excavplayer.domain.policy.PlaybackThresholdPolicy.seekStepSeconds(resumeThresholdPercent)
 

@@ -524,6 +524,12 @@ class ExcavViewModel @Inject constructor(
         }
     }
 
+    fun setLiquidGlassEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settings.updateLiquidGlassEnabled(enabled)
+        }
+    }
+
     fun setEqualizerEnabled(enabled: Boolean) {
         player.setVideoEqualizerEnabled(enabled)
     }

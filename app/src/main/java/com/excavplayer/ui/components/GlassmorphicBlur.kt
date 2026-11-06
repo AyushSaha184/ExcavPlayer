@@ -2,8 +2,12 @@ package com.excavplayer.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ripple
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
@@ -90,29 +94,31 @@ fun GlassmorphicBackButton(
     size: Dp = 40.dp,
     hazeState: HazeState = LocalHazeState.current
 ) {
-    GlassmorphicItem(
-        modifier = modifier.size(size),
-        cornerRadius = (size.value / 2).toInt(),
-        hazeState = hazeState
+    val shape = remember { CircleShape }
+    Box(
+        modifier = modifier
+            .size(size)
+            .liquidGlass(shape = shape)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = ripple(bounded = true, radius = size / 2),
+                enabled = enabled,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
     ) {
-        IconButton(
-            onClick = onClick,
-            enabled = enabled,
-            modifier = Modifier.fillMaxSize()
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = stringResource(R.string.cd_back),
-                tint = if (enabled) ExcavPalette.Text else ExcavPalette.TextMuted.copy(alpha = 0.4f),
-                modifier = Modifier.size(20.dp)
-            )
-        }
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = stringResource(R.string.cd_back),
+            tint = if (enabled) ExcavPalette.Text else ExcavPalette.TextMuted.copy(alpha = 0.4f),
+            modifier = Modifier.size(20.dp)
+        )
     }
 }
 
 @Composable
 fun GlassmorphicHeaderActions(
-    onSearch: () -> Unit,
+    onSearch: (() -> Unit)? = null,
     onRefresh: (() -> Unit)? = null,
     isSelectionMode: Boolean = false,
     onMoreClick: (() -> Unit)? = null,
@@ -120,6 +126,7 @@ fun GlassmorphicHeaderActions(
     hazeState: HazeState = LocalHazeState.current,
     dropdownMenu: (@Composable () -> Unit)? = null
 ) {
+    val buttonShape = remember { CircleShape }
     AnimatedContent(
         targetState = isSelectionMode,
         transitionSpec = {
@@ -135,61 +142,45 @@ fun GlassmorphicHeaderActions(
         ) {
             if (inSelection) {
                 Box {
-                    GlassmorphicItem(
-                        modifier = Modifier.size(40.dp),
-                        cornerRadius = 20,
-                        hazeState = hazeState
-                    ) {
-                        IconButton(
-                            onClick = { onMoreClick?.invoke() },
-                            modifier = Modifier.fillMaxSize()
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.MoreVert,
-                                contentDescription = stringResource(R.string.cd_more),
-                                tint = ExcavPalette.Text,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                    dropdownMenu?.invoke()
-                }
-            } else {
-                GlassmorphicItem(
-                    modifier = Modifier.size(40.dp),
-                    cornerRadius = 20,
-                    hazeState = hazeState
-                ) {
-                    IconButton(
-                        onClick = onSearch,
-                        modifier = Modifier.fillMaxSize()
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .liquidGlass(shape = buttonShape)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = ripple(bounded = true, radius = 20.dp),
+                                onClick = { onMoreClick?.invoke() }
+                            ),
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = stringResource(R.string.cd_search),
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = stringResource(R.string.cd_more),
                             tint = ExcavPalette.Text,
                             modifier = Modifier.size(20.dp)
                         )
                     }
+                    dropdownMenu?.invoke()
                 }
-
+            } else {
                 if (onRefresh != null) {
-                    GlassmorphicItem(
-                        modifier = Modifier.size(40.dp),
-                        cornerRadius = 20,
-                        hazeState = hazeState
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .liquidGlass(shape = buttonShape)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = ripple(bounded = true, radius = 20.dp),
+                                onClick = onRefresh
+                            ),
+                        contentAlignment = Alignment.Center
                     ) {
-                        IconButton(
-                            onClick = onRefresh,
-                            modifier = Modifier.fillMaxSize()
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = stringResource(R.string.refresh),
-                                tint = ExcavPalette.Text,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = stringResource(R.string.refresh),
+                            tint = ExcavPalette.Text,
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
                 }
             }

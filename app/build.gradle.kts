@@ -131,6 +131,7 @@ dependencies {
     implementation("dev.chrisbanes.haze:haze:2.0.1")
     implementation("dev.chrisbanes.haze:haze-blur:2.0.1")
     implementation("dev.chrisbanes.haze:haze-blur-materials:2.0.1")
+    implementation("com.github.cosmictaserdev-creator.Jetpack_SF_Symbols:sfsymbols-android:1.1.1")
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     // AndroidX Core & Lifecycle

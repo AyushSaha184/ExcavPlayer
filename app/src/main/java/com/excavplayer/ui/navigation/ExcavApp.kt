@@ -8,6 +8,7 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -45,11 +46,14 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
+import com.excavplayer.ui.components.backdrop.backdrops.LayerBackdrop
+import com.excavplayer.ui.components.backdrop.backdrops.layerBackdrop
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -140,10 +144,13 @@ fun ExcavApp(
             Box(
                 modifier = Modifier.fillMaxSize()
             ) {
+                val appBackdrop = LocalAppBackdrop.current as? LayerBackdrop
+                val useGlass = LocalLiquidGlassEnabled.current && isGlassSupported() && appBackdrop != null
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .hazeSource(state = hazeState)
+                        .then(if (useGlass && appBackdrop != null) Modifier.layerBackdrop(appBackdrop) else Modifier)
                 ) {
                     if (library.loading) {
                             Box(
@@ -252,11 +259,23 @@ fun ExcavApp(
                     exit = fadeOut(tween(140)),
                     modifier = Modifier.align(Alignment.BottomCenter)
                 ) {
+                    val isScrolledDown by remember {
+                        derivedStateOf {
+                            when (tab) {
+                                MainTab.HOME -> homeGridState.firstVisibleItemIndex > 0 || homeGridState.firstVisibleItemScrollOffset > 30
+                                MainTab.FOLDERS -> foldersGridState.firstVisibleItemIndex > 0 || foldersGridState.firstVisibleItemScrollOffset > 30
+                                else -> false
+                            }
+                        }
+                    }
+
                     BottomDock(
                         vm = vm,
                         tab = tab,
                         onSelectTab = { tab = it },
-                        playerOpen = playerOpen
+                        onOpenSearch = { searchOpen = true },
+                        playerOpen = playerOpen,
+                        isScrolledDown = isScrolledDown
                     )
                 }
 
@@ -340,121 +359,155 @@ fun BottomDock(
     vm: ExcavViewModel,
     tab: MainTab,
     onSelectTab: (MainTab) -> Unit,
+    onOpenSearch: () -> Unit,
     playerOpen: Boolean,
+    isScrolledDown: Boolean,
     modifier: Modifier = Modifier
 ) {
     val playerState by vm.player.state.collectAsStateWithLifecycle()
     val isBackgroundAudioActive = !playerOpen && playerState.currentVideo != null && (playerState.isBackgroundAudio || playerState.playback.isPlaying)
-    var isPlayerPillExpanded by rememberSaveable { mutableStateOf(false) }
+    var isDockManuallyExpanded by rememberSaveable { mutableStateOf(false) }
 
-    // When full player opens, reset expanded state so clicking bg play in player opens State 1
+    // When full player opens or closes, reset manual expansion
     LaunchedEffect(playerOpen) {
         if (playerOpen) {
-            isPlayerPillExpanded = false
+            isDockManuallyExpanded = false
         }
     }
-    // When playback stops, reset expanded state
+    // When playback stops, reset manual expansion
     LaunchedEffect(isBackgroundAudioActive) {
         if (!isBackgroundAudioActive) {
-            isPlayerPillExpanded = false
+            isDockManuallyExpanded = false
         }
     }
+
+    // Reset manual expansion if user scrolls back to the very top
+    LaunchedEffect(isScrolledDown) {
+        if (!isScrolledDown) {
+            isDockManuallyExpanded = false
+        }
+    }
+
+    // Dock collapses when scrolled down unless manually expanded
+    val isCollapsed = isBackgroundAudioActive && isScrolledDown && !isDockManuallyExpanded
+
+    val dockSpring = remember {
+        spring<Float>(
+            dampingRatio = 0.72f,
+            stiffness = 320f
+        )
+    }
+    val dockDpSpring = remember {
+        spring<androidx.compose.ui.unit.Dp>(
+            dampingRatio = 0.72f,
+            stiffness = 320f
+        )
+    }
+
+    val audioActiveProgress by animateFloatAsState(
+        targetValue = if (isBackgroundAudioActive) 1f else 0f,
+        animationSpec = dockSpring,
+        label = "dockAudioActive"
+    )
+
+    val collapseProgress by animateFloatAsState(
+        targetValue = if (isCollapsed) 1f else 0f,
+        animationSpec = dockSpring,
+        label = "dockCollapse"
+    )
+
+    val barHeight = 62.dp
+    val circleButtonSize = 62.dp
+    val spacing = 8.dp
+
+    val totalDockHeight by animateDpAsState(
+        targetValue = if (isBackgroundAudioActive && !isCollapsed) (barHeight * 2f + spacing) else barHeight,
+        animationSpec = dockDpSpring,
+        label = "dockTotalHeight"
+    )
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .navigationBarsPadding()
-            .padding(horizontal = 20.dp, vertical = 10.dp)
+            .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets(bottom = 15.dp)))
+            .padding(start = 19.dp, end = 19.dp, bottom = 6.dp)
     ) {
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(64.dp)
+                .height(totalDockHeight)
         ) {
             val totalWidth = maxWidth
-            val circlePillSize = 64.dp
-            val gap = 12.dp
-            val standaloneNavbarWidth = 256.dp.coerceAtMost(totalWidth)
-            val expandedPlayerWidth = standaloneNavbarWidth.coerceAtMost(totalWidth - circlePillSize - gap)
-            val dockedNavbarWidth = (totalWidth - circlePillSize - gap)
-                .coerceAtMost(standaloneNavbarWidth)
-                .coerceAtLeast(circlePillSize)
+            val searchWidth = circleButtonSize
+            val expandedNavbarWidth = (totalWidth - searchWidth - spacing).coerceAtLeast(circleButtonSize)
+            val collapsedNavbarWidth = circleButtonSize
+            val currentNavbarWidth = lerp(expandedNavbarWidth, collapsedNavbarWidth, collapseProgress)
 
-            val springSpec = spring<Float>(
-                dampingRatio = 0.72f,
-                stiffness = Spring.StiffnessMediumLow
-            )
+            val collapsedPillWidth = (totalWidth - collapsedNavbarWidth - searchWidth - spacing * 2f).coerceAtLeast(0.dp)
+            val currentPillWidth = lerp(expandedNavbarWidth, collapsedPillWidth, collapseProgress)
 
-            val audioActiveProgress by animateFloatAsState(
-                targetValue = if (isBackgroundAudioActive) 1f else 0f,
-                animationSpec = springSpec,
-                label = "dockAudioActiveProgress"
-            )
+            val currentPillOffsetX = lerp(0.dp, collapsedNavbarWidth + spacing, collapseProgress)
+            val bottomRowOffsetY = lerp(barHeight + spacing, 0.dp, collapseProgress)
 
-            val expandProgress by animateFloatAsState(
-                targetValue = if (isPlayerPillExpanded) 1f else 0f,
-                animationSpec = springSpec,
-                label = "dockExpandProgress"
-            )
-
-            val targetNavbarW = lerp(
-                standaloneNavbarWidth,
-                lerp(dockedNavbarWidth, circlePillSize, expandProgress),
-                audioActiveProgress
-            )
-
-            val targetPlayerW = lerp(
-                0.dp,
-                lerp(circlePillSize, expandedPlayerWidth, expandProgress),
-                audioActiveProgress
-            )
-
-            val targetGap = lerp(0.dp, gap, audioActiveProgress)
-
-            Row(
-                modifier = Modifier.fillMaxSize(),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Navbar
+            // 1. Background Play Pill (resting directly on top of navbar, slides down between Home and Search on scroll)
+            if (audioActiveProgress > 0.01f) {
                 Box(
                     modifier = Modifier
-                        .width(targetNavbarW)
-                        .height(64.dp)
+                        .offset(x = currentPillOffsetX, y = 0.dp)
+                        .width(currentPillWidth)
+                        .height(barHeight)
+                        .graphicsLayer {
+                            alpha = audioActiveProgress.coerceIn(0f, 1f)
+                        }
                 ) {
-                    val isCompact = isPlayerPillExpanded || targetNavbarW < 90.dp
-                    BottomNav(
-                        selected = tab,
-                        onSelect = onSelectTab,
-                        isCompact = isCompact,
-                        onExpandRequest = { isPlayerPillExpanded = false },
+                    BackgroundPlayPill(
+                        vm = vm,
+                        onOpenFullPlayer = { vm.setPlayerOpen(true) },
                         modifier = Modifier.fillMaxSize()
                     )
                 }
+            }
 
-                if (targetPlayerW > 2.dp) {
-                    Spacer(Modifier.width(targetGap))
-                    // Dynamic Background Play Pill
-                    Box(
-                        modifier = Modifier
-                            .width(targetPlayerW)
-                            .height(64.dp)
-                            .graphicsLayer {
-                                alpha = audioActiveProgress.coerceIn(0f, 1f)
-                            }
-                    ) {
-                        BackgroundPlayPill(
-                            vm = vm,
-                            isExpanded = isPlayerPillExpanded,
-                            onExpand = { isPlayerPillExpanded = true },
-                            onCollapse = { isPlayerPillExpanded = false },
-                            onOpenFullPlayer = {
-                                vm.setPlayerOpen(true)
-                            },
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-                }
+            // 2. Navbar (Left / Center)
+            Box(
+                modifier = Modifier
+                    .offset(x = 0.dp, y = bottomRowOffsetY)
+                    .width(currentNavbarWidth)
+                    .height(barHeight)
+            ) {
+                val isCompact = collapseProgress > 0.6f
+                BottomNav(
+                    selected = tab,
+                    onSelect = onSelectTab,
+                    isCompact = isCompact,
+                    onExpandRequest = {
+                        onSelectTab(MainTab.HOME)
+                        isDockManuallyExpanded = true
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+
+            // 3. Standalone Search Button (Right)
+            val searchShape = remember { CircleShape }
+            Box(
+                modifier = Modifier
+                    .offset(x = totalWidth - searchWidth, y = bottomRowOffsetY)
+                    .size(circleButtonSize)
+                    .liquidGlass(shape = searchShape)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = ripple(bounded = true, radius = circleButtonSize / 2),
+                        onClick = onOpenSearch
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = stringResource(R.string.search),
+                    tint = Color.White,
+                    modifier = Modifier.size(28.dp)
+                )
             }
         }
     }
@@ -753,9 +806,6 @@ fun CircularAudioVisualizer(
 @Composable
 fun BackgroundPlayPill(
     vm: ExcavViewModel,
-    isExpanded: Boolean,
-    onExpand: () -> Unit,
-    onCollapse: () -> Unit,
     onOpenFullPlayer: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -763,123 +813,93 @@ fun BackgroundPlayPill(
     val playbackPos by vm.player.playbackPosition.collectAsStateWithLifecycle()
     val currentVideo = playerState.currentVideo ?: return
     val playback = playerState.playback
-    val progress = if (playbackPos.durationMs > 0L) {
-        (playbackPos.currentPositionMs.toFloat() / playbackPos.durationMs.toFloat()).coerceIn(0f, 1f)
-    } else 0f
+    val pillShape = remember { RoundedCornerShape(percent = 50) }
 
-    GlassmorphicItem(
+    Box(
         modifier = modifier
-            .height(64.dp)
+            .height(62.dp)
+            .liquidGlass(shape = pillShape)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ) {
-                if (isExpanded) {
-                    onOpenFullPlayer()
-                } else {
-                    onExpand()
-                }
-            },
-        cornerRadius = 32,
-        containerColor = Color(0x66141822)
+                indication = null,
+                onClick = onOpenFullPlayer
+            )
+            .padding(horizontal = 14.dp),
+        contentAlignment = Alignment.Center
     ) {
-        Crossfade(
-            targetState = isExpanded,
-            animationSpec = tween(180),
-            label = "bgPlayPillContent"
-        ) { expanded ->
-            if (!expanded) {
-                // Circular Pill: Minimalist animated audio visualizer (white ring, black waves)
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularAudioVisualizer(
-                        isPlaying = playback.isPlaying,
-                        progress = progress,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-            } else {
-                // Expanded Pill: Displays video title, elapsed time, horizontal soundwaves, play/pause and close
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Video Name and Elapsed Time + Horizontal Waves
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = currentVideo.displayName,
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 13.sp
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(2.dp))
                 Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(start = 16.dp, end = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Video Name and Elapsed Time + Horizontal Waves
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = currentVideo.displayName,
-                            color = Color.White,
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 13.sp
-                            ),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                    Text(
+                        text = "${formatDuration(playbackPos.currentPositionMs)} / ${formatDuration(playbackPos.durationMs)}",
+                        color = ExcavPalette.TextMuted,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
                         )
-                        Spacer(Modifier.height(2.dp))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "${formatDuration(playbackPos.currentPositionMs)} / ${formatDuration(playbackPos.durationMs)}",
-                                color = ExcavPalette.TextMuted,
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            HorizontalSoundWaves(
-                                isPlaying = playback.isPlaying,
-                                modifier = Modifier.size(width = 18.dp, height = 10.dp)
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.width(6.dp))
-
-                    // Play / Pause Button
-                    IconButton(
-                        onClick = {
-                            if (playback.isPlaying) {
-                                vm.player.pause()
-                            } else {
-                                vm.player.resume()
-                            }
-                        },
-                        modifier = Modifier.size(38.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = if (playback.isPlaying) "Pause" else "Play",
-                            tint = Color.White,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-
-                    // Close Button
-                    IconButton(
-                        onClick = {
-                            vm.player.stop()
-                            onCollapse()
-                        },
-                        modifier = Modifier.size(38.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Close",
-                            tint = ExcavPalette.TextMuted,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    HorizontalSoundWaves(
+                        isPlaying = playback.isPlaying,
+                        modifier = Modifier.size(width = 18.dp, height = 10.dp)
+                    )
                 }
+            }
+
+            Spacer(Modifier.width(6.dp))
+
+            // Play / Pause Button
+            IconButton(
+                onClick = {
+                    if (playback.isPlaying) {
+                        vm.player.pause()
+                    } else {
+                        vm.player.resume()
+                    }
+                },
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = if (playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    contentDescription = if (playback.isPlaying) "Pause" else "Play",
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
+            // Close Button
+            IconButton(
+                onClick = {
+                    vm.player.stop()
+                },
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Close",
+                    tint = ExcavPalette.TextMuted,
+                    modifier = Modifier.size(20.dp)
+                )
             }
         }
     }

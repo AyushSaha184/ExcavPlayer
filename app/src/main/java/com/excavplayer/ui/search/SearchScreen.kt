@@ -14,7 +14,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.excavplayer.R
@@ -36,6 +39,15 @@ fun SearchScreen(
     var selectedVideoForMenu by remember { mutableStateOf<Video?>(null) }
     var renameVideoTarget by remember { mutableStateOf<Video?>(null) }
     var propertiesVideo by remember { mutableStateOf<Video?>(null) }
+
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(100)
+        focusRequester.requestFocus()
+        keyboardController?.show()
+    }
 
     Box(
         modifier = Modifier
@@ -123,7 +135,9 @@ fun SearchScreen(
                     TextField(
                         value = query,
                         onValueChange = onQueryChange,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(focusRequester),
                         placeholder = { Text(stringResource(R.string.search), color = ExcavPalette.TextMuted) },
                         singleLine = true,
                         leadingIcon = {

@@ -134,14 +134,9 @@ private fun rubberClamp(raw: Float, limit: Float): Float {
 
 @Composable
 private fun Modifier.playerGlass(
-    shape: Shape = CircleShape,
+    shape: androidx.compose.foundation.shape.CornerBasedShape = CircleShape,
     fallbackBg: Color = Color(0xA6141822)
-): Modifier = this.glassmorphicBlur(
-    shape = shape,
-    backgroundColor = fallbackBg,
-    strokeColor = Color.White.copy(alpha = 0.20f),
-    strokeWidth = 0.5.dp
-)
+): Modifier = this.liquidGlass(shape = shape)
 
 @Composable
 fun PlayerScreen(
