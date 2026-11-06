@@ -14,6 +14,9 @@ import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioOffloadSupportProvider
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.mediacodec.MediaCodecUtil
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -135,7 +138,19 @@ class PlayerManager @Inject constructor(
             }
         }
 
-        val renderersFactory = DefaultRenderersFactory(context)
+        val renderersFactory = object : DefaultRenderersFactory(context) {
+            override fun buildAudioSink(
+                context: Context,
+                enableFloatOutput: Boolean,
+                enableAudioTrackPlaybackParams: Boolean
+            ): AudioSink {
+                return DefaultAudioSink.Builder(context)
+                    .setAudioOffloadSupportProvider(DefaultAudioOffloadSupportProvider(context))
+                    .setEnableFloatOutput(enableFloatOutput)
+                    .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                    .build()
+            }
+        }
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
             .setEnableDecoderFallback(true)
             .setMediaCodecSelector(mediaCodecSelector)
@@ -238,6 +253,9 @@ class PlayerManager @Inject constructor(
     private fun applyTrackSelectionPreferences(settings: UserSettings) {
         try {
             val builder = exoPlayer.trackSelectionParameters.buildUpon()
+            if (!_state.value.isMuted) {
+                builder.setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+            }
             val audioLangs = TrackSelectionPolicy.getLanguageCodes(settings.preferredAudioLanguage)
             builder.setPreferredAudioLanguages(*audioLangs.toTypedArray())
             if (settings.subtitlesEnabled && !settings.preferredSubtitleLanguage.isNullOrBlank()) {
@@ -606,19 +624,18 @@ class PlayerManager @Inject constructor(
         val sessionId = exoPlayer.audioSessionId
         if (sessionId != C.AUDIO_SESSION_ID_UNSET && sessionId > 0) {
             try {
-                if (loudnessEnhancer == null || loudnessEnhancerSessionId != sessionId) {
-                    releaseLoudnessEnhancer()
-                    loudnessEnhancer = android.media.audiofx.LoudnessEnhancer(sessionId)
-                    loudnessEnhancerSessionId = sessionId
-                }
-                if (volume > 1.0f) {
+                if (!_state.value.isMuted && volume > 1.0f) {
+                    if (loudnessEnhancer == null || loudnessEnhancerSessionId != sessionId) {
+                        releaseLoudnessEnhancer()
+                        loudnessEnhancer = android.media.audiofx.LoudnessEnhancer(sessionId)
+                        loudnessEnhancerSessionId = sessionId
+                    }
                     // Boost volume from 100% to 200% mapped to +0 to +1200 mB (+12dB)
                     val gainMb = ((volume - 1.0f) * 1200f).toInt()
                     loudnessEnhancer?.setTargetGain(gainMb)
                     loudnessEnhancer?.enabled = true
                 } else {
-                    loudnessEnhancer?.setTargetGain(0)
-                    loudnessEnhancer?.enabled = false
+                    releaseLoudnessEnhancer()
                 }
             } catch (e: Exception) {
                 logger.w(TAG, "Failed to configure LoudnessEnhancer: ${e.message}")
@@ -876,15 +893,22 @@ class PlayerManager @Inject constructor(
 
     override fun setVolume(volume: Float) {
         val clampedVolume = volume.coerceIn(0f, 2.0f)
-        if (_state.value.isMuted) {
+        val shouldDisableAudio = _state.value.isMuted || clampedVolume == 0f
+        val params = exoPlayer.trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, shouldDisableAudio)
+            .build()
+        exoPlayer.trackSelectionParameters = params
+
+        if (clampedVolume > 0f && _state.value.isMuted) {
             _state.update { it.copy(isMuted = false) }
         }
         if (clampedVolume <= 1.0f) {
             exoPlayer.volume = clampedVolume
+            releaseLoudnessEnhancer()
         } else {
             exoPlayer.volume = 1.0f
+            applyLoudnessEnhancer(clampedVolume)
         }
-        applyLoudnessEnhancer(clampedVolume)
         _state.update {
             it.copy(playback = it.playback.copy(volume = clampedVolume))
         }
@@ -892,19 +916,31 @@ class PlayerManager @Inject constructor(
 
     override fun setMuted(muted: Boolean) {
         logger.d(TAG, "setMuted: $muted")
+        val params = exoPlayer.trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, muted)
+            .build()
+        exoPlayer.trackSelectionParameters = params
+
         if (muted) {
             exoPlayer.volume = 0f
-            applyLoudnessEnhancer(0f)
+            releaseLoudnessEnhancer()
             _state.update { it.copy(isMuted = true) }
         } else {
             val vol = _state.value.playback.volume.coerceIn(0f, 2.0f)
-            if (vol <= 1.0f) {
-                exoPlayer.volume = vol
+            val effectiveVol = if (vol == 0f) 1.0f else vol
+            if (effectiveVol <= 1.0f) {
+                exoPlayer.volume = effectiveVol
+                releaseLoudnessEnhancer()
             } else {
                 exoPlayer.volume = 1.0f
+                applyLoudnessEnhancer(effectiveVol)
             }
-            applyLoudnessEnhancer(vol)
-            _state.update { it.copy(isMuted = false) }
+            _state.update {
+                it.copy(
+                    isMuted = false,
+                    playback = it.playback.copy(volume = effectiveVol)
+                )
+            }
         }
     }
 
