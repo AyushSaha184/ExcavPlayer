@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.annotation.OptIn
 import androidx.media3.common.Metadata
+import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.extractor.metadata.id3.ChapterFrame
 import androidx.media3.extractor.metadata.id3.ChapterTocFrame
@@ -11,19 +12,20 @@ import androidx.media3.extractor.metadata.id3.CommentFrame
 import androidx.media3.extractor.metadata.id3.TextInformationFrame
 import androidx.media3.extractor.metadata.vorbis.VorbisComment
 import com.excavplayer.core.logging.AppLogger
+import com.excavplayer.domain.model.ChapterType
 import com.excavplayer.domain.model.MediaChapter
 import dagger.hilt.android.qualifiers.ApplicationContext
+import io.github.anilbeesetti.nextlib.mediainfo.MediaInfoBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.BufferedInputStream
-import java.io.InputStream
+import java.io.File
 import java.nio.charset.StandardCharsets
 import javax.inject.Inject
 import javax.inject.Singleton
 
 data class RawChapter(
     val id: String = "",
-    val title: String = "",
+    val title: String,
     val startTimeMs: Long,
     val endTimeMs: Long = -1L
 )
@@ -36,14 +38,115 @@ class ChapterExtractor @Inject constructor(
 ) {
     companion object {
         private const val TAG = "ChapterExtractor"
-        private const val MAX_CONTAINER_SCAN_BYTES = 16 * 1024 * 1024 // 16 MB max header scan limit
-        private const val MAX_CHAPTERS_LIMIT = 300
+        private const val MAX_CHAPTERS_LIMIT = 500
     }
 
     /**
-     * Extracts and validates chapters from Media3 player metadata (ID3, Vorbis, Text).
+     * Extracts chapters from media container using NextPlayer's FFmpeg native MediaInfoBuilder,
+     * or external sidecar files (.chp, .chapters.txt, .chapters.xml).
+     */
+    suspend fun extractFromUri(uriString: String, videoDurationMs: Long? = null): List<MediaChapter> = withContext(Dispatchers.IO) {
+        val rawLocalPath = when {
+            uriString.startsWith("file://", ignoreCase = true) -> uriString.substring(7)
+            uriString.startsWith("/") -> uriString
+            else -> null
+        }
+        val localPath = rawLocalPath?.let { raw ->
+            try {
+                java.net.URLDecoder.decode(raw, StandardCharsets.UTF_8.name())
+            } catch (_: Throwable) {
+                raw
+            }
+        }
+
+        // 1. Check sidecar files if local path exists
+        if (localPath != null) {
+            try {
+                val mediaFile = File(localPath)
+                if (mediaFile.exists()) {
+                    val parent = mediaFile.parentFile
+                    val baseName = mediaFile.nameWithoutExtension
+                    val candidateExtensions = listOf(".chapters.txt", ".chp", ".chapters.xml")
+                    for (ext in candidateExtensions) {
+                        val sidecar = File(parent, "$baseName$ext")
+                        if (sidecar.exists() && sidecar.isFile && sidecar.length() > 0) {
+                            val content = sidecar.readText(StandardCharsets.UTF_8)
+                            val sidecarChapters = parseSidecarChapters(content, videoDurationMs)
+                            if (sidecarChapters.isNotEmpty()) {
+                                logger.i(TAG, "Loaded ${sidecarChapters.size} chapters from sidecar file: ${sidecar.name}")
+                                return@withContext sidecarChapters
+                            }
+                        }
+                    }
+                }
+            } catch (e: Throwable) {
+                logger.d(TAG, "Sidecar chapter check skipped: ${e.message}")
+            }
+        }
+
+        val uri = runCatching { Uri.parse(uriString) }.getOrNull() ?: return@withContext emptyList()
+
+        // 2. NextPlayer FFmpeg extraction via MediaInfoBuilder (MKV, MP4, WebM, etc.)
+        val mediaInfo = runCatching {
+            MediaInfoBuilder().from(context, uri).build()
+        }.onFailure { e ->
+            logger.d(TAG, "MediaInfoBuilder chapter extraction failed: ${e.message}")
+        }.getOrNull()
+
+        val ffmpegChapters = try {
+            mediaInfo?.chapters?.mapIndexed { i, ch ->
+                RawChapter(
+                    id = "chap_${ch.index}_$i",
+                    title = ch.title.orEmpty(),
+                    startTimeMs = ch.start,
+                    endTimeMs = ch.end
+                )
+            }.orEmpty()
+        } finally {
+            try {
+                mediaInfo?.release()
+            } catch (e: Throwable) {
+                logger.d(TAG, "Failed releasing MediaInfo: ${e.message}")
+            }
+        }
+
+        if (ffmpegChapters.isNotEmpty()) {
+            logger.i(TAG, "Extracted ${ffmpegChapters.size} chapters via NextPlayer FFmpeg MediaInfo")
+            return@withContext sanitizeAndNormalize(ffmpegChapters, videoDurationMs)
+        }
+
+        emptyList()
+    }
+
+    /**
+     * Extracts dynamic chapters from Media3 player tracks (following NextPlayer's ChaptersState approach).
+     */
+    fun extractFromTracks(tracks: Tracks, videoDurationMs: Long? = null): List<MediaChapter> {
+        val raw = mutableListOf<RawChapter>()
+        for (group in tracks.groups) {
+            val mediaTrackGroup = group.mediaTrackGroup
+            for (i in 0 until mediaTrackGroup.length) {
+                val format = mediaTrackGroup.getFormat(i)
+                val metadata = format.metadata ?: continue
+                raw.addAll(extractRawFromMetadata(metadata))
+            }
+        }
+        return sanitizeAndNormalize(raw, videoDurationMs)
+    }
+
+    /**
+     * Extracts chapters from Media3 Metadata (ID3 ChapterFrame, Vorbis comments, etc.).
      */
     fun extractFromMetadata(metadata: Metadata, videoDurationMs: Long? = null): List<MediaChapter> {
+        val raw = extractRawFromMetadata(metadata)
+        val normalized = sanitizeAndNormalize(raw, videoDurationMs)
+        if (normalized.isNotEmpty()) {
+            logger.i(TAG, "Extracted ${normalized.size} normalized chapters from metadata")
+        }
+        return normalized
+    }
+
+    private fun extractRawFromMetadata(metadata: Metadata): List<RawChapter> {
         val rawChapters = mutableListOf<RawChapter>()
         val vorbisTimeMap = mutableMapOf<String, Long>()
         val vorbisEndTimeMap = mutableMapOf<String, Long>()
@@ -91,16 +194,16 @@ class ChapterExtractor @Inject constructor(
                 }
 
                 is TextInformationFrame -> {
-                    val desc = entry.description?.uppercase()?.trim() ?: ""
-                    val value = entry.values.firstOrNull()?.trim() ?: ""
+                    val desc = entry.description?.uppercase()?.trim().orEmpty()
+                    val value = entry.values.firstOrNull()?.trim().orEmpty()
                     if (desc.startsWith("CHAPTER") && value.isNotEmpty()) {
                         parseVorbisChapterTag(desc, value, vorbisTimeMap, vorbisEndTimeMap, vorbisNameMap)
                     }
                 }
 
                 is CommentFrame -> {
-                    val desc = entry.description?.uppercase()?.trim() ?: ""
-                    val text = entry.text?.trim() ?: ""
+                    val desc = entry.description?.uppercase()?.trim().orEmpty()
+                    val text = entry.text?.trim().orEmpty()
                     if (desc.startsWith("CHAPTER") && text.isNotEmpty()) {
                         parseVorbisChapterTag(desc, text, vorbisTimeMap, vorbisEndTimeMap, vorbisNameMap)
                     }
@@ -108,7 +211,6 @@ class ChapterExtractor @Inject constructor(
             }
         }
 
-        // Assemble Vorbis comment chapters (common in MKV, WebM, Ogg)
         for ((chapterNum, startMs) in vorbisTimeMap) {
             val title = vorbisNameMap[chapterNum] ?: "Chapter $chapterNum"
             val endMs = vorbisEndTimeMap[chapterNum] ?: -1L
@@ -122,33 +224,7 @@ class ChapterExtractor @Inject constructor(
             )
         }
 
-        val normalized = sanitizeAndNormalize(rawChapters, videoDurationMs)
-        if (normalized.isNotEmpty()) {
-            logger.i(TAG, "Extracted ${normalized.size} normalized chapters from metadata")
-        }
-        return normalized
-    }
-
-    /**
-     * Extracts chapters directly from a random-access seekable source (FileChannel or memory).
-     */
-    fun extractFromSeekable(source: SeekableSource, videoDurationMs: Long? = null): List<MediaChapter> {
-        val rawChapters = mutableListOf<RawChapter>()
-        try {
-            source.position = 0L
-            val magic = ByteArray(12)
-            val read = source.read(magic, 0, 12)
-            source.position = 0L
-
-            if (read >= 4 && isMatroska(magic)) {
-                rawChapters.addAll(parseEbmlSeekable(source))
-            } else if (read >= 8 && isMp4(magic)) {
-                rawChapters.addAll(parseMp4Seekable(source))
-            }
-        } catch (e: Exception) {
-            logger.d(TAG, "Seekable chapter extraction failed: ${e.message}")
-        }
-        return sanitizeAndNormalize(rawChapters, videoDurationMs)
+        return rawChapters
     }
 
     /**
@@ -158,7 +234,6 @@ class ChapterExtractor @Inject constructor(
         val rawChapters = mutableListOf<RawChapter>()
         val lines = content.lines().map { it.trim() }.filter { it.isNotEmpty() }
 
-        // Check if content is Vorbis comment format (e.g. CHAPTER01=00:00:00.000)
         val isVorbis = lines.any { it.startsWith("CHAPTER", ignoreCase = true) && it.contains("=") }
         if (isVorbis) {
             val vorbisTimeMap = mutableMapOf<String, Long>()
@@ -187,7 +262,6 @@ class ChapterExtractor @Inject constructor(
                 )
             }
         } else {
-            // YouTube / timestamp lines format: e.g. "01:23 Intro" or "[01:23] - Intro"
             val timestampRegex = Regex("""^[\[\(]?(\d{1,2}:\d{2}(?::\d{2})?(?:\.\d{1,3})?)[\]\)]?[\s\-:]+(.*)$""")
             var index = 1
             for (line in lines) {
@@ -213,130 +287,6 @@ class ChapterExtractor @Inject constructor(
     }
 
     /**
-     * Extracts chapters from media container or external sidecar files.
-     */
-    suspend fun extractFromUri(uriString: String, videoDurationMs: Long? = null): List<MediaChapter> = withContext(Dispatchers.IO) {
-        val rawLocalPath = when {
-            uriString.startsWith("file://", ignoreCase = true) -> uriString.substring(7)
-            uriString.startsWith("/") -> uriString
-            else -> null
-        }
-        val localPath = rawLocalPath?.let { raw ->
-            try {
-                android.net.Uri.decode(raw) ?: raw
-            } catch (_: Throwable) {
-                raw
-            }
-        }
-
-        // 1. Local file path: check sidecars and random access
-        if (localPath != null) {
-            try {
-                val mediaFile = java.io.File(localPath)
-                if (mediaFile.exists()) {
-                    val parent = mediaFile.parentFile
-                    val baseName = mediaFile.nameWithoutExtension
-                    val candidateExtensions = listOf(".chapters.txt", ".chp", ".chapters.xml")
-                    for (ext in candidateExtensions) {
-                        val sidecar = java.io.File(parent, "$baseName$ext")
-                        if (sidecar.exists() && sidecar.isFile && sidecar.length() > 0) {
-                            val content = sidecar.readText(StandardCharsets.UTF_8)
-                            val sidecarChapters = parseSidecarChapters(content, videoDurationMs)
-                            if (sidecarChapters.isNotEmpty()) {
-                                logger.i(TAG, "Loaded ${sidecarChapters.size} chapters from sidecar file: ${sidecar.name}")
-                                return@withContext sidecarChapters
-                            }
-                        }
-                    }
-
-                    if (mediaFile.isFile && mediaFile.canRead()) {
-                        java.io.RandomAccessFile(mediaFile, "r").use { raf ->
-                            val chapters = extractFromSeekable(FileChannelSeekableSource(raf.channel), videoDurationMs)
-                            if (chapters.isNotEmpty()) return@withContext chapters
-                        }
-                    }
-                }
-            } catch (e: Throwable) {
-                logger.d(TAG, "Local file extraction skipped: ${e.message}")
-            }
-        }
-
-        val uri = runCatching { Uri.parse(uriString) }.getOrNull() ?: return@withContext emptyList()
-
-        // 2. Content URI random-access extraction
-        val auth = uri.authority
-        val isMediaProvider = auth == "media" || auth?.contains("media", ignoreCase = true) == true || auth?.contains("providers", ignoreCase = true) == true
-        if (uri.scheme == "content" && !isMediaProvider) {
-            // Do not open secondary streams on external third-party one-shot ContentProviders (e.g. WhatsApp, FileProvider)
-            // to avoid stream contention or closing pipes used by ExoPlayer.
-            return@withContext emptyList()
-        }
-
-        try {
-            if (uri.scheme == "content") {
-                context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
-                    java.io.FileInputStream(pfd.fileDescriptor).channel.use { channel ->
-                        val chapters = extractFromSeekable(FileChannelSeekableSource(channel), videoDurationMs)
-                        if (chapters.isNotEmpty()) return@withContext chapters
-                    }
-                }
-            }
-        } catch (e: Throwable) {
-            logger.d(TAG, "Content URI seekable extraction failed, falling back to streaming: ${e.message}")
-        }
-
-        // 3. Fallback to stream reading if random access was not possible
-        val rawChapters = mutableListOf<RawChapter>()
-        try {
-            context.contentResolver.openInputStream(uri)?.use { stream ->
-                BufferedInputStream(stream, 64 * 1024).use { bis ->
-                    bis.mark(16)
-                    val magic = ByteArray(12)
-                    val read = bis.read(magic)
-                    bis.reset()
-
-                    if (read >= 4 && isMatroska(magic)) {
-                        rawChapters.addAll(extractMatroskaChapters(bis))
-                    } else if (read >= 8 && isMp4(magic)) {
-                        rawChapters.addAll(extractMp4Chapters(bis))
-                    }
-                }
-            }
-        } catch (e: Throwable) {
-            logger.d(TAG, "Container chapter extraction skipped or failed: ${e.message}")
-        }
-
-        sanitizeAndNormalize(rawChapters, videoDurationMs)
-    }
-
-
-
-    /**
-     * Sanitizes titles and eliminates unicode replacement characters, excessive question marks,
-     * or corrupted binary string remnants.
-     */
-    fun sanitizeTitle(rawTitle: String, fallbackIndex: Int): String {
-        var cleaned = rawTitle
-            .replace("\uFFFD", "") // Unicode replacement character ()
-            .replace(Regex("[\\x00-\\x1F\\x7F]"), "") // Control characters
-            .trim()
-            .replace(Regex("\\s+"), " ")
-
-        val meaningfulChars = cleaned.count { it.isLetterOrDigit() }
-        if (cleaned.isBlank() || meaningfulChars == 0) {
-            return "Chapter $fallbackIndex"
-        }
-
-        // Clean stray leading/trailing question marks, hyphens, colons
-        cleaned = cleaned.trim('?', ' ', '-', '_', ':', '.')
-        if (cleaned.isBlank() || cleaned.count { it.isLetterOrDigit() } == 0) {
-            return "Chapter $fallbackIndex"
-        }
-
-        return cleaned
-    }
-
-    /**
      * Comprehensive validation, deduplication, duration bounds checking, and title sanitization.
      */
     fun sanitizeAndNormalize(
@@ -345,23 +295,19 @@ class ChapterExtractor @Inject constructor(
     ): List<MediaChapter> {
         if (rawChapters.isEmpty()) return emptyList()
 
-        // 1. Filter negative or corrupt start timestamps
         val validStart = rawChapters
             .filter { it.startTimeMs >= 0L }
             .take(MAX_CHAPTERS_LIMIT)
         if (validStart.isEmpty()) return emptyList()
 
-        // 2. Sort by start timestamp ascending
         val sorted = validStart.sortedBy { it.startTimeMs }
 
-        // 3. Deduplicate chapters that start at the exact same or very near timestamp (< 500ms apart)
         val deduplicated = mutableListOf<RawChapter>()
         for (chapter in sorted) {
             val last = deduplicated.lastOrNull()
             if (last == null || (chapter.startTimeMs - last.startTimeMs) >= 500L) {
                 deduplicated.add(chapter)
             } else {
-                // Merge duplicate: prefer explicit named title over generic "Chapter X" or empty
                 val lastTitle = last.title.trim()
                 val newTitle = chapter.title.trim()
                 val preferredTitle = when {
@@ -388,8 +334,6 @@ class ChapterExtractor @Inject constructor(
             val next = deduplicated.getOrNull(i + 1)
 
             val start = current.startTimeMs
-
-            // Skip if start position is past the known video duration
             if (totalDuration != null && start >= totalDuration) {
                 continue
             }
@@ -397,17 +341,14 @@ class ChapterExtractor @Inject constructor(
             val nextStart = next?.startTimeMs
             var end = current.endTimeMs
 
-            // Fix end timestamp: if negative, <= startTime, or extends past the next chapter's start
             if (end <= start || end <= 0L || (nextStart != null && end > nextStart)) {
                 end = nextStart ?: (totalDuration ?: (start + 60_000L))
             }
 
-            // Cap to video duration if duration is known
             if (totalDuration != null && end > totalDuration) {
                 end = totalDuration
             }
 
-            // Ensure strictly end > start
             if (end <= start) {
                 end = if (nextStart != null && nextStart > start) nextStart else start + 1_000L
             }
@@ -430,9 +371,25 @@ class ChapterExtractor @Inject constructor(
         return result
     }
 
-    // -----------------------------------------------------------------------------------------
-    // Helper Parsers
-    // -----------------------------------------------------------------------------------------
+    fun sanitizeTitle(rawTitle: String, fallbackIndex: Int): String {
+        var cleaned = rawTitle
+            .replace("\uFFFD", "")
+            .replace(Regex("[\\x00-\\x1F\\x7F]"), "")
+            .trim()
+            .replace(Regex("\\s+"), " ")
+
+        val meaningfulChars = cleaned.count { it.isLetterOrDigit() }
+        if (cleaned.isBlank() || meaningfulChars == 0) {
+            return "Chapter $fallbackIndex"
+        }
+
+        cleaned = cleaned.trim('?', ' ', '-', '_', ':', '.')
+        if (cleaned.isBlank() || cleaned.count { it.isLetterOrDigit() } == 0) {
+            return "Chapter $fallbackIndex"
+        }
+
+        return cleaned
+    }
 
     private fun parseVorbisChapterTag(
         key: String,
@@ -441,15 +398,20 @@ class ChapterExtractor @Inject constructor(
         endTimeMap: MutableMap<String, Long>,
         nameMap: MutableMap<String, String>
     ) {
-        val chapterRegex = Regex("^CHAPTER(\\d{1,4})(NAME|END)?$", RegexOption.IGNORE_CASE)
-        val match = chapterRegex.find(key) ?: return
-        val num = match.groupValues[1]
-        val suffix = match.groupValues[2].uppercase()
-
-        when (suffix) {
-            "NAME" -> nameMap[num] = value
-            "END" -> parseTimestampMs(value)?.let { endTimeMap[num] = it }
-            "" -> parseTimestampMs(value)?.let { timeMap[num] = it }
+        val upperKey = key.uppercase().trim()
+        if (upperKey.startsWith("CHAPTER") && !upperKey.endsWith("NAME")) {
+            if (upperKey.endsWith("END")) {
+                val num = upperKey.removePrefix("CHAPTER").removeSuffix("END")
+                parseTimestampMs(value)?.let { endTimeMap[num] = it }
+            } else {
+                val num = upperKey.removePrefix("CHAPTER").removeSuffix("TIME")
+                parseTimestampMs(value)?.let { timeMap[num] = it }
+            }
+        } else if (upperKey.startsWith("CHAPTER") && upperKey.endsWith("NAME")) {
+            val num = upperKey.removePrefix("CHAPTER").removeSuffix("NAME")
+            if (value.isNotBlank()) {
+                nameMap[num] = value
+            }
         }
     }
 
@@ -458,801 +420,43 @@ class ChapterExtractor @Inject constructor(
         if (clean.isEmpty()) return null
 
         val parts = clean.split(":")
-        try {
-            return when (parts.size) {
+        return try {
+            when (parts.size) {
                 3 -> {
                     val hours = parts[0].toLong()
-                    val minutes = parts[1].toLong()
-                    val secondsParts = parts[2].split(".")
-                    val seconds = secondsParts[0].toLong()
-                    val millis = if (secondsParts.size > 1) {
-                        secondsParts[1].padEnd(3, '0').take(3).toLong()
+                    val mins = parts[1].toLong()
+                    val secParts = parts[2].split(".")
+                    val secs = secParts[0].toLong()
+                    val millis = if (secParts.size > 1) {
+                        secParts[1].padEnd(3, '0').take(3).toLong()
                     } else 0L
-                    (hours * 3600 + minutes * 60 + seconds) * 1000 + millis
+                    (hours * 3600 + mins * 60 + secs) * 1000L + millis
                 }
                 2 -> {
-                    val minutes = parts[0].toLong()
-                    val secondsParts = parts[1].split(".")
-                    val seconds = secondsParts[0].toLong()
-                    val millis = if (secondsParts.size > 1) {
-                        secondsParts[1].padEnd(3, '0').take(3).toLong()
+                    val mins = parts[0].toLong()
+                    val secParts = parts[1].split(".")
+                    val secs = secParts[0].toLong()
+                    val millis = if (secParts.size > 1) {
+                        secParts[1].padEnd(3, '0').take(3).toLong()
                     } else 0L
-                    (minutes * 60 + seconds) * 1000 + millis
+                    (mins * 60 + secs) * 1000L + millis
                 }
                 1 -> {
                     if (clean.contains(".")) {
-                        val secondsParts = clean.split(".")
-                        val seconds = secondsParts[0].toLong()
-                        val millis = if (secondsParts.size > 1) {
-                            secondsParts[1].padEnd(3, '0').take(3).toLong()
+                        val secParts = clean.split(".")
+                        val secs = secParts[0].toLong()
+                        val millis = if (secParts.size > 1) {
+                            secParts[1].padEnd(3, '0').take(3).toLong()
                         } else 0L
-                        seconds * 1000 + millis
+                        secs * 1000L + millis
                     } else {
                         clean.toLongOrNull()
                     }
                 }
-                else -> clean.toLongOrNull()
+                else -> null
             }
-        } catch (_: Exception) {
-            return null
+        } catch (_: Throwable) {
+            null
         }
-    }
-
-    private fun isMatroska(magic: ByteArray): Boolean {
-        return magic.size >= 4 &&
-                (magic[0] == 0x1A.toByte() && magic[1] == 0x45.toByte() &&
-                 magic[2] == 0xDF.toByte() && magic[3] == 0xA3.toByte())
-    }
-
-    private fun isMp4(magic: ByteArray): Boolean {
-        if (magic.size < 8) return false
-        val type = String(magic, 4, 4, StandardCharsets.US_ASCII)
-        return type == "ftyp" || type == "moov" || type == "free" || type == "mdat"
-    }
-
-    // -----------------------------------------------------------------------------------------
-    // Proper Hierarchical EBML Matroska Chapters Parser
-    // -----------------------------------------------------------------------------------------
-
-    private fun extractMatroskaChapters(stream: InputStream): List<RawChapter> {
-        val buffer = ByteArray(64 * 1024)
-        var totalRead = 0
-        val bos = java.io.ByteArrayOutputStream(256 * 1024)
-
-        while (totalRead < MAX_CONTAINER_SCAN_BYTES) {
-            val count = stream.read(buffer)
-            if (count <= 0) break
-            bos.write(buffer, 0, count)
-            totalRead += count
-        }
-
-        val data = bos.toByteArray()
-        if (data.size < 8) return emptyList()
-
-        return parseEbmlContainer(data)
-    }
-
-    fun parseEbmlContainer(data: ByteArray): List<RawChapter> = parseEbmlRoot(EbmlBufferReader(data))
-
-    fun parseEbmlSeekable(source: SeekableSource): List<RawChapter> = parseEbmlRoot(EbmlSeekableReader(source))
-
-    /**
-     * The single EBML root scanner, written once against [EbmlReader] and used
-     * by both the bounded-buffer and the random-access extraction paths.
-     */
-    private fun parseEbmlRoot(reader: EbmlReader): List<RawChapter> {
-        val chapters = mutableListOf<RawChapter>()
-
-        var seekChaptersOffset: Long? = null
-        var segmentDataStartOffset: Long = 0L
-
-        while (reader.hasRemaining()) {
-            val elementId = reader.readElementId() ?: break
-            val elementSize = reader.readElementSize() ?: break
-            val currentPos = reader.position
-
-            when (elementId) {
-                0x1A45DFA3L -> { // EBML Header - skip payload
-                    if (elementSize > 0) reader.skip(elementSize)
-                }
-                0x18538067L -> { // Segment - Master element, descend into it!
-                    segmentDataStartOffset = currentPos
-                    val segmentEnd = if (elementSize >= 0 && currentPos + elementSize <= reader.limit) {
-                        currentPos + elementSize
-                    } else reader.limit
-
-                    parseSegmentChildren(reader, segmentEnd, chapters, segmentDataStartOffset) { foundOffset ->
-                        seekChaptersOffset = foundOffset
-                    }
-                    break
-                }
-                else -> {
-                    if (elementSize > 0) reader.skip(elementSize) else break
-                }
-            }
-        }
-
-        // If chapters weren't inline before clusters, but SeekHead found its offset
-        if (chapters.isEmpty() && seekChaptersOffset != null) {
-            val absoluteChaptersPos = segmentDataStartOffset + seekChaptersOffset!!
-            if (absoluteChaptersPos in 0 until (reader.limit - 4)) {
-                reader.position = absoluteChaptersPos
-                val id = reader.readElementId()
-                val size = reader.readElementSize()
-                if (id == 0x1043A770L && size != null) {
-                    val end = if (size >= 0 && reader.position + size <= reader.limit) {
-                        reader.position + size
-                    } else reader.limit
-                    parseChaptersMaster(reader, end, chapters)
-                }
-            }
-        }
-
-        return chapters
-    }
-
-    private fun parseSegmentChildren(
-        reader: EbmlReader,
-        segmentEnd: Long,
-        chapters: MutableList<RawChapter>,
-        segmentDataStart: Long,
-        onSeekChaptersFound: (Long) -> Unit
-    ) {
-        while (reader.position < segmentEnd) {
-            val elementId = reader.readElementId() ?: break
-            val elementSize = reader.readElementSize() ?: break
-            val elementStart = reader.position
-
-            val end = if (elementSize >= 0 && elementStart + elementSize <= segmentEnd) {
-                elementStart + elementSize
-            } else segmentEnd
-
-            when (elementId) {
-                0x114D9B74L -> { // SeekHead - parse Seek entries to find Chapters
-                    parseSeekHead(reader, end, onSeekChaptersFound)
-                    reader.position = end
-                }
-                0x1043A770L -> { // Chapters - Master Element!
-                    parseChaptersMaster(reader, end, chapters)
-                    reader.position = end
-                }
-                0x1F43B675L -> { // Cluster - Media packets! STOP or skip; NEVER search raw cluster bytes!
-                    if (elementSize >= 0 && elementStart + elementSize <= segmentEnd) {
-                        reader.position = end
-                    } else {
-                        // Cluster with unknown size / reaches end: stop segment scanning
-                        break
-                    }
-                }
-                else -> {
-                    // Skip other segment children (Info, Tracks, Cues, Tags, etc.)
-                    if (elementSize >= 0) {
-                        reader.position = end
-                    } else break
-                }
-            }
-        }
-    }
-
-    private fun parseSeekHead(
-        reader: EbmlReader,
-        seekHeadEnd: Long,
-        onSeekChaptersFound: (Long) -> Unit
-    ) {
-        while (reader.position < seekHeadEnd) {
-            val id = reader.readElementId() ?: break
-            val size = reader.readElementSize() ?: break
-            val end = if (size >= 0) (reader.position + size).coerceAtMost(seekHeadEnd) else seekHeadEnd
-
-            if (id == 0x4DBBL) { // Seek Master
-                var seekId: Long? = null
-                var seekPos: Long? = null
-                while (reader.position < end) {
-                    val subId = reader.readElementId() ?: break
-                    val subSize = reader.readElementSize() ?: break
-                    when (subId) {
-                        0x53ABL -> seekId = reader.readUint(subSize) // SeekID
-                        0x53ACL -> seekPos = reader.readUint(subSize) // SeekPosition
-                        else -> if (subSize > 0) reader.skip(subSize)
-                    }
-                }
-                if (seekId == 0x1043A770L && seekPos != null) {
-                    onSeekChaptersFound(seekPos)
-                }
-            }
-            reader.position = end
-        }
-    }
-
-    private fun parseChaptersMaster(
-        reader: EbmlReader,
-        chaptersEnd: Long,
-        chapters: MutableList<RawChapter>
-    ) {
-        while (reader.position < chaptersEnd) {
-            val id = reader.readElementId() ?: break
-            val size = reader.readElementSize() ?: break
-            val end = if (size >= 0) (reader.position + size).coerceAtMost(chaptersEnd) else chaptersEnd
-
-            if (id == 0x45B9L) { // EditionEntry Master
-                parseEditionEntry(reader, end, chapters)
-            }
-            reader.position = end
-        }
-    }
-
-    private fun parseEditionEntry(
-        reader: EbmlReader,
-        editionEnd: Long,
-        chapters: MutableList<RawChapter>
-    ) {
-        while (reader.position < editionEnd) {
-            val id = reader.readElementId() ?: break
-            val size = reader.readElementSize() ?: break
-            val end = if (size >= 0) (reader.position + size).coerceAtMost(editionEnd) else editionEnd
-
-            if (id == 0x73C4L) { // ChapterAtom Master
-                parseChapterAtom(reader, end, chapters)
-            }
-            reader.position = end
-        }
-    }
-
-    private fun parseChapterAtom(
-        reader: EbmlReader,
-        atomEnd: Long,
-        chapters: MutableList<RawChapter>
-    ) {
-        var startNs: Long? = null
-        var endNs: Long? = null
-        var title = ""
-        var uid = ""
-
-        while (reader.position < atomEnd) {
-            val id = reader.readElementId() ?: break
-            val size = reader.readElementSize() ?: break
-            val end = if (size >= 0) (reader.position + size).coerceAtMost(atomEnd) else atomEnd
-
-            when (id) {
-                0x7373L -> { // ChapterUID
-                    uid = reader.readUint(size)?.toString() ?: ""
-                }
-                0x91L -> { // ChapterTimeStart
-                    startNs = reader.readUint(size)
-                }
-                0x92L -> { // ChapterTimeEnd
-                    endNs = reader.readUint(size)
-                }
-                0x80L -> { // ChapterDisplay Master
-                    while (reader.position < end) {
-                        val dispId = reader.readElementId() ?: break
-                        val dispSize = reader.readElementSize() ?: break
-                        when (dispId) {
-                            0x85L -> { // ChapString
-                                title = reader.readUtf8String(dispSize)
-                            }
-                            else -> if (dispSize > 0) reader.skip(dispSize)
-                        }
-                    }
-                }
-                0x73C4L -> { // Nested ChapterAtom
-                    parseChapterAtom(reader, end, chapters)
-                }
-                else -> {
-                    // skip other unhandled sub-elements
-                }
-            }
-            reader.position = end
-        }
-
-        if (startNs != null) {
-            val startMs = startNs / 1_000_000L
-            val endMs = endNs?.let { it / 1_000_000L } ?: -1L
-            chapters.add(
-                RawChapter(
-                    id = if (uid.isNotBlank()) "mkv_ch_$uid" else "mkv_ch_${chapters.size}",
-                    title = title,
-                    startTimeMs = startMs,
-                    endTimeMs = endMs
-                )
-            )
-        }
-    }
-
-    // -----------------------------------------------------------------------------------------
-    // MP4 / MOV Box Chapters Parser
-    // -----------------------------------------------------------------------------------------
-
-    private fun extractMp4Chapters(stream: InputStream): List<RawChapter> {
-        val buffer = ByteArray(64 * 1024)
-        var totalRead = 0
-        val bos = java.io.ByteArrayOutputStream(256 * 1024)
-
-        while (totalRead < MAX_CONTAINER_SCAN_BYTES) {
-            val count = stream.read(buffer)
-            if (count <= 0) break
-            bos.write(buffer, 0, count)
-            totalRead += count
-        }
-
-        val data = bos.toByteArray()
-        if (data.size < 8) return emptyList()
-
-        return parseMp4Boxes(data)
-    }
-
-    fun parseMp4Seekable(source: SeekableSource): List<RawChapter> {
-        val chapters = mutableListOf<RawChapter>()
-        var offset = 0L
-
-        while (offset + 8 <= source.size) {
-            source.position = offset
-            val header = ByteArray(8)
-            val read = source.read(header, 0, 8)
-            if (read < 8) break
-
-            val boxSize32 = ((header[0].toLong() and 0xFF) shl 24) or
-                            ((header[1].toLong() and 0xFF) shl 16) or
-                            ((header[2].toLong() and 0xFF) shl 8) or
-                            (header[3].toLong() and 0xFF)
-            val boxType = String(header, 4, 4, StandardCharsets.US_ASCII)
-
-            var headerSize = 8L
-            val boxSize: Long = when (boxSize32) {
-                1L -> { // 64-bit large box size
-                    if (offset + 16 > source.size) break
-                    headerSize = 16L
-                    val ext = ByteArray(8)
-                    if (source.read(ext, 0, 8) < 8) break
-                    var size64 = 0L
-                    for (b in 0 until 8) {
-                        size64 = (size64 shl 8) or (ext[b].toLong() and 0xFF)
-                    }
-                    size64.coerceAtMost(source.size - offset)
-                }
-                0L -> source.size - offset
-                else -> boxSize32.coerceAtMost(source.size - offset)
-            }
-
-            if (boxSize < headerSize) break
-            val boxEnd = offset + boxSize
-
-            if (boxType == "moov") {
-                val payloadSize = (boxSize - headerSize).toInt().coerceAtMost(32 * 1024 * 1024)
-                if (payloadSize > 0) {
-                    val moovPayload = ByteArray(payloadSize)
-                    val bytesRead = source.read(moovPayload, 0, payloadSize)
-                    if (bytesRead > 0) {
-                        parseMoovBox(moovPayload, 0, bytesRead, chapters)
-                        if (chapters.isEmpty()) {
-                            chapters.addAll(parseMp4TextTracks(moovPayload, 0, bytesRead, source))
-                        }
-                        if (chapters.isNotEmpty()) return chapters
-                    }
-                }
-                break
-            }
-
-            offset = boxEnd
-        }
-
-        return chapters
-    }
-
-    private data class StscEntry(val firstChunk: Int, val samplesPerChunk: Int, val sampleDescIndex: Int)
-
-    private fun parseMp4TextTracks(
-        data: ByteArray,
-        startOffset: Int,
-        endOffset: Int,
-        source: SeekableSource
-    ): List<RawChapter> {
-        val chapters = mutableListOf<RawChapter>()
-        var offset = startOffset
-
-        while (offset + 8 <= endOffset) {
-            val boxSize = readBoxSize(data, offset, endOffset) ?: break
-            val boxType = String(data, offset + 4, 4, StandardCharsets.US_ASCII)
-            val boxEnd = offset + boxSize
-
-            if (boxType == "trak") {
-                val trackChapters = parseTrakForTextChapters(data, offset + 8, boxEnd, source)
-                if (trackChapters.isNotEmpty()) {
-                    chapters.addAll(trackChapters)
-                    break
-                }
-            }
-
-            offset = boxEnd
-        }
-
-        return chapters
-    }
-
-    private fun parseTrakForTextChapters(
-        data: ByteArray,
-        startOffset: Int,
-        endOffset: Int,
-        source: SeekableSource
-    ): List<RawChapter> {
-        var offset = startOffset
-        var mdiaOffset = -1
-        var mdiaEnd = -1
-
-        while (offset + 8 <= endOffset) {
-            val boxSize = readBoxSize(data, offset, endOffset) ?: break
-            val boxType = String(data, offset + 4, 4, StandardCharsets.US_ASCII)
-            val boxEnd = offset + boxSize
-
-            if (boxType == "mdia") {
-                mdiaOffset = offset + 8
-                mdiaEnd = boxEnd
-                break
-            }
-            offset = boxEnd
-        }
-
-        if (mdiaOffset == -1) return emptyList()
-
-        var isTextHandler = false
-        var timescale = 1000L
-        var minfOffset = -1
-        var minfEnd = -1
-
-        offset = mdiaOffset
-        while (offset + 8 <= mdiaEnd) {
-            val boxSize = readBoxSize(data, offset, mdiaEnd) ?: break
-            val boxType = String(data, offset + 4, 4, StandardCharsets.US_ASCII)
-            val boxEnd = offset + boxSize
-
-            when (boxType) {
-                "mdhd" -> {
-                    if (boxSize >= 28) {
-                        val version = data[offset + 8].toInt() and 0xFF
-                        val tsOffset = if (version == 1) offset + 8 + 4 + 16 else offset + 8 + 4 + 8
-                        if (tsOffset + 4 <= boxEnd) {
-                            timescale = (readInt32(data, tsOffset).toLong() and 0xFFFFFFFFL).coerceAtLeast(1L)
-                        }
-                    }
-                }
-                "hdlr" -> {
-                    if (boxSize >= 24) {
-                        val handlerType = String(data, offset + 8 + 8, 4, StandardCharsets.US_ASCII)
-                        if (handlerType == "text" || handlerType == "sbtl" || handlerType == "subp") {
-                            isTextHandler = true
-                        }
-                    }
-                }
-                "minf" -> {
-                    minfOffset = offset + 8
-                    minfEnd = boxEnd
-                }
-            }
-            offset = boxEnd
-        }
-
-        if (!isTextHandler || minfOffset == -1) return emptyList()
-
-        // Find stbl inside minf
-        var stblOffset = -1
-        var stblEnd = -1
-        offset = minfOffset
-        while (offset + 8 <= minfEnd) {
-            val boxSize = readBoxSize(data, offset, minfEnd) ?: break
-            val boxType = String(data, offset + 4, 4, StandardCharsets.US_ASCII)
-            val boxEnd = offset + boxSize
-            if (boxType == "stbl") {
-                stblOffset = offset + 8
-                stblEnd = boxEnd
-                break
-            }
-            offset = boxEnd
-        }
-
-        if (stblOffset == -1) return emptyList()
-
-        // Inside stbl, parse stts, stsc, stsz, stco / co64
-        val sampleTimesMs = mutableListOf<Long>()
-        val stscEntries = mutableListOf<StscEntry>()
-        var sampleSizes: IntArray? = null
-        val chunkOffsets = mutableListOf<Long>()
-
-        offset = stblOffset
-        while (offset + 8 <= stblEnd) {
-            val boxSize = readBoxSize(data, offset, stblEnd) ?: break
-            val boxType = String(data, offset + 4, 4, StandardCharsets.US_ASCII)
-            val boxEnd = offset + boxSize
-
-            when (boxType) {
-                "stts" -> {
-                    if (boxSize >= 16) {
-                        val entryCount = readInt32(data, offset + 8 + 4)
-                        var curPos = offset + 8 + 8
-                        var curTime = 0L
-                        for (i in 0 until entryCount) {
-                            if (curPos + 8 > boxEnd) break
-                            val count = readInt32(data, curPos)
-                            val delta = readInt32(data, curPos + 4).toLong() and 0xFFFFFFFFL
-                            curPos += 8
-                            for (c in 0 until count) {
-                                sampleTimesMs.add(curTime * 1000L / timescale)
-                                curTime += delta
-                            }
-                        }
-                    }
-                }
-                "stsc" -> {
-                    if (boxSize >= 16) {
-                        val entryCount = readInt32(data, offset + 8 + 4)
-                        var curPos = offset + 8 + 8
-                        for (i in 0 until entryCount) {
-                            if (curPos + 12 > boxEnd) break
-                            val firstChunk = readInt32(data, curPos)
-                            val samplesPerChunk = readInt32(data, curPos + 4)
-                            val sampleDescIndex = readInt32(data, curPos + 8)
-                            curPos += 12
-                            stscEntries.add(StscEntry(firstChunk, samplesPerChunk, sampleDescIndex))
-                        }
-                    }
-                }
-                "stsz" -> {
-                    if (boxSize >= 20) {
-                        val defSize = readInt32(data, offset + 8 + 4)
-                        val count = readInt32(data, offset + 8 + 8)
-                        val sizes = IntArray(count)
-                        if (defSize > 0) {
-                            sizes.fill(defSize)
-                        } else {
-                            var curPos = offset + 8 + 12
-                            for (i in 0 until count) {
-                                if (curPos + 4 > boxEnd) break
-                                sizes[i] = readInt32(data, curPos)
-                                curPos += 4
-                            }
-                        }
-                        sampleSizes = sizes
-                    }
-                }
-                "stco" -> {
-                    if (boxSize >= 16) {
-                        val entryCount = readInt32(data, offset + 8 + 4)
-                        var curPos = offset + 8 + 8
-                        for (i in 0 until entryCount) {
-                            if (curPos + 4 > boxEnd) break
-                            chunkOffsets.add(readInt32(data, curPos).toLong() and 0xFFFFFFFFL)
-                            curPos += 4
-                        }
-                    }
-                }
-                "co64" -> {
-                    if (boxSize >= 16) {
-                        val entryCount = readInt32(data, offset + 8 + 4)
-                        var curPos = offset + 8 + 8
-                        for (i in 0 until entryCount) {
-                            if (curPos + 8 > boxEnd) break
-                            chunkOffsets.add(readInt64(data, curPos))
-                            curPos += 8
-                        }
-                    }
-                }
-            }
-            offset = boxEnd
-        }
-
-        val totalSamples = sampleSizes?.size ?: sampleTimesMs.size
-        if (totalSamples == 0 || chunkOffsets.isEmpty()) return emptyList()
-
-        val sampleOffsets = LongArray(totalSamples)
-        var sampleIdx = 0
-        for (chunkIdx in chunkOffsets.indices) {
-            val chunkNum = chunkIdx + 1
-            val stsc = stscEntries.lastOrNull { chunkNum >= it.firstChunk } ?: stscEntries.firstOrNull() ?: StscEntry(1, 1, 1)
-            var currentChunkOffset = chunkOffsets[chunkIdx]
-            for (s in 0 until stsc.samplesPerChunk) {
-                if (sampleIdx >= totalSamples) break
-                sampleOffsets[sampleIdx] = currentChunkOffset
-                currentChunkOffset += (sampleSizes?.getOrNull(sampleIdx) ?: 0)
-                sampleIdx++
-            }
-        }
-
-        val chapters = mutableListOf<RawChapter>()
-        for (i in 0 until totalSamples) {
-            val sOffset = sampleOffsets[i]
-            val sSize = sampleSizes?.getOrNull(i) ?: 0
-            if (sOffset > 0 && sOffset < source.size && sSize > 0) {
-                source.position = sOffset
-                val buf = ByteArray(sSize.coerceAtMost(1024))
-                val bytesRead = source.read(buf, 0, buf.size)
-                if (bytesRead > 0) {
-                    val title = if (bytesRead >= 2) {
-                        val strLen = ((buf[0].toInt() and 0xFF) shl 8) or (buf[1].toInt() and 0xFF)
-                        if (strLen in 1..(bytesRead - 2)) {
-                            String(buf, 2, strLen, StandardCharsets.UTF_8)
-                        } else {
-                            String(buf, 0, bytesRead, StandardCharsets.UTF_8)
-                        }
-                    } else {
-                        String(buf, 0, bytesRead, StandardCharsets.UTF_8)
-                    }
-                    val startTime = sampleTimesMs.getOrElse(i) { 0L }
-                    chapters.add(
-                        RawChapter(
-                            id = "mp4_text_$i",
-                            title = title.trim(),
-                            startTimeMs = startTime
-                        )
-                    )
-                }
-            }
-        }
-
-        return chapters
-    }
-
-    private fun readInt32(data: ByteArray, offset: Int): Int {
-        if (offset + 4 > data.size) return 0
-        return ((data[offset].toInt() and 0xFF) shl 24) or
-               ((data[offset + 1].toInt() and 0xFF) shl 16) or
-               ((data[offset + 2].toInt() and 0xFF) shl 8) or
-               (data[offset + 3].toInt() and 0xFF)
-    }
-
-    private fun readInt64(data: ByteArray, offset: Int): Long {
-        if (offset + 8 > data.size) return 0L
-        var value = 0L
-        for (i in 0 until 8) {
-            value = (value shl 8) or (data[offset + i].toLong() and 0xFF)
-        }
-        return value
-    }
-
-
-    fun parseMp4Boxes(data: ByteArray): List<RawChapter> {
-        val chapters = mutableListOf<RawChapter>()
-        var offset = 0
-
-        while (offset + 8 <= data.size) {
-            val boxSizeLong = ((data[offset].toLong() and 0xFF) shl 24) or
-                              ((data[offset + 1].toLong() and 0xFF) shl 16) or
-                              ((data[offset + 2].toLong() and 0xFF) shl 8) or
-                              (data[offset + 3].toLong() and 0xFF)
-            val boxType = String(data, offset + 4, 4, StandardCharsets.US_ASCII)
-
-            var headerSize = 8
-            val boxSize = when (boxSizeLong) {
-                1L -> { // 64-bit large box size
-                    if (offset + 16 > data.size) break
-                    headerSize = 16
-                    var size64 = 0L
-                    for (b in 0 until 8) {
-                        size64 = (size64 shl 8) or (data[offset + 8 + b].toLong() and 0xFF)
-                    }
-                    size64.coerceAtMost(data.size.toLong() - offset).toInt()
-                }
-                0L -> data.size - offset
-                else -> boxSizeLong.coerceAtMost(data.size.toLong() - offset).toInt()
-            }
-
-            if (boxSize < headerSize) break
-
-            val boxEnd = offset + boxSize
-            if (boxType == "moov") {
-                parseMoovBox(data, offset + headerSize, boxEnd, chapters)
-                break // Chapters are inside moov
-            }
-
-            offset = boxEnd
-        }
-
-        return chapters
-    }
-
-    private fun parseMoovBox(
-        data: ByteArray,
-        startOffset: Int,
-        endOffset: Int,
-        chapters: MutableList<RawChapter>
-    ) {
-        var offset = startOffset
-        while (offset + 8 <= endOffset) {
-            val boxSize = readBoxSize(data, offset, endOffset) ?: break
-            val boxType = String(data, offset + 4, 4, StandardCharsets.US_ASCII)
-            val boxEnd = offset + boxSize
-
-            if (boxType == "udta") {
-                parseUdtaBox(data, offset + 8, boxEnd, chapters)
-                if (chapters.isNotEmpty()) return
-            }
-
-            offset = boxEnd
-        }
-    }
-
-    private fun parseUdtaBox(
-        data: ByteArray,
-        startOffset: Int,
-        endOffset: Int,
-        chapters: MutableList<RawChapter>
-    ) {
-        var offset = startOffset
-        while (offset + 8 <= endOffset) {
-            val boxSize = readBoxSize(data, offset, endOffset) ?: break
-            val boxType = String(data, offset + 4, 4, StandardCharsets.US_ASCII)
-            val boxEnd = offset + boxSize
-
-            if (boxType == "chpl") {
-                parseChplAtom(data, offset + 8, boxEnd, chapters)
-                return
-            }
-
-            offset = boxEnd
-        }
-    }
-
-    private fun parseChplAtom(
-        data: ByteArray,
-        payloadStart: Int,
-        payloadEnd: Int,
-        chapters: MutableList<RawChapter>
-    ) {
-        if (payloadEnd - payloadStart < 5) return
-        var offset = payloadStart
-        val version = data[offset].toInt() and 0xFF
-        offset += 4 // 1 byte version + 3 bytes flags
-
-        val chapterCount: Int
-        if (version == 0) {
-            if (offset + 2 > payloadEnd) return
-            offset += 1 // 1 byte reserved
-            chapterCount = data[offset].toInt() and 0xFF
-            offset += 1
-        } else {
-            if (offset + 8 > payloadEnd) return
-            offset += 4 // 4 bytes reserved
-            chapterCount = (((data[offset].toInt() and 0xFF) shl 24) or
-                           ((data[offset + 1].toInt() and 0xFF) shl 16) or
-                           ((data[offset + 2].toInt() and 0xFF) shl 8) or
-                           (data[offset + 3].toInt() and 0xFF)).coerceAtLeast(0)
-            offset += 4
-        }
-
-        if (chapterCount in 1..MAX_CHAPTERS_LIMIT) {
-            for (c in 0 until chapterCount) {
-                if (offset + 9 > payloadEnd) break
-                // 8 bytes QuickTime timescale timestamp (10,000,000 units/sec)
-                var timeValue = 0L
-                for (b in 0 until 8) {
-                    timeValue = (timeValue shl 8) or (data[offset + b].toLong() and 0xFF)
-                }
-                val startMs = timeValue / 10_000L
-                offset += 8
-
-                val titleLen = data[offset].toInt() and 0xFF
-                offset += 1
-                val title = if (titleLen > 0 && offset + titleLen <= payloadEnd) {
-                    String(data, offset, titleLen, StandardCharsets.UTF_8)
-                } else ""
-                offset += titleLen
-
-                chapters.add(
-                    RawChapter(
-                        id = "mp4_ch_$c",
-                        title = title,
-                        startTimeMs = startMs
-                    )
-                )
-            }
-        }
-    }
-
-    private fun readBoxSize(data: ByteArray, offset: Int, maxEnd: Int): Int? {
-        if (offset + 8 > maxEnd) return null
-        val size = ((data[offset].toLong() and 0xFF) shl 24) or
-                   ((data[offset + 1].toLong() and 0xFF) shl 16) or
-                   ((data[offset + 2].toLong() and 0xFF) shl 8) or
-                   (data[offset + 3].toLong() and 0xFF)
-        if (size < 8) return null
-        return size.coerceAtMost((maxEnd - offset).toLong()).toInt()
     }
 }

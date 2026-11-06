@@ -153,6 +153,7 @@ dependencies {
     implementation(libs.androidx.media3.common)
     implementation(libs.androidx.media3.extractor)
     implementation(libs.media3.ffmpeg.decoder)
+    implementation(libs.nextlib.mediainfo)
 
     // Room
     implementation(libs.androidx.room.runtime)

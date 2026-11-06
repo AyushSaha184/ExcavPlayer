@@ -1313,11 +1313,26 @@ class PlayerManager @Inject constructor(
             val finalAudio = audio.map { it.copy(isSelected = it.id == selectedAudio) }
             val finalSubs = subs.map { it.copy(isSelected = it.id == selectedSubs) }
 
+            // Extract dynamic chapters from tracks metadata (e.g. live stream or container chapters exposed on track format)
+            val dur = exoPlayer.duration.takeIf { it > 0 } ?: _state.value.currentVideo?.durationMs
+            val trackChapters = chapterExtractor.extractFromTracks(tracks, dur)
+            val updatedChapters = if (trackChapters.isNotEmpty()) {
+                chapterExtractor.sanitizeAndNormalize(
+                    rawChapters = (_state.value.chapters + trackChapters).map {
+                        RawChapter(it.id, it.title, it.startTimeMs, it.endTimeMs)
+                    },
+                    videoDurationMs = dur
+                )
+            } else {
+                _state.value.chapters
+            }
+
             _state.update {
                 it.copy(
                     availableAudioTracks = finalAudio,
                     availableVideoTracks = video,
                     availableSubtitleTracks = finalSubs,
+                    chapters = updatedChapters,
                     playback = it.playback.copy(
                         selectedAudioTrackId = savedAudioPreferenceForVideo ?: selectedAudio,
                         selectedVideoTrackId = selectedVideo,
