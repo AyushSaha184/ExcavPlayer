@@ -57,6 +57,7 @@ import com.excavplayer.ui.components.RenameVideoDialog
 import com.excavplayer.ui.components.SectionTitle
 import com.excavplayer.ui.components.VideoOptionsMenu
 import com.excavplayer.ui.components.VideoPropertiesDialog
+import com.excavplayer.ui.components.rememberThumbnailLoader
 import com.excavplayer.ui.folders.logic.FolderTreeManager
 import dev.chrisbanes.haze.hazeSource
 
@@ -93,6 +94,13 @@ fun FoldersScreen(
     var propertiesFolder by remember { mutableStateOf<Folder?>(null) }
     var renameVideoTarget by remember { mutableStateOf<Video?>(null) }
     var renameFolderTarget by remember { mutableStateOf<Folder?>(null) }
+
+    val thumbnailLoader = rememberThumbnailLoader()
+    LaunchedEffect(folderVideos) {
+        if (folderVideos.isNotEmpty()) {
+            thumbnailLoader.preloadThumbnails(folderVideos.take(16).map { it.uri })
+        }
+    }
 
     // Clear selection when navigating into/out of folder
     LaunchedEffect(selectedFolder) {

@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.*
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
@@ -493,9 +494,42 @@ fun FoldersBrandHeader(
     }
 }
 
-private val BitChordGlassSpring = spring<Float>(dampingRatio = 0.72f, stiffness = 320f)
+// BitChord 3-Spring Physics Constants for Liquid Glass Selection Pill
+private const val TRAVEL_STIFFNESS = 280.0
+private const val TRAVEL_DAMPING = 31.4
+
+private const val LIFT_STIFFNESS = 250.0
+private const val LIFT_DAMPING_X = 19.0
+private const val LIFT_DAMPING_Y = 22.1
+
+private const val MATERIAL_STIFFNESS = 1000.0
+private const val MATERIAL_DAMPING = 63.3
+
+private const val HANDOVER_START = 0.92
 private const val BITCHORD_STRETCH = 0.16f
 private const val BITCHORD_SQUASH = 0.5f
+
+/** Semi-implicit Euler spring stepper in 1/240 s substeps for numerical stability */
+private fun springStep(
+    x: Double,
+    vel: Double,
+    target: Double,
+    dt: Double,
+    stiffness: Double,
+    damping: Double,
+): Pair<Double, Double> {
+    var t = dt
+    var px = x
+    var pv = vel
+    while (t > 0) {
+        val step = if (t > 1 / 240.0) 1 / 240.0 else t
+        val accel = -stiffness * (px - target) - damping * pv
+        pv += accel * step
+        px += pv * step
+        t -= step
+    }
+    return px to pv
+}
 
 @Composable
 fun BottomNav(
@@ -550,11 +584,92 @@ fun BottomNav(
 
             val pillTargetPx = if (tabStepPx > 0f) selectedIndex * tabStepPx else 0f
 
-            val animatedPillOffset by animateFloatAsState(
-                targetValue = pillTargetPx,
-                animationSpec = BitChordGlassSpring,
-                label = "tabPillOffset"
-            )
+            var animatedPillOffset by remember { mutableFloatStateOf(0f) }
+            var liftX by remember { mutableFloatStateOf(0f) }
+            var liftY by remember { mutableFloatStateOf(0f) }
+            var materialPresence by remember { mutableFloatStateOf(0f) }
+            var isInitialized by remember { mutableStateOf(false) }
+
+            // 3-Spring Physics: 1) Travel Spring, 2) Lift Springs (X/Y), 3) Material Spring
+            LaunchedEffect(selectedIndex, tabStepPx) {
+                if (tabStepPx <= 0f) return@LaunchedEffect
+
+                if (!isInitialized) {
+                    animatedPillOffset = pillTargetPx
+                    isInitialized = true
+                    return@LaunchedEffect
+                }
+
+                var travelPos = animatedPillOffset.toDouble()
+                var travelVel = 0.0
+                val travelTarget = pillTargetPx.toDouble()
+                val travelFrom = travelPos
+                var lifted = true
+                var liftXPos = liftX.toDouble()
+                var liftXVel = 0.0
+                var liftYPos = liftY.toDouble()
+                var liftYVel = 0.0
+                var materialPos = materialPresence.toDouble()
+                var materialVel = 0.0
+
+                var lastTime = -1L
+                while (true) {
+                    val now = withFrameNanos { it }
+                    val dt = if (lastTime < 0L) 0.016 else ((now - lastTime) / 1e9).coerceIn(0.001, 0.05)
+                    lastTime = now
+
+                    // 1) Travel Spring
+                    val (nextTravel, nextTravelVel) = springStep(
+                        travelPos, travelVel, travelTarget, dt, TRAVEL_STIFFNESS, TRAVEL_DAMPING
+                    )
+                    travelPos = nextTravel
+                    travelVel = nextTravelVel
+
+                    val span = abs(travelTarget - travelFrom)
+                    val progress = if (span < 1e-4) 1.0 else (1.0 - abs(travelTarget - travelPos) / span).coerceIn(0.0, 1.0)
+                    val travelSettled = abs(travelPos - travelTarget) < 0.2 && abs(travelVel) < 0.5
+
+                    // 2) Lift Release at HANDOVER_START (92% of travel)
+                    if (travelSettled || progress >= HANDOVER_START) {
+                        lifted = false
+                    }
+                    val liftTarget = if (lifted) 1.0 else 0.0
+
+                    // 3) Lift Springs (X and Y with slight under-damping for organic inflation)
+                    val (nextLiftX, nextLiftXVel) = springStep(
+                        liftXPos, liftXVel, liftTarget, dt, LIFT_STIFFNESS, LIFT_DAMPING_X
+                    )
+                    liftXPos = nextLiftX
+                    liftXVel = nextLiftXVel
+
+                    val (nextLiftY, nextLiftYVel) = springStep(
+                        liftYPos, liftYVel, liftTarget, dt, LIFT_STIFFNESS, LIFT_DAMPING_Y
+                    )
+                    liftYPos = nextLiftY
+                    liftYVel = nextLiftYVel
+
+                    // 4) Material / Presence Spring (stiff spring snapping into active glass state)
+                    val (nextMat, nextMatVel) = springStep(
+                        materialPos, materialVel, liftTarget, dt, MATERIAL_STIFFNESS, MATERIAL_DAMPING
+                    )
+                    materialPos = nextMat
+                    materialVel = nextMatVel
+
+                    animatedPillOffset = travelPos.toFloat()
+                    liftX = liftXPos.toFloat()
+                    liftY = liftYPos.toFloat()
+                    materialPresence = materialPos.coerceIn(0.0, 1.0).toFloat()
+
+                    val liftSettled = !lifted && abs(liftXPos) < 0.001 && abs(liftYPos) < 0.001 && abs(materialPos) < 0.001
+                    if (travelSettled && liftSettled) {
+                        animatedPillOffset = travelTarget.toFloat()
+                        liftX = 0f
+                        liftY = 0f
+                        materialPresence = 0f
+                        break
+                    }
+                }
+            }
 
             val lag = if (tabStepPx > 0f) {
                 (abs(pillTargetPx - animatedPillOffset) / tabStepPx).coerceIn(0f, 1f)
@@ -565,7 +680,7 @@ fun BottomNav(
                     .fillMaxSize()
                     .onSizeChanged { rowSize = it }
             ) {
-                // Liquid sliding highlight indicator with fluid stretch and squash
+                // Liquid sliding highlight indicator with fluid stretch and squash driven by 3-spring physics
                 if (tabWidthPx > 0f) {
                     Box(
                         modifier = Modifier
@@ -573,14 +688,14 @@ fun BottomNav(
                             .fillMaxHeight()
                             .graphicsLayer {
                                 translationX = animatedPillOffset
-                                scaleX = 1f + lag * BITCHORD_STRETCH
-                                scaleY = 1f - lag * BITCHORD_STRETCH * BITCHORD_SQUASH
+                                scaleX = (1f + liftX * 0.12f) * (1f + lag * BITCHORD_STRETCH)
+                                scaleY = (1f + liftY * 0.08f) * (1f - lag * BITCHORD_STRETCH * BITCHORD_SQUASH)
                             }
                             .clip(pillShape)
-                            .background(Color.White.copy(alpha = 0.16f))
+                            .background(Color.White.copy(alpha = 0.16f + 0.08f * materialPresence))
                             .border(
-                                width = 0.5.dp,
-                                color = Color.White.copy(alpha = 0.28f),
+                                width = (0.5f + 0.4f * materialPresence).dp,
+                                color = Color.White.copy(alpha = 0.28f + 0.16f * materialPresence),
                                 shape = pillShape
                             )
                     )

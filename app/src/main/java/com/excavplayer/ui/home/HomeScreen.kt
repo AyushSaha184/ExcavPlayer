@@ -114,6 +114,13 @@ fun HomeScreen(
         }
     }
 
+    val thumbnailLoader = rememberThumbnailLoader()
+    LaunchedEffect(videos) {
+        if (videos.isNotEmpty()) {
+            thumbnailLoader.preloadThumbnails(videos.take(16).map { it.uri })
+        }
+    }
+
     var selectedGroup by remember { mutableStateOf<VideoGroup?>(null) }
     var selectedVideoIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     val isSelectionMode = selectedVideoIds.isNotEmpty()
@@ -149,6 +156,11 @@ fun HomeScreen(
                 val groupIds = group.videos.map { it.id }.toSet()
                 val list = videos.filter { it.id in groupIds }.ifEmpty { group.videos }
                 list.sortedWith(NaturalVideoComparator)
+            }
+            LaunchedEffect(groupVideos) {
+                if (groupVideos.isNotEmpty()) {
+                    thumbnailLoader.preloadThumbnails(groupVideos.take(16).map { it.uri })
+                }
             }
             val groupListState = androidx.compose.foundation.lazy.rememberLazyListState()
             val isGroupScrolled by remember {

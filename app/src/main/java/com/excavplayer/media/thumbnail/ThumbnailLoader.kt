@@ -22,6 +22,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
@@ -51,11 +53,13 @@ class ThumbnailLoader @Inject constructor(
     companion object {
         private const val TAG = "ThumbnailLoader"
         private const val DISK_CACHE_DIR = "thumbnails_v2"
-        private const val COMPRESSION_QUALITY = 90
+        private const val COMPRESSION_QUALITY = 80
         private const val MAX_DISK_CACHE_SIZE_BYTES = 64L * 1024 * 1024 // 64 MB
+        private const val MAX_CONCURRENT_EXTRACTIONS = 3
     }
 
     private val diskCacheScope = CoroutineScope(SupervisorJob() + dispatchers.io)
+    private val extractionSemaphore = Semaphore(MAX_CONCURRENT_EXTRACTIONS)
     private var lastTrimTimeMs = 0L
 
     private val maxCacheSizeBytes = run {
@@ -91,6 +95,25 @@ class ThumbnailLoader @Inject constructor(
     ): Bitmap? {
         val cacheKey = buildCacheKey(uriString, targetWidth, targetHeight)
         return memoryCache.get(cacheKey)
+    }
+
+    /**
+     * Preloads thumbnails in the background so they are ready before the user scrolls to them.
+     */
+    fun preloadThumbnails(
+        uriStrings: List<String>,
+        targetWidth: Int = 320,
+        targetHeight: Int = 180
+    ) {
+        if (uriStrings.isEmpty()) return
+        diskCacheScope.launch {
+            for (uriString in uriStrings) {
+                val cacheKey = buildCacheKey(uriString, targetWidth, targetHeight)
+                if (memoryCache.get(cacheKey) == null) {
+                    loadThumbnail(uriString, targetWidth, targetHeight)
+                }
+            }
+        }
     }
 
     suspend fun loadThumbnail(
@@ -137,7 +160,26 @@ class ThumbnailLoader @Inject constructor(
             return diskBitmap
         }
 
-        // 3. Generate thumbnail using NextPlayer's hybrid extraction
+        // 3. Throttle heavy extraction pipeline with Semaphore to avoid CPU/IO thrashing
+        return extractionSemaphore.withPermit {
+            // Re-check caches after acquiring permit
+            memoryCache.get(cacheKey)?.let { return@withPermit it }
+            loadFromDiskCache(cacheKey)?.let { diskBitmap ->
+                memoryCache.put(cacheKey, diskBitmap)
+                return@withPermit diskBitmap
+            }
+
+            extractThumbnailFromSource(uriString, cacheKey, targetWidth, targetHeight)
+        }
+    }
+
+    private fun extractThumbnailFromSource(
+        uriString: String,
+        cacheKey: String,
+        targetWidth: Int,
+        targetHeight: Int
+    ): Bitmap? {
+        // Generate thumbnail using optimized hybrid extraction
         return try {
             val uri = Uri.parse(uriString)
             var bitmap: Bitmap? = null
@@ -165,23 +207,30 @@ class ThumbnailLoader @Inject constructor(
                 } catch (_: Throwable) {}
             }
 
-            // Dual retriever hybrid pipeline
+            // Dual retriever hybrid pipeline (Native first, lazy FFmpeg fallback)
             if (bitmap == null) {
                 val nativeRetriever = MediaMetadataRetriever()
                 var ffmpegRetriever: MediaThumbnailRetriever? = null
+                var ffmpegAttempted = false
+
+                fun getFfmpeg(): MediaThumbnailRetriever? {
+                    if (!ffmpegAttempted) {
+                        ffmpegAttempted = true
+                        ffmpegRetriever = runCatching {
+                            MediaThumbnailRetriever().apply {
+                                setDataSourceSafe(this, uri, uriString)
+                            }
+                        }.getOrNull()
+                    }
+                    return ffmpegRetriever
+                }
+
                 try {
                     setDataSourceSafe(nativeRetriever, uri, uriString)
-                    try {
-                        val ffmpeg = MediaThumbnailRetriever()
-                        setDataSourceSafe(ffmpeg, uri, uriString)
-                        ffmpegRetriever = ffmpeg
-                    } catch (_: Throwable) {
-                        ffmpegRetriever = null
-                    }
 
                     // Step 1: Check embedded picture (album art / poster / cover artwork)
                     val embeddedPicture = runCatching { nativeRetriever.embeddedPicture }.getOrNull()
-                        ?: runCatching { ffmpegRetriever?.getEmbeddedPicture() }.getOrNull()
+                        ?: runCatching { getFfmpeg()?.getEmbeddedPicture() }.getOrNull()
 
                     val embeddedBitmap = embeddedPicture?.let { pictureBytes ->
                         runCatching {
@@ -219,26 +268,39 @@ class ThumbnailLoader @Inject constructor(
                                     )
                                 }.getOrNull()
                             }
-                            // Fallback to FFmpeg retriever
-                            if (frame == null && ffmpegRetriever != null) {
+                            // Fallback to FFmpeg retriever only when native fails
+                            if (frame == null) {
                                 frame = runCatching {
-                                    ffmpegRetriever.getFrameAtTime(timeUs)
+                                    getFfmpeg()?.getFrameAtTime(timeUs)
                                 }.getOrNull()
                             }
                             return frame
                         }
 
-                        // Step 2 & 3: Try first frame (t = 0), test for solid color rejection
+                        // Step 2: Try first frame (t = 0), test for solid color rejection
                         var frame = extractFrame(0L)
                         if (frame == null || isSolidColor(frame)) {
-                            // Step 4: Fallback to frame at 33% of duration
-                            if (durationMs > 0L) {
-                                val timeUs = (durationMs * 0.33f * 1000L).toLong()
-                                val secondFrame = extractFrame(timeUs)
-                                if (secondFrame != null) {
-                                    frame?.recycle()
-                                    frame = secondFrame
+                            var secondFrame: Bitmap? = null
+                            // Fast check: Try near-start offset (2-3s) before seeking deeply across large files
+                            if (durationMs > 2_000L) {
+                                val nearStartUs = minOf(3_000_000L, (durationMs * 1000L) / 4)
+                                val nearStartFrame = extractFrame(nearStartUs)
+                                if (nearStartFrame != null && !isSolidColor(nearStartFrame)) {
+                                    secondFrame = nearStartFrame
+                                } else {
+                                    nearStartFrame?.recycle()
                                 }
+                            }
+
+                            // Step 3: Fallback to frame at 33% of duration if near-start was also solid/null
+                            if (secondFrame == null && durationMs > 0L) {
+                                val timeUs = (durationMs * 0.33f * 1000L).toLong()
+                                secondFrame = extractFrame(timeUs)
+                            }
+
+                            if (secondFrame != null) {
+                                frame?.recycle()
+                                frame = secondFrame
                             }
                         }
                         bitmap = frame
