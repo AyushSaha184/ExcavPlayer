@@ -57,8 +57,8 @@ class LayerBackdrop internal constructor(
         coordinates: LayoutCoordinates?,
         layerBlock: (GraphicsLayerScope.() -> Unit)?
     ) {
-        val coordinates = coordinates ?: return
-        val layerCoordinates = layerCoordinates ?: return
+        val coordinates = coordinates?.takeIf { it.isAttached } ?: return
+        val layerCoordinates = layerCoordinates?.takeIf { it.isAttached } ?: return
         withTransform({
             if (layerBlock != null) {
                 with(obtainInverseLayerScope()) { inverseTransform(density, layerBlock) }
@@ -67,8 +67,11 @@ class LayerBackdrop internal constructor(
                 try {
                     layerCoordinates.localPositionOf(coordinates)
                 } catch (_: Exception) {
-                    // TODO: outer transformations lead to wrong position calculation
-                    coordinates.positionInWindow() - layerCoordinates.positionInWindow()
+                    try {
+                        coordinates.positionInWindow() - layerCoordinates.positionInWindow()
+                    } catch (_: Exception) {
+                        return@withTransform
+                    }
                 }
             translate(-offset.x, -offset.y)
         }) {

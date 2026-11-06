@@ -81,6 +81,7 @@ internal class ShadowNode(
 
     override fun ContentDrawScope.draw() {
         val shadow = shadow() ?: return drawContent()
+        if (size.width < 1f || size.height < 1f) return drawContent()
 
         val shadowLayer = shadowLayer
         if (shadowLayer != null) {
@@ -92,8 +93,8 @@ internal class ShadowNode(
             val offsetX = shadow.offset.x.toPx()
             val offsetY = shadow.offset.y.toPx()
             val shadowSize = IntSize(
-                ceil(size.width + radius * 4f + offsetX).toInt(),
-                ceil(size.height + radius * 4f + offsetY).toInt()
+                ceil(size.width + radius * 4f + offsetX).toInt().coerceAtLeast(1),
+                ceil(size.height + radius * 4f + offsetY).toInt().coerceAtLeast(1)
             )
             val outline = shapeProvider.shape.createOutline(size, layoutDirection, density)
 

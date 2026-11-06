@@ -507,10 +507,10 @@ fun BottomNav(
             val gapPx = with(density) { 4.dp.toPx() }
 
             val tabWidthPx = if (rowSize.width > 0 && n > 0) {
-                (rowSize.width - gapPx * (n - 1)) / n
+                ((rowSize.width - gapPx * (n - 1)) / n).coerceAtLeast(0f)
             } else 0f
             val tabStepPx = if (rowSize.width > 0 && n > 0) {
-                (rowSize.width + gapPx) / n
+                ((rowSize.width + gapPx) / n).coerceAtLeast(0f)
             } else 0f
 
             val pillTargetPx = if (tabStepPx > 0f) selectedIndex * tabStepPx else 0f

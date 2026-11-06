@@ -87,7 +87,7 @@ internal class InnerShadowNode(
     override fun ContentDrawScope.draw() {
         drawContent()
 
-        if (!isRenderEffectSupported()) return
+        if (!isRenderEffectSupported() || size.width < 1f || size.height < 1f) return
 
         val shadow = shadow() ?: return
 

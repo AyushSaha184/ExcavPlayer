@@ -95,7 +95,7 @@ internal class HighlightNode(
 
     override fun ContentDrawScope.draw() {
         val highlight = highlight()
-        if (highlight == null || highlight.width.value <= 0f) {
+        if (highlight == null || highlight.width.value <= 0f || size.width < 1f || size.height < 1f) {
             return drawContent()
         }
 

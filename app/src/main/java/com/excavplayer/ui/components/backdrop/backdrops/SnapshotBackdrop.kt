@@ -78,7 +78,7 @@ class SnapshotBackdrop internal constructor() : Backdrop {
         layerBlock: (GraphicsLayerScope.() -> Unit)?,
     ) {
         val image = image ?: return
-        val coordinates = coordinates ?: return
+        val coordinates = coordinates?.takeIf { it.isAttached } ?: return
         val source = sourceCoordinates?.takeIf { it.isAttached } ?: return
         withTransform({
             if (layerBlock != null) {
@@ -93,7 +93,12 @@ class SnapshotBackdrop internal constructor() : Backdrop {
                     val step = source.localPositionOf(coordinates, Offset(SCALE_PROBE_PX, 0f))
                     origin to ((step.x - origin.x) / SCALE_PROBE_PX).takeIf { it > 0f }
                 } catch (_: Exception) {
-                    (coordinates.positionInWindow() - source.positionInWindow()) to null
+                    val fallbackOffset = try {
+                        coordinates.positionInWindow() - source.positionInWindow()
+                    } catch (_: Exception) {
+                        return@withTransform
+                    }
+                    fallbackOffset to null
                 }
             // Undone, so the still stays where it is on screen while the panel
             // grows over it, rather than zooming in and out with the panel.

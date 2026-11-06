@@ -447,10 +447,11 @@ fun BottomDock(
             val currentPillWidth = lerp(expandedNavbarWidth, collapsedPillWidth, collapseProgress)
 
             val currentPillOffsetX = lerp(0.dp, collapsedNavbarWidth + spacing, collapseProgress)
-            val bottomRowOffsetY = lerp(barHeight + spacing, 0.dp, collapseProgress)
+            val expandedOffsetY = lerp(0.dp, barHeight + spacing, audioActiveProgress)
+            val bottomRowOffsetY = lerp(expandedOffsetY, 0.dp, collapseProgress)
 
             // 1. Background Play Pill (resting directly on top of navbar, slides down between Home and Search on scroll)
-            if (audioActiveProgress > 0.01f) {
+            if (audioActiveProgress > 0.01f && currentPillWidth > 0.dp) {
                 Box(
                     modifier = Modifier
                         .offset(x = currentPillOffsetX, y = 0.dp)
@@ -492,7 +493,7 @@ fun BottomDock(
             val searchShape = remember { CircleShape }
             Box(
                 modifier = Modifier
-                    .offset(x = totalWidth - searchWidth, y = bottomRowOffsetY)
+                    .offset(x = (totalWidth - searchWidth).coerceAtLeast(0.dp), y = bottomRowOffsetY)
                     .size(circleButtonSize)
                     .liquidGlass(shape = searchShape)
                     .clickable(

@@ -98,7 +98,7 @@ fun GlassmorphicBackButton(
     Box(
         modifier = modifier
             .size(size)
-            .liquidGlass(shape = shape)
+            .lightweightLiquidGlass(shape = shape)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = ripple(bounded = true, radius = size / 2),
@@ -145,7 +145,7 @@ fun GlassmorphicHeaderActions(
                     Box(
                         modifier = Modifier
                             .size(40.dp)
-                            .liquidGlass(shape = buttonShape)
+                            .lightweightLiquidGlass(shape = buttonShape)
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = ripple(bounded = true, radius = 20.dp),
@@ -167,7 +167,7 @@ fun GlassmorphicHeaderActions(
                     Box(
                         modifier = Modifier
                             .size(40.dp)
-                            .liquidGlass(shape = buttonShape)
+                            .lightweightLiquidGlass(shape = buttonShape)
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = ripple(bounded = true, radius = 20.dp),

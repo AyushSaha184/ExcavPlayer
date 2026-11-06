@@ -3548,8 +3548,8 @@ private fun SegmentedAnimatedPillBar(
         ) { measurables, constraints ->
             val indicatorMeasurable = measurables[0]
             val tabMeasurables = measurables.drop(1)
-            val tabCount = tabMeasurables.size
-            val tabWidth = constraints.maxWidth / tabCount
+            val tabCount = tabMeasurables.size.coerceAtLeast(1)
+            val tabWidth = if (constraints.hasBoundedWidth) constraints.maxWidth / tabCount else 0
 
             val tabPlaceables = tabMeasurables.map {
                 it.measure(
@@ -3569,7 +3569,8 @@ private fun SegmentedAnimatedPillBar(
 
             val indicatorXOffset = (targetOffsetFraction * tabWidth).roundToInt()
 
-            layout(constraints.maxWidth, maxHeight) {
+            val layoutWidth = if (constraints.hasBoundedWidth) constraints.maxWidth else (tabWidth * tabCount)
+            layout(layoutWidth, maxHeight) {
                 indicatorPlaceable.placeRelative(indicatorXOffset, 0)
                 tabPlaceables.forEachIndexed { i, placeable ->
                     placeable.placeRelative(i * tabWidth, 0)
