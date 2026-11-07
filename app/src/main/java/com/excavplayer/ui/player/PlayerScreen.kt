@@ -49,6 +49,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import com.excavplayer.ui.components.glassDialogSurface
+import com.excavplayer.ui.components.LocalLiquidGlassEnabled
+import com.excavplayer.ui.components.LocalRemoveDynamicBlur
+import com.excavplayer.ui.components.isGlassSupported
+import com.excavplayer.ui.components.liquidGlass
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -138,7 +142,23 @@ private fun rubberClamp(raw: Float, limit: Float): Float {
 private fun Modifier.playerGlass(
     shape: androidx.compose.foundation.shape.CornerBasedShape = CircleShape,
     fallbackBg: Color = ExcavPalette.SurfaceCard
-): Modifier = this.lightweightLiquidGlass(shape = shape, fallbackColor = fallbackBg)
+): Modifier {
+    val isGlass = LocalLiquidGlassEnabled.current && isGlassSupported()
+    val removeDynamicBlur = LocalRemoveDynamicBlur.current
+    return when {
+        isGlass -> this.liquidGlass(shape = shape)
+        removeDynamicBlur -> this
+            .clip(shape)
+            .background(fallbackBg)
+            .border(0.5.dp, Color.White.copy(alpha = 0.16f), shape)
+        else -> this.darkUltraThinBlur(
+            shape = shape,
+            backgroundColor = fallbackBg,
+            strokeColor = Color.White.copy(alpha = 0.18f),
+            strokeWidth = 0.5.dp
+        )
+    }
+}
 
 @Composable
 fun PlayerScreen(
@@ -199,8 +219,11 @@ fun PlayerScreen(
 
     var doubleTapSeekSide by remember { mutableStateOf<DoubleTapSide?>(null) }
     var doubleTapSeekAccumulatedSeconds by remember { mutableIntStateOf(10) }
+    var doubleTapBasePositionMs by remember { mutableLongStateOf(0L) }
 
     var lastDoubleTapSeekTime by remember { mutableLongStateOf(0L) }
+    val coroutineScope = rememberCoroutineScope()
+    var pendingDoubleTapSeekJob by remember { mutableStateOf<Job?>(null) }
     var activeSurfaceView by remember { mutableStateOf<android.view.SurfaceView?>(null) }
     var activePlayerView by remember { mutableStateOf<PlayerView?>(null) }
 
@@ -439,26 +462,41 @@ fun PlayerScreen(
                             val seekStepMs = settings.seekDurationMs
                             when {
                                 offset.x < width * 0.35f -> {
-                                    if (doubleTapSeekSide == DoubleTapSide.LEFT && now - lastDoubleTapSeekTime < 750) {
+                                    val isContinuing = doubleTapSeekSide == DoubleTapSide.LEFT && now - lastDoubleTapSeekTime < 750
+                                    if (isContinuing) {
                                         doubleTapSeekAccumulatedSeconds += seekStep
                                     } else {
+                                        doubleTapBasePositionMs = player.playbackPosition.value.currentPositionMs
                                         doubleTapSeekAccumulatedSeconds = seekStep
                                     }
                                     lastDoubleTapSeekTime = now
                                     doubleTapSeekSide = DoubleTapSide.LEFT
-                                    vm.player.seekBackward(seekStepMs)
+                                    val targetMs = (doubleTapBasePositionMs - doubleTapSeekAccumulatedSeconds * 1000L).coerceAtLeast(0L)
+                                    pendingDoubleTapSeekJob?.cancel()
+                                    pendingDoubleTapSeekJob = coroutineScope.launch {
+                                        delay(350L)
+                                        vm.player.seekTo(targetMs)
+                                    }
                                 }
                                 offset.x > width * 0.65f -> {
-                                    if (doubleTapSeekSide == DoubleTapSide.RIGHT && now - lastDoubleTapSeekTime < 750) {
+                                    val isContinuing = doubleTapSeekSide == DoubleTapSide.RIGHT && now - lastDoubleTapSeekTime < 750
+                                    if (isContinuing) {
                                         doubleTapSeekAccumulatedSeconds += seekStep
                                     } else {
+                                        doubleTapBasePositionMs = player.playbackPosition.value.currentPositionMs
                                         doubleTapSeekAccumulatedSeconds = seekStep
                                     }
                                     lastDoubleTapSeekTime = now
                                     doubleTapSeekSide = DoubleTapSide.RIGHT
-                                    vm.player.seekForward(seekStepMs)
+                                    val targetMs = doubleTapBasePositionMs + doubleTapSeekAccumulatedSeconds * 1000L
+                                    pendingDoubleTapSeekJob?.cancel()
+                                    pendingDoubleTapSeekJob = coroutineScope.launch {
+                                        delay(350L)
+                                        vm.player.seekTo(targetMs)
+                                    }
                                 }
                                 else -> {
+                                    pendingDoubleTapSeekJob?.cancel()
                                     if (state.playback.isPlaying) {
                                         vm.player.pause()
                                     } else {
@@ -494,6 +532,7 @@ fun PlayerScreen(
 
                     detectDragGestures(
                         onDragStart = { startOffset ->
+                            pendingDoubleTapSeekJob?.cancel()
                             // Ignore touches in top 20% (status bar pull-down zone) and bottom 18% (nav bar zone)
                             val safeTop = size.height * 0.20f
                             val safeBottom = size.height * 0.82f
@@ -2029,9 +2068,9 @@ private fun SubtitleSheet(
         // -------------------------------------------------------------------------
         // Subtitle Delay Control (Player Seekbar Style, Range: -5.0s .. +5.0s)
         // -------------------------------------------------------------------------
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(16.dp))
         HorizontalDivider(color = ExcavPalette.Line.copy(alpha = 0.4f), thickness = 0.6.dp)
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(12.dp))
 
         var sliderValue by remember(state.subtitleDelayMs) {
             mutableFloatStateOf((state.subtitleDelayMs / 1000f).coerceIn(-5.0f, 5.0f))
@@ -2109,7 +2148,7 @@ private fun SubtitleSheet(
             }
 
             // Move the slider down a bit
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(10.dp))
 
             // Player seekbar style Slider (-5.0s .. +5.0s)
             ExcavSleekSlider(
@@ -2598,21 +2637,29 @@ fun SeekbarPreviewPopup(
 ) {
     val previewLoader = rememberSeekPreviewLoader()
     var previewBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    val scrubChannel = remember { kotlinx.coroutines.channels.Channel<Long>(kotlinx.coroutines.channels.Channel.CONFLATED) }
 
-    LaunchedEffect(video?.id, scrubState?.targetMs) {
-        if (scrubState == null || video == null || durationMs <= 0L) {
+    LaunchedEffect(scrubState?.targetMs, video?.id) {
+        val target = scrubState?.targetMs
+        if (target != null && video != null && durationMs > 0L) {
+            val nearest = previewLoader.getNearestFromCache(video.id, target)
+            if (nearest != null) {
+                previewBitmap = nearest
+            }
+            scrubChannel.trySend(target)
+        }
+    }
+
+    LaunchedEffect(video?.id) {
+        if (video == null || durationMs <= 0L) {
             previewBitmap = null
             return@LaunchedEffect
         }
-        val target = scrubState.targetMs
-        val cached = previewLoader.getFromCache(video.id, target)
-        if (cached != null) {
-            previewBitmap = cached
-        } else {
-            val uri = android.net.Uri.parse(video.uri)
+        val uri = android.net.Uri.parse(video.uri)
+        for (target in scrubChannel) {
             val bmp = previewLoader.loadPreview(video.id, uri, target, durationMs)
-            previewBitmap = bmp
             if (bmp != null) {
+                previewBitmap = bmp
                 previewLoader.prefetchAdjacent(video.id, uri, target, durationMs)
             }
         }
@@ -2661,15 +2708,8 @@ fun SeekbarPreviewPopup(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(ExcavPalette.SurfaceCardHighlight),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(
-                            color = ExcavPalette.Blue,
-                            strokeWidth = 2.dp,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
+                            .background(ExcavPalette.SurfaceCardHighlight)
+                    )
                 }
 
                 // Bottom time badge overlay

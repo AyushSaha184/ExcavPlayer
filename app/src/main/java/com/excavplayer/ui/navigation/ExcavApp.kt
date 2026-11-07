@@ -19,8 +19,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -62,9 +60,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import android.content.res.Configuration
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -146,18 +145,57 @@ fun ExcavApp(
         containerColor = ExcavPalette.Ink,
         contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { _ ->
-        CompositionLocalProvider(LocalHazeState provides hazeState) {
+        val configuration = LocalConfiguration.current
+        var lastPortraitWidth by remember { mutableStateOf<androidx.compose.ui.unit.Dp?>(null) }
+        var lastPortraitHeight by remember { mutableStateOf<androidx.compose.ui.unit.Dp?>(null) }
+
+        if (configuration.orientation == Configuration.ORIENTATION_PORTRAIT && !playerOpen) {
+            lastPortraitWidth = configuration.screenWidthDp.dp
+            lastPortraitHeight = configuration.screenHeightDp.dp
+        }
+
+        val isLandscapeWhilePlayerOpen = playerOpen && configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+        val effectiveAppConfig = remember(configuration, isLandscapeWhilePlayerOpen, lastPortraitWidth, lastPortraitHeight) {
+            if (isLandscapeWhilePlayerOpen) {
+                Configuration(configuration).apply {
+                    orientation = Configuration.ORIENTATION_PORTRAIT
+                    screenWidthDp = lastPortraitWidth?.value?.toInt() ?: configuration.screenHeightDp
+                    screenHeightDp = lastPortraitHeight?.value?.toInt() ?: configuration.screenWidthDp
+                }
+            } else {
+                configuration
+            }
+        }
+
+        CompositionLocalProvider(
+            LocalHazeState provides hazeState,
+            LocalConfiguration provides effectiveAppConfig
+        ) {
             Box(
                 modifier = Modifier.fillMaxSize()
             ) {
-                val appBackdrop = LocalAppBackdrop.current as? LayerBackdrop
-                val useGlass = LocalLiquidGlassEnabled.current && isGlassSupported() && appBackdrop != null
+                // Background App Container: locked to portrait dimensions when player is open in landscape
                 Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .hazeSource(state = hazeState)
-                        .then(if (useGlass) Modifier.layerBackdrop(appBackdrop!!) else Modifier)
+                        .then(
+                            if (isLandscapeWhilePlayerOpen && lastPortraitWidth != null && lastPortraitHeight != null) {
+                                Modifier
+                                    .size(lastPortraitWidth!!, lastPortraitHeight!!)
+                                    .align(Alignment.Center)
+                            } else {
+                                Modifier.fillMaxSize()
+                            }
+                        )
                 ) {
+                    val appBackdrop = LocalAppBackdrop.current as? LayerBackdrop
+                    val useGlass = LocalLiquidGlassEnabled.current && isGlassSupported() && appBackdrop != null
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .hazeSource(state = hazeState)
+                            .then(if (useGlass) Modifier.layerBackdrop(appBackdrop!!) else Modifier)
+                    ) {
                     if (library.loading) {
                             Box(
                                 modifier = Modifier
@@ -292,6 +330,7 @@ fun ExcavApp(
                         isScrolledDown = isScrolledDown
                     )
                 }
+            }
 
             // Top Floating Message / Error Banner
             Box(
@@ -314,7 +353,7 @@ fun ExcavApp(
                 onDismiss = { vm.dismissUpdate() }
             )
 
-            // Fullscreen Player: slide in from right edge, exit sliding down to bottom
+            // Fullscreen Player: slide in from right edge, instant exit without animation
             AnimatedVisibility(
                 visible = playerOpen,
                 enter = if (reducedMotion) {
@@ -323,24 +362,9 @@ fun ExcavApp(
                     slideInHorizontally(
                         initialOffsetX = { it },
                         animationSpec = excavTween(ExcavMotion.Container, ExcavEaseDrawer)
-                    ) + scaleIn(
-                        initialScale = 0.96f,
-                        transformOrigin = TransformOrigin(1f, 0.5f),
-                        animationSpec = excavTween(ExcavMotion.Container, ExcavEaseDrawer)
-                    ) + fadeIn(excavTween(ExcavMotion.Ui))
+                    ) + fadeIn(excavTween(ExcavMotion.Press))
                 },
-                exit = if (reducedMotion) {
-                    fadeOut(excavTween(ExcavMotion.Ui))
-                } else {
-                    slideOutVertically(
-                        targetOffsetY = { it },
-                        animationSpec = excavTween(ExcavMotion.Container, ExcavEaseDrawer)
-                    ) + scaleOut(
-                        targetScale = 0.92f,
-                        transformOrigin = TransformOrigin(0.5f, 1f),
-                        animationSpec = excavTween(ExcavMotion.Container, ExcavEaseDrawer)
-                    ) + fadeOut(excavTween(ExcavMotion.Ui))
-                },
+                exit = ExitTransition.None,
                 modifier = Modifier.fillMaxSize()
             ) {
                 PlayerScreen(

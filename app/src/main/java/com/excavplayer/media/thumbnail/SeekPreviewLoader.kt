@@ -29,10 +29,10 @@ class SeekPreviewLoader @Inject constructor(
 
     companion object {
         private const val TAG = "SeekPreviewLoader"
-        const val BUCKET_MS = 5_000L // 5s per storyboard bucket for granular preview
-        private const val TARGET_WIDTH = 420
-        private const val TARGET_HEIGHT = 236
-        private const val MAX_CACHE_ENTRIES = 120
+        const val BUCKET_MS = 3_000L // 3s per storyboard bucket for granular preview
+        private const val TARGET_WIDTH = 256
+        private const val TARGET_HEIGHT = 144
+        private const val MAX_CACHE_ENTRIES = 180
     }
 
     private val memoryCache = object : LruCache<String, Bitmap>(MAX_CACHE_ENTRIES) {
@@ -59,6 +59,19 @@ class SeekPreviewLoader @Inject constructor(
         val bucket = targetMs.coerceAtLeast(0L) / BUCKET_MS
         val key = "$videoId:$bucket"
         return memoryCache.get(key)
+    }
+
+    fun getNearestFromCache(videoId: String, targetMs: Long): Bitmap? {
+        val exact = getFromCache(videoId, targetMs)
+        if (exact != null) return exact
+        val currentBucket = targetMs.coerceAtLeast(0L) / BUCKET_MS
+        for (offset in 1..8) {
+            val left = memoryCache.get("$videoId:${currentBucket - offset}")
+            if (left != null) return left
+            val right = memoryCache.get("$videoId:${currentBucket + offset}")
+            if (right != null) return right
+        }
+        return null
     }
 
     private fun getOrCreateRetriever(uri: Uri): MediaMetadataRetriever {
