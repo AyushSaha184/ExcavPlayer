@@ -314,18 +314,18 @@ fun ExcavApp(
                 onDismiss = { vm.dismissUpdate() }
             )
 
-            // Fullscreen Player with bottom-dock collapse and expansion animation
+            // Fullscreen Player: slide in from right edge, exit sliding down to bottom
             AnimatedVisibility(
                 visible = playerOpen,
                 enter = if (reducedMotion) {
                     fadeIn(excavTween(ExcavMotion.Ui))
                 } else {
-                    slideInVertically(
-                        initialOffsetY = { it / 4 },
+                    slideInHorizontally(
+                        initialOffsetX = { it },
                         animationSpec = excavTween(ExcavMotion.Container, ExcavEaseDrawer)
                     ) + scaleIn(
-                        initialScale = 0.94f,
-                        transformOrigin = TransformOrigin(0.5f, 1f),
+                        initialScale = 0.96f,
+                        transformOrigin = TransformOrigin(1f, 0.5f),
                         animationSpec = excavTween(ExcavMotion.Container, ExcavEaseDrawer)
                     ) + fadeIn(excavTween(ExcavMotion.Ui))
                 },
@@ -333,10 +333,10 @@ fun ExcavApp(
                     fadeOut(excavTween(ExcavMotion.Ui))
                 } else {
                     slideOutVertically(
-                        targetOffsetY = { it / 2 },
+                        targetOffsetY = { it },
                         animationSpec = excavTween(ExcavMotion.Container, ExcavEaseDrawer)
                     ) + scaleOut(
-                        targetScale = 0.90f,
+                        targetScale = 0.92f,
                         transformOrigin = TransformOrigin(0.5f, 1f),
                         animationSpec = excavTween(ExcavMotion.Container, ExcavEaseDrawer)
                     ) + fadeOut(excavTween(ExcavMotion.Ui))

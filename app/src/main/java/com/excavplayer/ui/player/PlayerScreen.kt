@@ -320,6 +320,9 @@ fun PlayerScreen(
         }
 
         onDispose {
+            if (!keepAudioOnBackground && !state.isBackgroundAudio) {
+                vm.player.stop()
+            }
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             insetsController?.show(WindowInsetsCompat.Type.systemBars())
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -344,7 +347,7 @@ fun PlayerScreen(
             isLocked = false
         } else {
             if (!keepAudioOnBackground && !state.isBackgroundAudio) {
-                vm.player.stop()
+                vm.player.pause()
             }
             onClose()
         }
@@ -972,7 +975,7 @@ fun PlayerScreen(
                         isSheetOpen = activeSheet != null,
                         onClose = {
                             if (!keepAudioOnBackground && !state.isBackgroundAudio) {
-                                vm.player.stop()
+                                vm.player.pause()
                             }
                             onClose()
                         },
@@ -1786,8 +1789,9 @@ private fun SheetContainer(
                     )
                     .heightIn(max = (maxSheetHeight * 0.88f).coerceAtLeast(200.dp))
                     .clip(RoundedCornerShape(22.dp))
-                    .glassDialogSurface(
-                        shape = RoundedCornerShape(22.dp)
+                    .playerGlass(
+                        shape = RoundedCornerShape(22.dp),
+                        fallbackBg = Color(0xF21C1C1E)
                     )
             ) {
                 AnimatedContent(
@@ -2025,9 +2029,9 @@ private fun SubtitleSheet(
         // -------------------------------------------------------------------------
         // Subtitle Delay Control (Player Seekbar Style, Range: -5.0s .. +5.0s)
         // -------------------------------------------------------------------------
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(28.dp))
         HorizontalDivider(color = ExcavPalette.Line.copy(alpha = 0.4f), thickness = 0.6.dp)
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(18.dp))
 
         var sliderValue by remember(state.subtitleDelayMs) {
             mutableFloatStateOf((state.subtitleDelayMs / 1000f).coerceIn(-5.0f, 5.0f))
@@ -2105,7 +2109,7 @@ private fun SubtitleSheet(
             }
 
             // Move the slider down a bit
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(18.dp))
 
             // Player seekbar style Slider (-5.0s .. +5.0s)
             ExcavSleekSlider(
