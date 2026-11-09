@@ -67,28 +67,35 @@ fun GlassmorphicItem(
     hazeStyle: HazeBlurStyle = CupertinoMaterials.regular(containerColor = containerColor),
     content: @Composable BoxScope.() -> Unit
 ) {
+    val isGlass = LocalLiquidGlassEnabled.current && isGlassSupported()
     val removeDynamicBlur = LocalRemoveDynamicBlur.current
     val shape = remember(cornerRadius) { RoundedCornerShape(cornerRadius.dp) }
 
     Box(
         modifier = modifier
-            .clip(shape)
             .then(
-                if (removeDynamicBlur) {
-                    Modifier.background(ExcavPalette.SurfaceCard)
+                if (isGlass) {
+                    Modifier.lightweightLiquidGlass(shape = shape)
+                } else if (removeDynamicBlur) {
+                    Modifier
+                        .clip(shape)
+                        .background(ExcavPalette.SurfaceCard)
+                        .border(1.dp, Color.White.copy(alpha = 0.16f), shape)
                 } else {
-                    Modifier.hazeBlur(input = HazeInput.Sources(hazeState), style = hazeStyle)
+                    Modifier
+                        .clip(shape)
+                        .hazeBlur(input = HazeInput.Sources(hazeState), style = hazeStyle)
+                        .border(
+                            width = 1.dp,
+                            brush = Brush.verticalGradient(
+                                listOf(
+                                    Color.White.copy(alpha = 0.28f),
+                                    Color.White.copy(alpha = 0.08f)
+                                )
+                            ),
+                            shape = shape
+                        )
                 }
-            )
-            .border(
-                width = 1.dp,
-                brush = Brush.verticalGradient(
-                    listOf(
-                        Color.White.copy(alpha = 0.28f),
-                        Color.White.copy(alpha = 0.08f)
-                    )
-                ),
-                shape = shape
             ),
         content = content
     )

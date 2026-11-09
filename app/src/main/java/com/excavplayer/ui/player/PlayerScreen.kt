@@ -49,10 +49,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import com.excavplayer.ui.components.glassDialogSurface
-import com.excavplayer.ui.components.LocalLiquidGlassEnabled
 import com.excavplayer.ui.components.LocalRemoveDynamicBlur
-import com.excavplayer.ui.components.isGlassSupported
-import com.excavplayer.ui.components.liquidGlass
+import com.excavplayer.ui.components.liquidGlassRim
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -73,7 +71,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -143,20 +140,21 @@ private fun Modifier.playerGlass(
     shape: androidx.compose.foundation.shape.CornerBasedShape = CircleShape,
     fallbackBg: Color = ExcavPalette.SurfaceCard
 ): Modifier {
-    val isGlass = LocalLiquidGlassEnabled.current && isGlassSupported()
     val removeDynamicBlur = LocalRemoveDynamicBlur.current
-    return when {
-        isGlass -> this.liquidGlass(shape = shape)
-        removeDynamicBlur -> this
+    return if (removeDynamicBlur) {
+        this
             .clip(shape)
             .background(fallbackBg)
             .border(0.5.dp, Color.White.copy(alpha = 0.16f), shape)
-        else -> this.darkUltraThinBlur(
-            shape = shape,
-            backgroundColor = fallbackBg,
-            strokeColor = Color.White.copy(alpha = 0.18f),
-            strokeWidth = 0.5.dp
-        )
+    } else {
+        this
+            .darkUltraThinBlur(
+                shape = shape,
+                backgroundColor = fallbackBg.copy(alpha = 0.85f),
+                strokeColor = Color.White.copy(alpha = 0.18f),
+                strokeWidth = 0.5.dp
+            )
+            .liquidGlassRim(shape = shape)
     }
 }
 
@@ -2068,9 +2066,9 @@ private fun SubtitleSheet(
         // -------------------------------------------------------------------------
         // Subtitle Delay Control (Player Seekbar Style, Range: -5.0s .. +5.0s)
         // -------------------------------------------------------------------------
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(8.dp))
         HorizontalDivider(color = ExcavPalette.Line.copy(alpha = 0.4f), thickness = 0.6.dp)
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(10.dp))
 
         var sliderValue by remember(state.subtitleDelayMs) {
             mutableFloatStateOf((state.subtitleDelayMs / 1000f).coerceIn(-5.0f, 5.0f))
@@ -2146,10 +2144,6 @@ private fun SubtitleSheet(
                     }
                 }
             }
-
-            // Move the slider down a bit
-            Spacer(Modifier.height(10.dp))
-
             // Player seekbar style Slider (-5.0s .. +5.0s)
             ExcavSleekSlider(
                 value = sliderValue,

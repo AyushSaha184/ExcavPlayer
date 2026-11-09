@@ -39,6 +39,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.excavplayer.ui.components.AnimatedDialogContainer
 import com.excavplayer.ui.components.glassDialogSurface
+import com.excavplayer.ui.components.LiquidGlassButton
+import com.excavplayer.ui.components.LocalLiquidGlassEnabled
+import com.excavplayer.ui.components.liquidGlassRim
 import com.excavplayer.ui.components.LocalHazeState
 import com.excavplayer.ui.components.IosSwitch
 import com.excavplayer.ui.components.isGlassSupported
@@ -505,13 +508,15 @@ private fun SettingsSectionHeader(title: String) {
 
 @Composable
 private fun SettingsCardContainer(content: @Composable ColumnScope.() -> Unit) {
+    val isGlass = LocalLiquidGlassEnabled.current && isGlassSupported()
     val cardBorder = com.excavplayer.ui.components.adaptiveCardBorder()
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .clip(ExcavShapes.Card)
+            .then(if (isGlass) Modifier.liquidGlassRim(ExcavShapes.Card) else Modifier)
             .border(cardBorder, ExcavShapes.Card),
-        color = ExcavPalette.SurfaceCard,
+        color = if (isGlass) Color(0xCC161A24) else ExcavPalette.SurfaceCard,
         content = { Column(content = content) }
     )
 }
@@ -710,7 +715,7 @@ private fun <T> RadioChoiceDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    TextButton(onClick = onDismiss) {
+                    LiquidGlassButton(onClick = onDismiss) {
                         Text(stringResource(R.string.cancel), color = ExcavPalette.TextMuted, fontWeight = FontWeight.Medium)
                     }
                 }

@@ -2085,12 +2085,11 @@ fun VideoPropertiesDialog(video: Video, onDismiss: () -> Unit) {
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    Button(
+                    LiquidGlassButton(
                         onClick = onDismiss,
-                        colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
-                        shape = ExcavShapes.Pill
+                        isPrimary = true
                     ) {
-                        Text("Close", color = ExcavPalette.Ink, fontWeight = FontWeight.Bold)
+                        Text("Close", color = Color.White, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -2285,12 +2284,11 @@ fun MultiVideoPropertiesDialog(videos: List<Video>, onDismiss: () -> Unit) {
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    Button(
+                    LiquidGlassButton(
                         onClick = onDismiss,
-                        colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
-                        shape = ExcavShapes.Pill
+                        isPrimary = true
                     ) {
-                        Text("Close", color = ExcavPalette.Ink, fontWeight = FontWeight.Bold)
+                        Text("Close", color = Color.White, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -2354,12 +2352,11 @@ fun FolderPropertiesDialog(folders: List<Folder>, onDismiss: () -> Unit) {
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    Button(
+                    LiquidGlassButton(
                         onClick = onDismiss,
-                        colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
-                        shape = ExcavShapes.Pill
+                        isPrimary = true
                     ) {
-                        Text("Close", color = ExcavPalette.Ink, fontWeight = FontWeight.Bold)
+                        Text("Close", color = Color.White, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -2408,20 +2405,17 @@ fun BatchDeleteConfirmationDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)
                 ) {
-                    OutlinedButton(
-                        onClick = onDismiss,
-                        border = BorderStroke(1.dp, ExcavPalette.Line),
-                        shape = ExcavShapes.Pill
+                    LiquidGlassButton(
+                        onClick = onDismiss
                     ) {
-                        Text("Cancel", color = ExcavPalette.TextSecondary)
+                        Text("Cancel", color = ExcavPalette.TextSecondary, fontWeight = FontWeight.Medium)
                     }
-                    Button(
+                    LiquidGlassButton(
                         onClick = {
                             onConfirm()
                             onDismiss()
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Error),
-                        shape = ExcavShapes.Pill
+                        isDestructive = true
                     ) {
                         Text("Delete", color = Color.White, fontWeight = FontWeight.Bold)
                     }
@@ -2470,7 +2464,9 @@ fun RenameFolderDialog(
                         unfocusedTextColor = ExcavPalette.Text,
                         focusedBorderColor = ExcavPalette.Blue,
                         unfocusedBorderColor = ExcavPalette.Line,
-                        cursorColor = ExcavPalette.Blue
+                        cursorColor = ExcavPalette.Blue,
+                        focusedContainerColor = Color.White.copy(alpha = 0.05f),
+                        unfocusedContainerColor = Color.White.copy(alpha = 0.05f)
                     ),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
@@ -2482,24 +2478,22 @@ fun RenameFolderDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)
                 ) {
-                    OutlinedButton(
-                        onClick = onDismiss,
-                        border = BorderStroke(1.dp, ExcavPalette.Line),
-                        shape = ExcavShapes.Pill
+                    LiquidGlassButton(
+                        onClick = onDismiss
                     ) {
-                        Text("Cancel", color = ExcavPalette.TextSecondary)
+                        Text("Cancel", color = ExcavPalette.TextSecondary, fontWeight = FontWeight.Medium)
                     }
-                    Button(
+                    LiquidGlassButton(
+                        enabled = text.isNotBlank(),
                         onClick = {
                             if (text.isNotBlank()) {
                                 onRename(text.trim())
                                 onDismiss()
                             }
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
-                        shape = ExcavShapes.Pill
+                        isPrimary = true
                     ) {
-                        Text("Rename", color = ExcavPalette.Ink, fontWeight = FontWeight.Bold)
+                        Text("Rename", color = Color.White, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -2549,8 +2543,8 @@ fun RenameVideoDialog(
                         unfocusedBorderColor = ExcavPalette.Line,
                         focusedTextColor = ExcavPalette.Text,
                         unfocusedTextColor = ExcavPalette.Text,
-                        focusedContainerColor = ExcavPalette.SurfaceCardHighlight,
-                        unfocusedContainerColor = ExcavPalette.SurfaceCardHighlight
+                        focusedContainerColor = Color.White.copy(alpha = 0.05f),
+                        unfocusedContainerColor = Color.White.copy(alpha = 0.05f)
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -2562,20 +2556,19 @@ fun RenameVideoDialog(
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(onClick = onDismiss) {
+                    LiquidGlassButton(onClick = onDismiss) {
                         Text(stringResource(R.string.cancel), color = ExcavPalette.TextMuted, fontWeight = FontWeight.Medium)
                     }
                     Spacer(Modifier.width(10.dp))
-                    Button(
+                    LiquidGlassButton(
                         enabled = name.isNotBlank() && name.trim() != video.displayName,
                         onClick = {
                             onRename(name.trim())
                             onDismiss()
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Blue),
-                        shape = ExcavShapes.Pill
+                        isPrimary = true
                     ) {
-                        Text(stringResource(R.string.rename), color = ExcavPalette.Ink, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.rename), color = Color.White, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -2644,17 +2637,16 @@ fun DeleteConfirmDialog(
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(onClick = onDismiss) {
+                    LiquidGlassButton(onClick = onDismiss) {
                         Text(stringResource(R.string.cancel), color = ExcavPalette.TextMuted, fontWeight = FontWeight.Medium)
                     }
                     Spacer(Modifier.width(10.dp))
-                    Button(
+                    LiquidGlassButton(
                         onClick = {
                             onDelete()
                             onDismiss()
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = ExcavPalette.Error),
-                        shape = ExcavShapes.Pill
+                        isDestructive = true
                     ) {
                         Text(stringResource(R.string.delete), color = Color.White, fontWeight = FontWeight.Bold)
                     }
@@ -2827,19 +2819,13 @@ fun UserMessageHost(message: UserMessage?, onDismiss: () -> Unit) {
         exit = if (reducedMotion) fadeOut(tween(120)) else (slideOutVertically(targetOffsetY = { -it }) + fadeOut())
     ) {
         if (message != null) {
-            Surface(
+            val messageShape = remember { RoundedCornerShape(14.dp) }
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .statusBarsPadding()
                     .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .border(
-                        1.dp,
-                        if (message.isError) ExcavPalette.Error else ExcavPalette.BlueGlow,
-                        RoundedCornerShape(14.dp)
-                    ),
-                color = if (message.isError) ExcavPalette.ErrorContainer else ExcavPalette.GlassStrong,
-                shadowElevation = 8.dp
+                    .lightweightLiquidGlass(shape = messageShape)
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),

@@ -145,11 +145,6 @@ fun SearchScreen(
                         .weight(1f)
                         .height(40.dp)
                         .lightweightLiquidGlass(shape = pillShape)
-                        .border(
-                            width = 0.5.dp,
-                            color = Color.White.copy(alpha = 0.16f),
-                            shape = pillShape
-                        )
                         .padding(horizontal = 14.dp),
                     contentAlignment = Alignment.CenterStart
                 ) {

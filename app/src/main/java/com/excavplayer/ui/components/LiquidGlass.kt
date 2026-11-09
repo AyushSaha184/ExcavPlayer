@@ -4,13 +4,25 @@ import android.os.Build
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CornerBasedShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
@@ -190,4 +202,72 @@ fun Modifier.liquidGlass(
         backdropScale = GLASS_RESOLUTION_SCALE,
     )
 }
+
+/**
+ * Universal interactive Liquid Glass button matching the navbar and search button design.
+ */
+@Composable
+fun LiquidGlassButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    isPrimary: Boolean = false,
+    isDestructive: Boolean = false,
+    shape: CornerBasedShape = RoundedCornerShape(percent = 50),
+    contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 9.dp),
+    content: @Composable RowScope.() -> Unit
+) {
+    val isGlass = LocalLiquidGlassEnabled.current && isGlassSupported()
+    val removeDynamicBlur = LocalRemoveDynamicBlur.current
+
+    val surfaceTint = when {
+        isDestructive -> ExcavPalette.Error.copy(alpha = if (isGlass) 0.35f else 0.85f)
+        isPrimary -> ExcavPalette.Blue.copy(alpha = if (isGlass) 0.35f else 0.85f)
+        isGlass -> Color.White.copy(alpha = 0.08f)
+        removeDynamicBlur -> ExcavPalette.SurfaceCardHighlight
+        else -> Color.White.copy(alpha = 0.10f)
+    }
+
+    val borderColor = when {
+        isDestructive -> ExcavPalette.Error.copy(alpha = 0.5f)
+        isPrimary -> ExcavPalette.Blue.copy(alpha = 0.5f)
+        isGlass -> Color.White.copy(alpha = 0.22f)
+        else -> Color.White.copy(alpha = 0.16f)
+    }
+
+    val shapeProvider = remember(shape) { ShapeProvider { shape } }
+
+    Box(
+        modifier = modifier
+            .alpha(if (enabled) 1f else 0.45f)
+            .clip(shape)
+            .background(surfaceTint, shape)
+            .then(
+                if (isGlass) {
+                    HighlightElement(
+                        shapeProvider = shapeProvider,
+                        highlight = { Highlight.Default }
+                    )
+                } else {
+                    Modifier
+                }
+            )
+            .border(GLASS_EDGE_WIDTH, borderColor, shape)
+            .clickable(
+                enabled = enabled,
+                interactionSource = remember { MutableInteractionSource() },
+                indication = ripple(bounded = true, color = if (isDestructive) ExcavPalette.Error else ExcavPalette.Blue),
+                onClick = onClick
+            )
+            .padding(contentPadding),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+            content = content
+        )
+    }
+}
+
 

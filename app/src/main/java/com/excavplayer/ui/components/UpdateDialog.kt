@@ -175,36 +175,25 @@ fun UpdateDialog(
                             horizontalArrangement = Arrangement.End,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Secondary "Later" Glassmorphic Pill Button
-                            Surface(
-                                modifier = Modifier
-                                    .height(38.dp)
-                                    .clip(ExcavShapes.Pill)
-                                    .border(1.dp, Color.White.copy(alpha = 0.16f), ExcavShapes.Pill)
-                                    .clickable(onClick = onDismiss),
-                                color = Color.White.copy(alpha = 0.08f),
-                                shape = ExcavShapes.Pill
+                            // Secondary "Later" Pill Button
+                            LiquidGlassButton(
+                                onClick = onDismiss
                             ) {
-                                Box(
-                                    modifier = Modifier.padding(horizontal = 16.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "Later",
-                                        color = ExcavPalette.TextSecondary,
-                                        style = MaterialTheme.typography.bodyMedium.copy(
-                                            fontWeight = FontWeight.SemiBold,
-                                            fontSize = 13.sp
-                                        )
+                                Text(
+                                    text = "Later",
+                                    color = ExcavPalette.TextSecondary,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 13.sp
                                     )
-                                }
+                                )
                             }
 
                             Spacer(Modifier.width(10.dp))
 
                             val context = androidx.compose.ui.platform.LocalContext.current
                             // Primary "Update" Pill Button
-                            Button(
+                            LiquidGlassButton(
                                 onClick = {
                                     val asset = updateState.apkAsset
                                     if (asset != null) {
@@ -218,24 +207,18 @@ fun UpdateDialog(
                                         onDismiss()
                                     }
                                 },
-                                modifier = Modifier.height(38.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = ExcavPalette.Silver,
-                                    contentColor = ExcavPalette.Ink
-                                ),
-                                shape = ExcavShapes.Pill,
-                                contentPadding = PaddingValues(horizontal = 16.dp)
+                                isPrimary = true
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Download,
                                     contentDescription = null,
-                                    tint = ExcavPalette.Ink,
+                                    tint = Color.White,
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(Modifier.width(6.dp))
                                 Text(
                                     text = "Update",
-                                    color = ExcavPalette.Ink,
+                                    color = Color.White,
                                     style = MaterialTheme.typography.bodyMedium.copy(
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 13.sp
@@ -333,13 +316,9 @@ fun UpdateDialog(
                                 )
                             }
 
-                            Surface(
-                                modifier = Modifier
-                                    .clip(ExcavShapes.Pill)
-                                    .border(1.dp, Color.White.copy(alpha = 0.14f), ExcavShapes.Pill)
-                                    .clickable(onClick = onDismiss),
-                                color = Color.White.copy(alpha = 0.06f),
-                                shape = ExcavShapes.Pill
+                            LiquidGlassButton(
+                                onClick = onDismiss,
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 5.dp)
                             ) {
                                 Text(
                                     text = "Cancel",
@@ -347,8 +326,7 @@ fun UpdateDialog(
                                     style = MaterialTheme.typography.bodySmall.copy(
                                         fontWeight = FontWeight.Medium,
                                         fontSize = 12.sp
-                                    ),
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp)
+                                    )
                                 )
                             }
                         }
@@ -414,52 +392,35 @@ fun UpdateDialog(
                             horizontalArrangement = Arrangement.End,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Surface(
-                                modifier = Modifier
-                                    .height(42.dp)
-                                    .clip(ExcavShapes.Pill)
-                                    .border(1.dp, Color.White.copy(alpha = 0.16f), ExcavShapes.Pill)
-                                    .clickable(onClick = onDismiss),
-                                color = Color.White.copy(alpha = 0.08f),
-                                shape = ExcavShapes.Pill
+                            LiquidGlassButton(
+                                onClick = onDismiss
                             ) {
-                                Box(
-                                    modifier = Modifier.padding(horizontal = 18.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "Later",
-                                        color = ExcavPalette.TextSecondary,
-                                        style = MaterialTheme.typography.bodyMedium.copy(
-                                            fontWeight = FontWeight.SemiBold,
-                                            fontSize = 13.5.sp
-                                        )
+                                Text(
+                                    text = "Later",
+                                    color = ExcavPalette.TextSecondary,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 13.5.sp
                                     )
-                                }
+                                )
                             }
 
                             Spacer(Modifier.width(10.dp))
 
-                            Button(
+                            LiquidGlassButton(
                                 onClick = { onInstall(updateState.apkFile) },
-                                modifier = Modifier.height(42.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = ExcavPalette.Silver,
-                                    contentColor = ExcavPalette.Ink
-                                ),
-                                shape = ExcavShapes.Pill,
-                                contentPadding = PaddingValues(horizontal = 18.dp)
+                                isPrimary = true
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.InstallMobile,
                                     contentDescription = null,
-                                    tint = ExcavPalette.Ink,
+                                    tint = Color.White,
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(Modifier.width(6.dp))
                                 Text(
                                     text = "Install",
-                                    color = ExcavPalette.Ink,
+                                    color = Color.White,
                                     style = MaterialTheme.typography.bodyMedium.copy(
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 13.5.sp
