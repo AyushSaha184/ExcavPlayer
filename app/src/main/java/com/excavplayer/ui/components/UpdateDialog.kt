@@ -138,10 +138,12 @@ fun UpdateDialog(
                         )
                         Spacer(Modifier.height(8.dp))
 
+                        val isGlass = LocalLiquidGlassEnabled.current && isGlassSupported()
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .heightIn(max = 180.dp)
+                                .then(if (isGlass) Modifier.liquidGlassRim(RoundedCornerShape(16.dp)) else Modifier)
                                 .darkUltraThinBlur(
                                     shape = RoundedCornerShape(16.dp),
                                     backgroundColor = Color(0x66161920),

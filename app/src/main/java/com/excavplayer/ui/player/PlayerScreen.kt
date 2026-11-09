@@ -18,6 +18,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -568,6 +569,7 @@ fun PlayerScreen(
                             isDragEligible = false
                             gestureHudText = null
                             gestureHudIcon = null
+                            gestureHudProgress = 0f
                             gestureHudIsBoost = false
                             onUserInteraction()
                         },
@@ -579,6 +581,7 @@ fun PlayerScreen(
                             isDragEligible = false
                             gestureHudText = null
                             gestureHudIcon = null
+                            gestureHudProgress = 0f
                             gestureHudIsBoost = false
                         },
                         onDrag = { change, dragAmount ->
@@ -798,7 +801,7 @@ fun PlayerScreen(
         AnimatedVisibility(
             visible = gestureHudText != null,
             enter = scaleIn(initialScale = 0.88f, animationSpec = spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMedium)) + fadeIn(tween(120)),
-            exit = scaleOut(targetScale = 0.92f, animationSpec = tween(160)) + fadeOut(tween(160)),
+            exit = ExitTransition.None,
             modifier = Modifier.align(Alignment.Center)
         ) {
 
