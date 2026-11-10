@@ -396,6 +396,12 @@ class ExcavViewModel @Inject constructor(
         }
     }
 
+    fun setDoubleTapSeekSeconds(seconds: Int) {
+        viewModelScope.launch {
+            settings.updateDoubleTapSeekSeconds(seconds)
+        }
+    }
+
     fun setPreferredSubtitleLanguage(lang: String?) {
         viewModelScope.launch {
             settings.updatePreferredSubtitleLanguage(lang)

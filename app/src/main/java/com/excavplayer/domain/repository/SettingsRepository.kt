@@ -9,6 +9,7 @@ interface SettingsRepository {
     suspend fun updatePlaybackSpeed(speed: Float)
     suspend fun updateAutoResume(enabled: Boolean)
     suspend fun updateResumeThreshold(threshold: Float)
+    suspend fun updateDoubleTapSeekSeconds(seconds: Int)
     suspend fun updateDefaultRepeatMode(mode: RepeatMode)
     suspend fun updateAutoplayNext(enabled: Boolean)
     suspend fun updateSubtitlesEnabled(enabled: Boolean)

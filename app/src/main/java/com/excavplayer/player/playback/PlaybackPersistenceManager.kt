@@ -97,11 +97,8 @@ class PlaybackPersistenceManager @Inject constructor(
             val settings = settingsRepository.userSettings.first()
             val currentPos = state.currentPositionMs
             val duration = state.durationMs
-            val remainingMs = (duration - currentPos).coerceAtLeast(0L)
-            val thresholdMs = com.excavplayer.domain.policy.PlaybackThresholdPolicy.seekStepMs(settings.resumeThresholdPercent)
             val isCompleted = duration > 0 && (
-                remainingMs <= thresholdMs ||
-                (currentPos.toFloat() / duration.toFloat()) >= settings.resumeThresholdPercent ||
+                com.excavplayer.domain.policy.PlaybackThresholdPolicy.isCompleted(currentPos, duration) ||
                 state.playbackStatus == com.excavplayer.domain.model.PlaybackStatus.ENDED
             )
 

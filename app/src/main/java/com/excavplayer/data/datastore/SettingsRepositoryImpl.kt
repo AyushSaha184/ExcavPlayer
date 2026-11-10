@@ -39,6 +39,7 @@ class SettingsRepositoryImpl @Inject constructor(
         val KEY_DEFAULT_PLAYBACK_SPEED = floatPreferencesKey("default_playback_speed")
         val KEY_AUTO_RESUME = booleanPreferencesKey("auto_resume")
         val KEY_RESUME_THRESHOLD = floatPreferencesKey("resume_threshold")
+        val KEY_DOUBLE_TAP_SEEK = intPreferencesKey("double_tap_seek_seconds")
         val KEY_DEFAULT_REPEAT_MODE = stringPreferencesKey("default_repeat_mode")
         val KEY_AUTOPLAY_NEXT = booleanPreferencesKey("autoplay_next")
         val KEY_SUBTITLES_ENABLED = booleanPreferencesKey("subtitles_enabled")
@@ -84,6 +85,7 @@ class SettingsRepositoryImpl @Inject constructor(
                 defaultPlaybackSpeed = preferences[KEY_DEFAULT_PLAYBACK_SPEED] ?: 1.0f,
                 autoResume = preferences[KEY_AUTO_RESUME] ?: true,
                 resumeThresholdPercent = preferences[KEY_RESUME_THRESHOLD] ?: 0.95f,
+                doubleTapSeekSeconds = preferences[KEY_DOUBLE_TAP_SEEK] ?: 10,
                 defaultRepeatMode = runCatching {
                     RepeatMode.valueOf(preferences[KEY_DEFAULT_REPEAT_MODE] ?: RepeatMode.OFF.name)
                 }.getOrDefault(RepeatMode.OFF),
@@ -128,6 +130,11 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun updateResumeThreshold(threshold: Float) {
         logger.i(TAG, "updateResumeThreshold: $threshold")
         edit(KEY_RESUME_THRESHOLD) { it[KEY_RESUME_THRESHOLD] = threshold }
+    }
+
+    override suspend fun updateDoubleTapSeekSeconds(seconds: Int) {
+        logger.i(TAG, "updateDoubleTapSeekSeconds: $seconds")
+        edit(KEY_DOUBLE_TAP_SEEK) { it[KEY_DOUBLE_TAP_SEEK] = seconds }
     }
 
     override suspend fun updateDefaultRepeatMode(mode: RepeatMode) {

@@ -73,4 +73,6 @@
     <string name="unmute">Unmute</string>
     <string name="cd_mute">Mute audio</string>
     <string name="cd_unmute">Unmute audio</string>
+    <string name="seek_seconds_backward">-%d sec</string>
+    <string name="seek_seconds_forward">+%d sec</string>
 </resources>

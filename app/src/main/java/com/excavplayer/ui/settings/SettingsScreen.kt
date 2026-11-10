@@ -53,7 +53,7 @@ import dev.chrisbanes.haze.hazeSource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 private enum class SettingDialog {
-    NONE, HARDWARE_ACCELERATION, SPEED, REPEAT, THRESHOLD, ORIENTATION, MEDIA_FIT, SUB_LANG, AUDIO_LANG
+    NONE, HARDWARE_ACCELERATION, SPEED, REPEAT, DOUBLE_TAP_SEEK, ORIENTATION, MEDIA_FIT, SUB_LANG, AUDIO_LANG
 }
 
 @Composable
@@ -147,19 +147,6 @@ fun SettingsScreen(
                 )
                 SettingsDivider()
                 SettingsNavRow(
-                    icon = SfIcons.Speed,
-                    title = "Select seek duration",
-                    subtitle = when {
-                        settings.resumeThresholdPercent >= 0.99f -> "5 seconds"
-                        settings.resumeThresholdPercent >= 0.95f -> "10 seconds"
-                        settings.resumeThresholdPercent >= 0.92f -> "20 seconds"
-                        settings.resumeThresholdPercent >= 0.90f -> "30 seconds"
-                        else -> "1 minute"
-                    },
-                    onClick = { activeDialog = SettingDialog.THRESHOLD }
-                )
-                SettingsDivider()
-                SettingsNavRow(
                     icon = SfIcons.Orientation,
                     title = "Default Screen Orientation",
                     subtitle = settings.defaultScreenOrientation,
@@ -237,6 +224,20 @@ fun SettingsScreen(
                     subtitle = "Swipe right side of screen",
                     checked = settings.volumeGestureEnabled,
                     onCheckedChange = { vm.setVolumeGesture(it) }
+                )
+                SettingsDivider()
+                SettingsNavRow(
+                    icon = SfIcons.Speed,
+                    title = "Double-tap skip",
+                    subtitle = when (settings.doubleTapSeekSeconds) {
+                        5 -> "5 seconds"
+                        10 -> "10 seconds"
+                        20 -> "20 seconds"
+                        30 -> "30 seconds"
+                        60 -> "1 minute"
+                        else -> "${settings.doubleTapSeekSeconds} seconds"
+                    },
+                    onClick = { activeDialog = SettingDialog.DOUBLE_TAP_SEEK }
                 )
             }
 
@@ -401,22 +402,23 @@ fun SettingsScreen(
                 onDismiss = { activeDialog = SettingDialog.NONE }
             )
         }
-        SettingDialog.THRESHOLD -> {
+        SettingDialog.DOUBLE_TAP_SEEK -> {
             RadioChoiceDialog(
-                title = "Select seek duration",
-                options = listOf(0.99f, 0.95f, 0.92f, 0.90f, 0.80f),
-                selected = settings.resumeThresholdPercent,
+                title = "Double-tap skip",
+                options = listOf(5, 10, 20, 30, 60),
+                selected = settings.doubleTapSeekSeconds,
                 labelFor = {
-                    when {
-                        it >= 0.99f -> "5 seconds"
-                        it >= 0.95f -> "10 seconds"
-                        it >= 0.92f -> "20 seconds"
-                        it >= 0.90f -> "30 seconds"
-                        else -> "1 minute"
+                    when (it) {
+                        5 -> "5 seconds"
+                        10 -> "10 seconds"
+                        20 -> "20 seconds"
+                        30 -> "30 seconds"
+                        60 -> "1 minute"
+                        else -> "$it seconds"
                     }
                 },
                 onSelect = {
-                    vm.setResumeThreshold(it)
+                    vm.setDoubleTapSeekSeconds(it)
                     activeDialog = SettingDialog.NONE
                 },
                 onDismiss = { activeDialog = SettingDialog.NONE }

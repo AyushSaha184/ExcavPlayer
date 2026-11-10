@@ -472,10 +472,7 @@ fun PlayerScreen(
                                     doubleTapSeekSide = DoubleTapSide.LEFT
                                     val targetMs = (doubleTapBasePositionMs - doubleTapSeekAccumulatedSeconds * 1000L).coerceAtLeast(0L)
                                     pendingDoubleTapSeekJob?.cancel()
-                                    pendingDoubleTapSeekJob = coroutineScope.launch {
-                                        delay(350L)
-                                        vm.player.seekTo(targetMs)
-                                    }
+                                    vm.player.seekTo(targetMs)
                                 }
                                 offset.x > width * 0.65f -> {
                                     val isContinuing = doubleTapSeekSide == DoubleTapSide.RIGHT && now - lastDoubleTapSeekTime < 750
@@ -489,10 +486,7 @@ fun PlayerScreen(
                                     doubleTapSeekSide = DoubleTapSide.RIGHT
                                     val targetMs = doubleTapBasePositionMs + doubleTapSeekAccumulatedSeconds * 1000L
                                     pendingDoubleTapSeekJob?.cancel()
-                                    pendingDoubleTapSeekJob = coroutineScope.launch {
-                                        delay(350L)
-                                        vm.player.seekTo(targetMs)
-                                    }
+                                    vm.player.seekTo(targetMs)
                                 }
                                 else -> {
                                     pendingDoubleTapSeekJob?.cancel()
@@ -779,7 +773,10 @@ fun PlayerScreen(
                         }
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            text = "${if (isLeft) "-" else "+"}$doubleTapSeekAccumulatedSeconds sec",
+                            text = stringResource(
+                                if (isLeft) R.string.seek_seconds_backward else R.string.seek_seconds_forward,
+                                doubleTapSeekAccumulatedSeconds
+                            ),
                             color = Color.White,
                             style = MaterialTheme.typography.labelLarge.copy(
                                 fontWeight = FontWeight.Bold,

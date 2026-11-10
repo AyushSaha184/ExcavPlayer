@@ -4,6 +4,7 @@ data class UserSettings(
     val defaultPlaybackSpeed: Float = 1.0f,
     val autoResume: Boolean = true,
     val resumeThresholdPercent: Float = 0.95f,
+    val doubleTapSeekSeconds: Int = 10,
     val defaultRepeatMode: RepeatMode = RepeatMode.OFF,
     val autoplayNextVideo: Boolean = true,
     val subtitlesEnabled: Boolean = true,
@@ -30,7 +31,7 @@ data class UserSettings(
     val liquidGlassEnabled: Boolean = true,
     val removeDynamicBlur: Boolean = false) {
     val seekDurationSeconds: Int
-        get() = com.excavplayer.domain.policy.PlaybackThresholdPolicy.seekStepSeconds(resumeThresholdPercent)
+        get() = doubleTapSeekSeconds
 
     val seekDurationMs: Long
         get() = seekDurationSeconds * 1000L

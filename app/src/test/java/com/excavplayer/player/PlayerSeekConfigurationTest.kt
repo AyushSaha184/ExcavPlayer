@@ -44,5 +44,12 @@ class PlayerSeekConfigurationTest {
         val targetMs = (baseMs - seekAccumulatedSeconds * 1000L).coerceAtLeast(0L)
         assertThat(targetMs).isEqualTo(0L)
     }
+
+    @Test
+    fun `doubleTapSeekSeconds setting directly drives seekDurationSeconds and seekDurationMs`() {
+        val settings = com.excavplayer.domain.model.UserSettings(doubleTapSeekSeconds = 20)
+        assertThat(settings.seekDurationSeconds).isEqualTo(20)
+        assertThat(settings.seekDurationMs).isEqualTo(20_000L)
+    }
 }
 

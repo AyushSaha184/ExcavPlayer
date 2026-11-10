@@ -326,11 +326,9 @@ class PlayerManager @Inject constructor(
             }
 
             val duration = video.durationMs
-            val thresholdMs = com.excavplayer.domain.policy.PlaybackThresholdPolicy.seekStepMs(settings.resumeThresholdPercent)
             val isCompleted = duration > 0 && (
                 rawPos < 3_000L ||
-                (duration - rawPos) <= thresholdMs ||
-                (rawPos.toFloat() / duration.toFloat()) >= settings.resumeThresholdPercent
+                com.excavplayer.domain.policy.PlaybackThresholdPolicy.isCompleted(rawPos, duration)
             )
             val resumePos = if (isCompleted) 0L else rawPos
 
