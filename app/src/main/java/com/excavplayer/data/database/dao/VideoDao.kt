@@ -249,6 +249,9 @@ interface VideoDao {
     @Query("UPDATE videos SET display_name = :newName WHERE id = :videoId")
     suspend fun renameVideo(videoId: String, newName: String)
 
+    @Query("UPDATE videos SET display_name = :newName, uri = :newUri WHERE id = :videoId")
+    suspend fun renameVideoWithUri(videoId: String, newName: String, newUri: String)
+
     @Query("DELETE FROM videos WHERE id = :videoId")
     suspend fun deleteVideo(videoId: String)
 

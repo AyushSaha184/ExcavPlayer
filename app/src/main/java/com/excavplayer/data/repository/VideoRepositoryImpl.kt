@@ -1,8 +1,11 @@
 package com.excavplayer.data.repository
 
 import android.content.ContentResolver
+import android.content.ContentValues
 import android.content.Context
+import android.media.MediaScannerConnection
 import android.net.Uri
+import android.os.Build
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import com.excavplayer.core.coroutine.DispatcherProvider
@@ -23,6 +26,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
@@ -104,13 +108,149 @@ class VideoRepositoryImpl @Inject constructor(
 
     override suspend fun renameVideo(videoId: String, newName: String): ExcavResult<Unit> = withContext(dispatchers.io) {
         try {
-            logger.i(TAG, "Renaming video $videoId to: $newName")
-            videoDao.renameVideo(videoId, newName)
-            ExcavResult.Success(Unit)
+            val videoTuple = videoDao.getVideoById(videoId)
+                ?: return@withContext ExcavResult.Error(IllegalArgumentException("Video with ID $videoId not found"))
+            val video = videoTuple.video
+
+            val oldName = video.displayName
+            val oldExt = File(oldName).extension
+            val targetName = if (oldExt.isNotBlank() && !newName.endsWith(".$oldExt", ignoreCase = true)) {
+                val newExt = File(newName).extension
+                if (newExt.isBlank()) {
+                    "$newName.$oldExt"
+                } else {
+                    newName
+                }
+            } else {
+                newName
+            }
+
+            if (targetName == oldName) {
+                return@withContext ExcavResult.Success(Unit)
+            }
+
+            logger.i(TAG, "Renaming video $videoId from '$oldName' to '$targetName'")
+
+            val uri = Uri.parse(video.uri)
+            var newUriString = video.uri
+            var storageRenamed = false
+
+            // 1. SAF document or tree URI renaming
+            if (DocumentsContract.isDocumentUri(context, uri) ||
+                video.sourceType == MediaSourceType.LOCAL_DOCUMENT.name ||
+                video.sourceType == MediaSourceType.LOCAL_TREE.name
+            ) {
+                val renamedUri = runCatching {
+                    DocumentsContract.renameDocument(context.contentResolver, uri, targetName)
+                }.getOrNull()
+                if (renamedUri != null) {
+                    newUriString = renamedUri.toString()
+                    storageRenamed = true
+                }
+            }
+
+            // 2. Direct File / Filesystem renaming
+            val physicalFile = getPhysicalFile(uri, video.folderPath, oldName)
+            var newPhysicalFile: File? = null
+            if (physicalFile != null && physicalFile.exists()) {
+                val dest = File(physicalFile.parentFile ?: File(video.folderPath), targetName)
+                if (dest.exists() && dest.canonicalPath != physicalFile.canonicalPath) {
+                    return@withContext ExcavResult.Error(IOException("A file named '$targetName' already exists"))
+                }
+                if (physicalFile.renameTo(dest)) {
+                    storageRenamed = true
+                    newPhysicalFile = dest
+                    if (uri.scheme == "file") {
+                        newUriString = Uri.fromFile(dest).toString()
+                    }
+                    logger.i(TAG, "Renamed physical file: ${physicalFile.absolutePath} -> ${dest.absolutePath}")
+                } else {
+                    logger.w(TAG, "File.renameTo returned false for ${physicalFile.absolutePath}")
+                }
+            }
+
+            // 3. MediaStore ContentResolver update (if content:// URI)
+            if (uri.scheme == ContentResolver.SCHEME_CONTENT && !DocumentsContract.isDocumentUri(context, uri)) {
+                val values = ContentValues().apply {
+                    put(MediaStore.Video.Media.DISPLAY_NAME, targetName)
+                    if (newPhysicalFile != null) {
+                        @Suppress("DEPRECATION")
+                        put(MediaStore.Video.Media.DATA, newPhysicalFile.absolutePath)
+                    }
+                }
+                val updatedRows = runCatching {
+                    context.contentResolver.update(uri, values, null, null)
+                }.getOrDefault(0)
+
+                if (updatedRows > 0) {
+                    storageRenamed = true
+                    logger.i(TAG, "Updated MediaStore record for $uri ($updatedRows row)")
+                }
+            }
+
+            // 4. Trigger MediaScanner to index renamed file
+            if (physicalFile != null && newPhysicalFile != null && storageRenamed) {
+                runCatching {
+                    MediaScannerConnection.scanFile(
+                        context,
+                        arrayOf(physicalFile.absolutePath, newPhysicalFile.absolutePath),
+                        null,
+                        null
+                    )
+                }
+            }
+
+            // 5. Update database and thumbnail cache
+            if (storageRenamed || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                thumbnailLoader.evictThumbnail(video.uri)
+                if (newUriString != video.uri) {
+                    thumbnailLoader.evictThumbnail(newUriString)
+                    videoDao.renameVideoWithUri(videoId, targetName, newUriString)
+                } else {
+                    videoDao.renameVideo(videoId, targetName)
+                }
+                logger.i(TAG, "Successfully renamed video $videoId to $targetName in database")
+                ExcavResult.Success(Unit)
+            } else {
+                logger.w(TAG, "Could not rename video file on storage (permission restricted)")
+                ExcavResult.Error(IOException("Could not rename file on storage. Please check storage permissions."))
+            }
         } catch (e: Exception) {
             logger.e(TAG, "Failed to rename video $videoId", e)
             ExcavResult.Error(e)
         }
+    }
+
+    private fun getPhysicalFile(uri: Uri, folderPath: String, displayName: String): File? {
+        if (uri.scheme == "file" && !uri.path.isNullOrBlank()) {
+            val f = File(uri.path!!)
+            if (f.exists()) return f
+        }
+        if (folderPath.isNotBlank() && displayName.isNotBlank()) {
+            val f = File(folderPath, displayName)
+            if (f.exists()) return f
+        }
+        if (uri.scheme == ContentResolver.SCHEME_CONTENT) {
+            runCatching {
+                context.contentResolver.query(
+                    uri,
+                    arrayOf(MediaStore.Video.Media.DATA),
+                    null, null, null
+                )?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val idx = cursor.getColumnIndex(MediaStore.Video.Media.DATA)
+                        if (idx != -1) {
+                            val path = cursor.getString(idx)
+                            if (!path.isNullOrBlank()) {
+                                val f = File(path)
+                                if (f.exists()) return f
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return null
     }
 
     override suspend fun deleteVideo(videoId: String): ExcavResult<Unit> = withContext(dispatchers.io) {

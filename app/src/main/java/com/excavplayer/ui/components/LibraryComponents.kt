@@ -61,7 +61,9 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.animation.core.snap
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInParent
@@ -1978,6 +1980,94 @@ fun VideoOptionsMenu(
     onDelete: () -> Unit,
     onRemoveFromContinueWatching: (() -> Unit)? = null
 ) {
+    val host = LocalInWindowMenuHost.current
+    if (host != null) {
+        val menuKey = remember(video.id) { "video_${video.id}" }
+        var anchorBounds by remember { mutableStateOf<Rect?>(null) }
+
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .onGloballyPositioned { coords ->
+                    if (coords.isAttached) {
+                        val b = coords.boundsInWindow()
+                        if (b.width > 0f && b.height > 0f) {
+                            anchorBounds = b
+                            host.updateAnchor(b)
+                        }
+                    }
+                }
+        )
+
+        val currentOnDismiss by rememberUpdatedState(onDismiss)
+        val currentOnRename by rememberUpdatedState(onRename)
+        val currentOnProperties by rememberUpdatedState(onProperties)
+        val currentOnDelete by rememberUpdatedState(onDelete)
+        val currentOnRemove by rememberUpdatedState(onRemoveFromContinueWatching)
+
+        LaunchedEffect(expanded, menuKey) {
+            if (expanded) {
+                host.show(
+                    key = menuKey,
+                    data = InWindowMenuData(
+                        anchorBounds = anchorBounds ?: Rect.Zero,
+                        onDismiss = { currentOnDismiss() },
+                        content = {
+                            val onRemove = currentOnRemove
+                            if (onRemove != null) {
+                                InWindowMenuItem(
+                                    text = "Remove from Continue Watching",
+                                    icon = Icons.Default.VisibilityOff,
+                                    contentColor = ExcavPalette.TextMuted,
+                                    onClick = {
+                                        host.dismiss()
+                                        onRemove()
+                                    }
+                                )
+                                InWindowMenuDivider()
+                            }
+                            InWindowMenuItem(
+                                text = "Rename",
+                                icon = Icons.Default.Edit,
+                                onClick = {
+                                    host.dismiss()
+                                    currentOnRename()
+                                }
+                            )
+                            InWindowMenuItem(
+                                text = "Properties",
+                                icon = Icons.Default.Info,
+                                onClick = {
+                                    host.dismiss()
+                                    currentOnProperties()
+                                }
+                            )
+                            InWindowMenuDivider()
+                            InWindowMenuItem(
+                                text = "Delete",
+                                icon = Icons.Default.Delete,
+                                isDestructive = true,
+                                onClick = {
+                                    host.dismiss()
+                                    currentOnDelete()
+                                }
+                            )
+                        }
+                    )
+                )
+            } else {
+                host.dismissIfKey(menuKey)
+            }
+        }
+
+        DisposableEffect(menuKey) {
+            onDispose {
+                host.dismissIfKey(menuKey)
+            }
+        }
+        return
+    }
+
     val menuShape = RoundedCornerShape(14.dp)
     DropdownMenu(
         expanded = expanded,
@@ -2125,6 +2215,103 @@ fun BatchVideoOptionsMenu(
     onProperties: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val host = LocalInWindowMenuHost.current
+    if (host != null) {
+        val menuKey = "batch_video_menu"
+        var anchorBounds by remember { mutableStateOf<Rect?>(null) }
+
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .onGloballyPositioned { coords ->
+                    if (coords.isAttached) {
+                        val b = coords.boundsInWindow()
+                        if (b.width > 0f && b.height > 0f) {
+                            anchorBounds = b
+                            host.updateAnchor(b)
+                        }
+                    }
+                }
+        )
+
+        val currentOnDismiss by rememberUpdatedState(onDismiss)
+        val currentOnPlay by rememberUpdatedState(onPlaySelected)
+        val currentOnShare by rememberUpdatedState(onShare)
+        val currentOnRename by rememberUpdatedState(onRename)
+        val currentOnProperties by rememberUpdatedState(onProperties)
+        val currentOnDelete by rememberUpdatedState(onDelete)
+
+        LaunchedEffect(expanded, selectedVideos.size) {
+            if (expanded) {
+                host.show(
+                    key = menuKey,
+                    data = InWindowMenuData(
+                        anchorBounds = anchorBounds ?: Rect.Zero,
+                        onDismiss = { currentOnDismiss() },
+                        content = {
+                            if (selectedVideos.size == 1) {
+                                InWindowMenuItem(
+                                    text = "Play",
+                                    icon = Icons.Default.PlayArrow,
+                                    onClick = {
+                                        host.dismiss()
+                                        currentOnPlay()
+                                    }
+                                )
+                            }
+                            InWindowMenuItem(
+                                text = "Share",
+                                icon = Icons.Default.Share,
+                                onClick = {
+                                    host.dismiss()
+                                    currentOnShare()
+                                }
+                            )
+                            val renameAction = currentOnRename
+                            if (selectedVideos.size == 1 && renameAction != null) {
+                                InWindowMenuItem(
+                                    text = "Rename",
+                                    icon = Icons.Default.Edit,
+                                    onClick = {
+                                        host.dismiss()
+                                        renameAction()
+                                    }
+                                )
+                            }
+                            InWindowMenuItem(
+                                text = "Properties",
+                                icon = Icons.Default.Info,
+                                onClick = {
+                                    host.dismiss()
+                                    currentOnProperties()
+                                }
+                            )
+                            InWindowMenuDivider()
+                            InWindowMenuItem(
+                                text = "Delete (${selectedVideos.size})",
+                                icon = Icons.Default.Delete,
+                                isDestructive = true,
+                                onClick = {
+                                    host.dismiss()
+                                    currentOnDelete()
+                                }
+                            )
+                        }
+                    )
+                )
+            } else {
+                host.dismissIfKey(menuKey)
+            }
+        }
+
+        DisposableEffect(Unit) {
+            onDispose {
+                host.dismissIfKey(menuKey)
+            }
+        }
+        return
+    }
+
     val menuShape = RoundedCornerShape(14.dp)
     DropdownMenu(
         expanded = expanded,
@@ -2195,6 +2382,83 @@ fun BatchFolderOptionsMenu(
     onProperties: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val host = LocalInWindowMenuHost.current
+    if (host != null) {
+        val menuKey = "batch_folder_menu"
+        var anchorBounds by remember { mutableStateOf<Rect?>(null) }
+
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .onGloballyPositioned { coords ->
+                    if (coords.isAttached) {
+                        val b = coords.boundsInWindow()
+                        if (b.width > 0f && b.height > 0f) {
+                            anchorBounds = b
+                            host.updateAnchor(b)
+                        }
+                    }
+                }
+        )
+
+        val currentOnDismiss by rememberUpdatedState(onDismiss)
+        val currentOnRename by rememberUpdatedState(onRename)
+        val currentOnProperties by rememberUpdatedState(onProperties)
+        val currentOnDelete by rememberUpdatedState(onDelete)
+
+        LaunchedEffect(expanded, selectedFolders.size) {
+            if (expanded) {
+                host.show(
+                    key = menuKey,
+                    data = InWindowMenuData(
+                        anchorBounds = anchorBounds ?: Rect.Zero,
+                        onDismiss = { currentOnDismiss() },
+                        content = {
+                            val renameAction = currentOnRename
+                            if (selectedFolders.size == 1 && renameAction != null) {
+                                InWindowMenuItem(
+                                    text = "Rename",
+                                    icon = Icons.Default.Edit,
+                                    onClick = {
+                                        host.dismiss()
+                                        renameAction()
+                                    }
+                                )
+                            }
+                            InWindowMenuItem(
+                                text = "Properties",
+                                icon = Icons.Default.Info,
+                                onClick = {
+                                    host.dismiss()
+                                    currentOnProperties()
+                                }
+                            )
+                            InWindowMenuDivider()
+                            InWindowMenuItem(
+                                text = "Delete (${selectedFolders.size})",
+                                icon = Icons.Default.Delete,
+                                isDestructive = true,
+                                onClick = {
+                                    host.dismiss()
+                                    currentOnDelete()
+                                }
+                            )
+                        }
+                    )
+                )
+            } else {
+                host.dismissIfKey(menuKey)
+            }
+        }
+
+        DisposableEffect(Unit) {
+            onDispose {
+                host.dismissIfKey(menuKey)
+            }
+        }
+        return
+    }
+
     val menuShape = RoundedCornerShape(14.dp)
     DropdownMenu(
         expanded = expanded,

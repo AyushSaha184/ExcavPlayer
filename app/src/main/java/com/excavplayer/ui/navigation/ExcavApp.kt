@@ -168,9 +168,12 @@ fun ExcavApp(
             }
         }
 
+        val inWindowMenuHost = remember { InWindowMenuHostState() }
+
         CompositionLocalProvider(
             LocalHazeState provides hazeState,
-            LocalConfiguration provides effectiveAppConfig
+            LocalConfiguration provides effectiveAppConfig,
+            LocalInWindowMenuHost provides inWindowMenuHost
         ) {
             Box(
                 modifier = Modifier.fillMaxSize()
@@ -343,6 +346,9 @@ fun ExcavApp(
                     onDismiss = { vm.clearUserMessage() }
                 )
             }
+
+            // In-Window Liquid Glass Context Menu
+            InWindowMenuHost(host = inWindowMenuHost)
 
             // In-App Update Dialog (Release Notes, Download Progress, and Installation)
             val updateState by vm.updateState.collectAsStateWithLifecycle()
